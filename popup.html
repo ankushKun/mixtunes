@@ -9,7 +9,21 @@
   <body>
     <main id="on-ytm" hidden>
       <h1>yTunes</h1>
-      <p>Active on YouTube Music.</p>
+      <div class="artwork" hidden>
+        <img id="artwork" alt="" />
+      </div>
+      <p id="now-playing">Looking for the player…</p>
+      <p id="host-status" class="status"></p>
+      <div class="transport" role="group" aria-label="Playback">
+        <button type="button" data-action="previous">Previous</button>
+        <button type="button" id="play-pause" data-action="playPause">
+          Play/Pause
+        </button>
+        <button type="button" data-action="next">Next</button>
+      </div>
+      <button type="button" id="show-original" class="linkish">
+        Show original YouTube Music
+      </button>
     </main>
     <main id="off-ytm" hidden>
       <h1>yTunes</h1>

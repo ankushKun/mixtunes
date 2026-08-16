@@ -36,7 +36,9 @@
   "content_scripts": [
     {
       "matches": ["https://music.youtube.com/*"],
+      "exclude_matches": ["https://music.youtube.com/*?*newytm=true*"],
       "js": ["scripts/content.js"],
+      "css": ["scripts/content.css"],
       "run_at": "document_idle"
     }
   ],
