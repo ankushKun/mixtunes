@@ -2,7 +2,10 @@
   "name": "ytunes",
   "version": "0.1.0",
   "private": true,
-  "description": "yTunes Chrome extension",
+  "description": "YouTube Music with a classic iTunes interface",
+  "scripts": {
+    "pack": "node pack.js"
+  },
   "devDependencies": {
     "chrome-types": "0.1.436"
   }
