@@ -1,0 +1,110 @@
+<div class="ytunes-app">
+  <header class="ytunes-top">
+    <div class="ytunes-transport">
+      <button type="button" class="ytunes-round" data-action="previous" aria-label="Previous">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z"/></svg>
+      </button>
+      <button type="button" class="ytunes-round ytunes-play" data-action="playPause" aria-label="Play">
+        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5L8 5.5z"/></svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z"/></svg>
+      </button>
+      <button type="button" class="ytunes-round" data-action="next" aria-label="Next">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z"/></svg>
+      </button>
+      <label class="ytunes-volume">
+        <span class="ytunes-vol-icon" aria-hidden="true"></span>
+        <input id="ytunes-volume" class="ytunes-range" type="range" min="0" max="100" value="80" aria-label="Volume" style="--yt-fill: 80%" />
+      </label>
+    </div>
+
+    <div class="ytunes-lcd" aria-live="polite">
+      <div class="ytunes-lcd-art" hidden>
+        <img id="ytunes-lcd-img" alt="" />
+      </div>
+      <div class="ytunes-lcd-meta">
+        <div id="ytunes-lcd-title">yTunes</div>
+        <div id="ytunes-lcd-sub">YouTube Music</div>
+        <div class="ytunes-lcd-progress">
+          <span id="ytunes-time-current">0:00</span>
+          <input id="ytunes-seek" class="ytunes-range" type="range" min="0" max="1000" value="0" aria-label="Seek" style="--yt-fill: 0%" />
+          <span id="ytunes-time-duration">0:00</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ytunes-top-right">
+      <div class="ytunes-views" role="tablist" aria-label="View">
+        <button type="button" data-view="list" aria-pressed="false" title="List">
+          <svg viewBox="0 0 16 12" aria-hidden="true"><path d="M0 1h16v2H0V1zm0 4h16v2H0V5zm0 4h16v2H0V9z"/></svg>
+        </button>
+        <button type="button" data-view="grid" aria-pressed="false" title="Grid">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M0 0h5v5H0V0zm7 0h5v5H7V0zM0 7h5v5H0V7zm7 0h5v5H7V7z"/></svg>
+        </button>
+        <button type="button" data-view="coverflow" aria-pressed="true" title="Cover Flow">
+          <svg viewBox="0 0 16 12" aria-hidden="true"><path d="M0 3h3v6H0V3zm4-3h8v12H4V0zm9 3h3v6h-3V3z"/></svg>
+        </button>
+      </div>
+      <label class="ytunes-search">
+        <input id="ytunes-search" type="search" placeholder="Search Music" autocomplete="off" spellcheck="false" enterkeyhint="search" />
+      </label>
+    </div>
+  </header>
+
+  <div class="ytunes-body">
+    <aside class="ytunes-sidebar">
+      <div class="ytunes-source-list">
+        <h2>Library</h2>
+        <button type="button" class="is-selected" data-source="songs" aria-current="true">Music</button>
+        <button type="button" data-source="liked">Liked Songs</button>
+        <button type="button" data-source="albums">Albums</button>
+        <button type="button" data-source="artists">Artists</button>
+        <h2>Playlists</h2>
+        <button type="button" data-source="now">Now Playing</button>
+        <div id="ytunes-playlists"></div>
+      </div>
+      <div class="ytunes-selected">
+        <div class="ytunes-selected-label">Selected Item</div>
+        <div class="ytunes-selected-art" hidden>
+          <img id="ytunes-selected-img" alt="" />
+        </div>
+      </div>
+    </aside>
+
+    <section class="ytunes-main" data-view="coverflow">
+      <div class="ytunes-coverflow" id="ytunes-coverflow" tabindex="0" role="listbox" aria-label="Cover Flow">
+        <div id="ytunes-covers" class="ytunes-coverflow-stage"></div>
+        <div class="ytunes-coverflow-floor" aria-hidden="true"></div>
+        <div class="ytunes-coverflow-caption">
+          <div id="ytunes-cover-title"></div>
+          <div id="ytunes-cover-artist"></div>
+        </div>
+        <p id="ytunes-cover-empty">Loading library…</p>
+      </div>
+
+      <div class="ytunes-table-wrap">
+        <table class="ytunes-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Time</th>
+              <th>Artist</th>
+              <th>Album</th>
+            </tr>
+          </thead>
+          <tbody id="ytunes-tracks">
+            <tr class="is-empty">
+              <td colspan="5">No tracks yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer class="ytunes-status">
+    <span id="ytunes-status-left">1 item</span>
+    <span id="ytunes-status-center"></span>
+    <button type="button" id="ytunes-original">Show original YouTube Music</button>
+  </footer>
+</div>

@@ -1,3 +1,9 @@
+html[data-ytunes-host="ready"],
+html[data-ytunes-host="ready"] body {
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
 html[data-ytunes-host="ready"] ytmusic-nav-bar,
 html[data-ytunes-host="ready"] #nav-bar-background,
 html[data-ytunes-host="ready"] #guide-wrapper,
@@ -6,12 +12,4 @@ html[data-ytunes-host="ready"] ytmusic-guide-renderer,
 html[data-ytunes-host="ready"] #content {
   visibility: hidden !important;
   pointer-events: none !important;
-}
-
-html[data-ytunes-host="ready"] ytmusic-player-bar,
-html[data-ytunes-host="ready"] ytmusic-player,
-html[data-ytunes-host="ready"] #movie_player,
-html[data-ytunes-host="ready"] ytmusic-player-page {
-  visibility: visible !important;
-  pointer-events: auto !important;
 }

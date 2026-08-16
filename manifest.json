@@ -37,9 +37,28 @@
     {
       "matches": ["https://music.youtube.com/*"],
       "exclude_matches": ["https://music.youtube.com/*?*newytm=true*"],
-      "js": ["scripts/content.js"],
-      "css": ["scripts/content.css"],
+      "js": ["scripts/page.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://music.youtube.com/*"],
+      "exclude_matches": ["https://music.youtube.com/*?*newytm=true*"],
+      "js": [
+        "scripts/host.js",
+        "scripts/ytm.js",
+        "layouts/shell/coverflow.js",
+        "layouts/shell/script.js",
+        "scripts/content.js"
+      ],
+      "css": ["scripts/content.css", "layouts/shell/style.css"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["layouts/shell/index.html"],
+      "matches": ["https://music.youtube.com/*"]
     }
   ],
   "background": {

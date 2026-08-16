@@ -24,6 +24,7 @@ const IGNORE_TOP = new Set([
   "node_modules",
   "build",
   "references",
+  "tasks",
   "pack.js",
   "package.json",
   "package-lock.json",
