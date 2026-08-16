@@ -16,13 +16,33 @@
   box-sizing: border-box;
 }
 
-#ytunes-root img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: cover;
+#ytunes-root,
+#ytunes-root *:focus,
+#ytunes-root *:focus-visible,
+#ytunes-root *:focus-within {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
-#ytunes-root button,
+#ytunes-root .ytunes-coverflow:focus,
+#ytunes-root .ytunes-coverflow:focus-visible,
+#ytunes-root .ytunes-table-wrap:focus,
+#ytunes-root .ytunes-table-wrap:focus-visible,
+#ytunes-root .ytunes-main:focus,
+#ytunes-root .ytunes-main:focus-visible,
+#ytunes-root [tabindex]:focus,
+#ytunes-root [tabindex]:focus-visible {
+  outline: none !important;
+  box-shadow: none;
+}
+
+#ytunes-root button {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+}
+
 #ytunes-root input {
   font: inherit;
 }
@@ -42,12 +62,12 @@
 
 .ytunes-top {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(280px, 420px) minmax(220px, 1fr);
+  grid-template-columns: minmax(200px, 1fr) minmax(240px, 440px) minmax(180px, 1fr);
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   height: 62px;
   flex: none;
-  padding: 0 12px;
+  padding: 0 10px;
   background-image:
     repeating-linear-gradient(
       90deg,
@@ -64,12 +84,44 @@
 .ytunes-transport {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ytunes-nav {
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #8a8a8a;
+  border-radius: 3px;
+  background: linear-gradient(#f3f3f3, #cfcfcf);
+  color: #333;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.ytunes-nav svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.ytunes-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.ytunes-nav:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 .ytunes-round {
   width: 34px;
   height: 34px;
+  flex: none;
   border: 1px solid #7d7d7d;
   border-radius: 50%;
   color: #2c2c2c;
@@ -118,26 +170,28 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: 8px;
+  margin-left: 6px;
+  min-width: 0;
 }
 
 .ytunes-vol-icon {
   width: 12px;
   height: 10px;
+  flex: none;
   background: #4a4a4a;
   clip-path: polygon(0 30%, 40% 30%, 100% 0, 100% 100%, 40% 70%, 0 70%);
 }
 
 .ytunes-lcd {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: stretch;
+  align-items: center;
   min-width: 0;
-  height: 48px;
-  padding: 5px 8px 6px;
+  height: 50px;
+  padding: 5px 10px;
   border-radius: 6px;
-  background: linear-gradient(180deg, #d0d3d8 0%, #b8bcc2 45%, #aeb2b8 100%);
+  background: linear-gradient(180deg, #c5d0c8 0%, #a8b8ac 48%, #9aaba0 100%);
   border: 1px solid rgba(70, 76, 86, 0.55);
   box-shadow:
     inset 0 2px 3px rgba(0, 0, 0, 0.22),
@@ -145,12 +199,32 @@
     inset 0 -1px 0 rgba(255, 255, 255, 0.45),
     0 1px 0 rgba(255, 255, 255, 0.55);
   overflow: hidden;
+  cursor: pointer;
+}
+
+.ytunes-lcd.is-idle {
+  grid-template-columns: minmax(0, 1fr);
+  cursor: default;
+}
+
+.ytunes-lcd-art[hidden],
+.ytunes-lcd.is-idle .ytunes-lcd-art,
+.ytunes-lcd.is-idle .ytunes-lcd-progress,
+.ytunes-lcd.is-idle .ytunes-lcd-tools {
+  display: none !important;
+}
+
+.ytunes-lcd[aria-pressed="true"] {
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(0, 0, 0, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .ytunes-lcd-art {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   align-self: center;
   overflow: hidden;
   background: #8a9098;
@@ -161,7 +235,8 @@
 }
 
 .ytunes-lcd-art img,
-.ytunes-selected-art img {
+.ytunes-artwell img,
+.ytunes-tile-art img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -172,11 +247,18 @@
 
 .ytunes-lcd-meta {
   min-width: 0;
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 1px;
+  padding: 1px 2px 0;
 }
 
 #ytunes-lcd-title,
 #ytunes-lcd-sub {
+  max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -186,6 +268,17 @@
   font-size: 11px;
   font-weight: 700;
   color: #1c1c1c;
+}
+
+.ytunes-lcd.is-idle #ytunes-lcd-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ytunes-lcd.is-idle #ytunes-lcd-sub {
+  font-size: 10px;
+  color: #4a524c;
 }
 
 #ytunes-lcd-sub {
@@ -198,10 +291,51 @@
   grid-template-columns: 28px minmax(0, 1fr) 32px;
   align-items: center;
   gap: 5px;
-  margin-top: 3px;
+  width: 100%;
+  margin-top: 1px;
   font-size: 9px;
   color: rgba(30, 30, 30, 0.55);
   font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.ytunes-lcd-tools {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0;
+  align-self: center;
+}
+
+.ytunes-lcd-tool {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #3a4540;
+  opacity: 0.55;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.ytunes-lcd-tool svg {
+  width: 14px;
+  height: 12px;
+  overflow: visible;
+  fill: currentColor;
+}
+
+.ytunes-lcd-tool[aria-pressed="true"] {
+  opacity: 1;
+  color: #1a1a1a;
+}
+
+.ytunes-lcd-tool[data-action="like"][aria-pressed="true"] {
+  color: #b22233;
 }
 
 .ytunes-range {
@@ -241,25 +375,35 @@
 .ytunes-lcd .ytunes-range {
   background: linear-gradient(
     90deg,
-    #5a6068 0%,
-    #5a6068 var(--yt-fill, 0%),
+    #4a5550 0%,
+    #4a5550 var(--yt-fill, 0%),
     rgba(0, 0, 0, 0.16) var(--yt-fill, 0%)
   );
 }
 
 #ytunes-volume {
   width: 70px;
+  min-width: 36px;
 }
 
 .ytunes-top-right {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ytunes-history {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
 }
 
 .ytunes-views {
   display: flex;
+  flex: none;
   border: 1px solid #8a8a8a;
   border-radius: 4px;
   overflow: hidden;
@@ -294,15 +438,84 @@
   fill: currentColor;
 }
 
-.ytunes-search input {
-  width: 168px;
+.ytunes-search {
+  position: relative;
+  min-width: 0;
+}
+
+.ytunes-search-field {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   height: 22px;
+  padding: 0 8px 0 6px;
   border: 1px solid #7a7a7a;
   border-radius: 11px;
-  padding: 0 10px;
   background: #fff;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.ytunes-search-icon {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border: 1.5px solid #7a7a7a;
+  border-radius: 50%;
+  position: relative;
+}
+
+.ytunes-search-icon::after {
+  content: "";
+  position: absolute;
+  width: 5px;
+  height: 1.5px;
+  background: #7a7a7a;
+  right: -4px;
+  bottom: -1px;
+  transform: rotate(40deg);
+}
+
+.ytunes-search input {
+  width: 148px;
+  min-width: 72px;
+  height: 20px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  outline: none;
   user-select: text;
+}
+
+.ytunes-suggest {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.ytunes-suggest button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.ytunes-suggest button:hover,
+.ytunes-suggest button.is-active {
+  background: #3a7ec8;
+  color: #fff;
 }
 
 .ytunes-body {
@@ -343,22 +556,23 @@
 #ytunes-root .ytunes-source-list button {
   display: block;
   width: 100%;
-  border: 0;
+  border: 0 !important;
   appearance: none;
   -webkit-appearance: none;
-  background: transparent;
+  background: transparent !important;
   text-align: left;
   padding: 4px 12px 4px 18px;
-  color: #1a1a1a;
+  color: #1a1a1a !important;
   cursor: pointer;
   font: inherit;
   font-size: 12px;
+  text-shadow: none;
 }
 
 #ytunes-root .ytunes-source-list button.is-selected,
 #ytunes-root .ytunes-source-list button[aria-current="true"] {
-  background: linear-gradient(180deg, #6aa8e8 0%, #3a7ec8 100%);
-  color: #fff;
+  background: linear-gradient(180deg, #6aa8e8 0%, #3a7ec8 100%) !important;
+  color: #fff !important;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
@@ -368,27 +582,8 @@
   color: #5c656d;
 }
 
-.ytunes-selected {
-  flex: none;
-  overflow: hidden;
-  border-top: 1px solid #b7bec6;
-  background: #c8cfd6;
-  padding: 8px;
-}
-
-.ytunes-selected-label {
-  font-size: 10px;
-  color: #5c656d;
-  margin-bottom: 6px;
-}
-
-.ytunes-selected-art {
-  width: 116px;
-  height: 116px;
-  margin: 0 auto;
-  overflow: hidden;
-  background: #111;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+#ytunes-root .ytunes-source-list #ytunes-moods button {
+  padding-left: 28px;
 }
 
 .ytunes-main {
@@ -399,10 +594,11 @@
   display: flex;
   flex-direction: column;
   background: #fff;
+  position: relative;
 }
 
 .ytunes-coverflow {
-  --yt-cf-ms: 480ms;
+  --yt-cf-ms: 400ms;
   --yt-cf-ease: cubic-bezier(0.22, 0.7, 0.25, 1);
   --yt-cf-size: 150px;
   container-type: size;
@@ -422,10 +618,6 @@
   display: block;
 }
 
-.ytunes-coverflow:focus-visible {
-  box-shadow: inset 0 0 0 2px rgba(0, 122, 255, 0.55);
-}
-
 .ytunes-coverflow.is-snap .ytunes-cf-cover,
 .ytunes-coverflow.is-snap .ytunes-coverflow-caption {
   transition: none !important;
@@ -436,7 +628,7 @@
   left: 0;
   right: 0;
   top: 10px;
-  bottom: 44px;
+  bottom: 52px;
   perspective: 1200px;
   perspective-origin: 50% 45%;
   transform-style: preserve-3d;
@@ -447,7 +639,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: 22px;
   height: 48px;
   pointer-events: none;
   z-index: 0;
@@ -552,7 +744,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 6px;
+  bottom: 22px;
   text-align: center;
   color: #f5f5f5;
   pointer-events: none;
@@ -561,7 +753,7 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
 }
 
 .ytunes-coverflow-caption.is-swap {
@@ -586,6 +778,39 @@
   margin-top: 2px;
 }
 
+.ytunes-cf-scroll {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 4px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ytunes-cf-scroll button {
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 2px;
+  background: linear-gradient(#6a6a6a, #3a3a3a);
+  color: #eee;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.ytunes-cf-scroll .ytunes-range {
+  flex: 1;
+  background: linear-gradient(
+    90deg,
+    #6a6a6a 0%,
+    #6a6a6a var(--yt-fill, 0%),
+    rgba(255, 255, 255, 0.12) var(--yt-fill, 0%)
+  );
+}
+
 #ytunes-cover-empty {
   display: none;
   color: #8d8d8d;
@@ -606,11 +831,119 @@
   }
 }
 
+.ytunes-artwell {
+  display: none;
+  flex: 0 0 42%;
+  min-height: 160px;
+  max-height: 48%;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 16px 28px;
+  background: #111;
+  color: #eee;
+  border-bottom: 1px solid #000;
+}
+
+.ytunes-artwell img {
+  width: min(220px, 40%);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+
+.ytunes-artwell-meta {
+  min-width: 0;
+}
+
+#ytunes-artwell-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+#ytunes-artwell-sub {
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ytunes-grid {
+  display: none;
+  flex: 0 1 42%;
+  min-height: 160px;
+  max-height: 48%;
+  overflow: auto;
+  padding: 12px;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  align-content: start;
+  background: #e8e8e8;
+  border-bottom: 1px solid #b4b4b4;
+}
+
+.ytunes-tile {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ytunes-tile-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #222;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.ytunes-tile.is-selected .ytunes-tile-title {
+  color: #1a5fb4;
+}
+
+.ytunes-tile-title,
+.ytunes-tile-sub {
+  display: block;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ytunes-tile-title {
+  font-weight: 600;
+}
+
+.ytunes-tile-sub {
+  color: #666;
+  font-size: 11px;
+}
+
+.ytunes-lyrics {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 42%;
+  z-index: 30;
+  overflow: auto;
+  padding: 16px 20px;
+  background: rgba(12, 12, 12, 0.92);
+  color: #eee;
+}
+
+.ytunes-lyrics pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font: 13px/1.45 "Lucida Grande", Helvetica, sans-serif;
+}
+
 .ytunes-table-wrap {
   flex: 1 1 58%;
   min-height: 0;
   overflow: auto;
   background: #fff;
+  outline: none;
 }
 
 #ytunes-root .ytunes-table {
@@ -654,12 +987,24 @@
   background: linear-gradient(#f6f6f6, #dcdcdc);
   border-bottom: 1px solid #b4b4b4;
   border-right: 1px solid #cfcfcf;
+  cursor: pointer;
+}
+
+#ytunes-root .ytunes-table th[data-sort].is-asc::after,
+#ytunes-root .ytunes-table th[data-sort].is-desc::after {
+  content: " ▾";
+  font-size: 9px;
+}
+
+#ytunes-root .ytunes-table th[data-sort].is-asc::after {
+  content: " ▴";
 }
 
 #ytunes-root .ytunes-table th:nth-child(1),
 #ytunes-root .ytunes-table td:nth-child(1) {
   width: 22px;
   padding-right: 0;
+  cursor: default;
 }
 
 #ytunes-root .ytunes-table th:nth-child(3),
@@ -667,7 +1012,7 @@
   width: 64px;
 }
 
-.ytunes-table tbody tr:nth-child(even):not(.is-selected):not(.is-playing) {
+.ytunes-table tbody tr:nth-child(even):not(.is-selected) {
   background: #edf3fe;
 }
 
@@ -675,17 +1020,16 @@
   cursor: pointer;
 }
 
-.ytunes-table tbody tr:not(.is-empty):hover:not(.is-selected):not(.is-playing) {
+.ytunes-table tbody tr:not(.is-empty):hover:not(.is-selected) {
   background: #dcdcdc;
 }
 
-.ytunes-table tbody tr.is-browse:not(.is-playing) {
+.ytunes-table tbody tr.is-browse:not(.is-selected) {
   background: #e8eef6;
 }
 
-.ytunes-table tbody tr.is-selected,
-.ytunes-table tbody tr.is-playing {
-  background: #7d7d7d;
+.ytunes-table tbody tr.is-selected {
+  background: linear-gradient(180deg, #6aa8e8 0%, #3a7ec8 100%);
   color: #fff;
 }
 
@@ -709,17 +1053,29 @@
 }
 
 .ytunes-main[data-view="list"] .ytunes-coverflow,
-.ytunes-main[data-view="grid"] .ytunes-coverflow {
+.ytunes-main[data-view="list"] .ytunes-grid,
+.ytunes-main[data-view="coverflow"] .ytunes-artwell,
+.ytunes-main[data-view="coverflow"] .ytunes-grid,
+.ytunes-main[data-view="grid"] .ytunes-coverflow,
+.ytunes-main[data-view="grid"] .ytunes-artwell {
   display: none;
+}
+
+.ytunes-main[data-view="list"] .ytunes-artwell {
+  display: flex;
+}
+
+.ytunes-main[data-view="grid"] .ytunes-grid {
+  display: grid;
 }
 
 .ytunes-status {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   height: 24px;
   flex: none;
-  padding: 0 10px;
+  padding: 0 8px;
   font-size: 11px;
   color: #333;
   background-image:
@@ -734,28 +1090,161 @@
   border-top: 1px solid #9a9a9a;
 }
 
+.ytunes-status-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ytunes-status-tools button {
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #8a8a8a;
+  border-radius: 3px;
+  background: linear-gradient(#f4f4f4, #d0d0d0);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #333;
+}
+
+.ytunes-status-tools button svg {
+  width: 14px;
+  height: 12px;
+  overflow: visible;
+  fill: currentColor;
+}
+
+.ytunes-status-tools button[aria-pressed="true"] {
+  background: linear-gradient(#b9b9b9, #9d9d9d);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+.ytunes-status-tools button[data-action="like"][aria-pressed="true"] {
+  color: #b22233;
+}
+
+#ytunes-status-left,
+#ytunes-status-center {
+  flex: 1;
+  text-align: center;
+}
+
 #ytunes-original {
-  border: 0;
-  background: transparent;
+  border: 1px solid #8a8a8a;
+  border-radius: 3px;
+  background: linear-gradient(#f4f4f4, #d0d0d0);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
   color: #333;
   cursor: pointer;
-  padding: 0;
+  padding: 0 8px;
+  height: 18px;
+  font-size: 10px;
 }
 
-#ytunes-original:hover {
-  text-decoration: underline;
+#ytunes-original:active {
+  background: linear-gradient(#c8c8c8, #b0b0b0);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
-html[data-ytunes-host="ready"] ytmusic-player-bar,
-html[data-ytunes-host="ready"] ytmusic-player-page,
-html[data-ytunes-host="ready"] ytmusic-player,
-html[data-ytunes-host="ready"] #movie_player,
-html[data-ytunes-host="ready"] #player-bar-background,
-html[data-ytunes-host="ready"] #player-page {
-  position: fixed !important;
-  left: -100vw !important;
-  top: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  z-index: 0 !important;
+.ytunes-menu {
+  position: fixed;
+  z-index: 2147483646;
+  min-width: 180px;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.ytunes-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+
+.ytunes-menu button:hover {
+  background: #3a7ec8;
+  color: #fff;
+}
+
+.ytunes-menu button:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.ytunes-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.ytunes-dialog[hidden] {
+  display: none;
+}
+
+.ytunes-dialog form {
+  width: min(320px, calc(100% - 32px));
+  padding: 14px 16px 12px;
+  background: linear-gradient(#f6f6f6, #dcdcdc);
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.ytunes-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.ytunes-dialog input {
+  width: 100%;
+  height: 24px;
+  border: 1px solid #7a7a7a;
+  padding: 0 8px;
+  background: #fff;
+}
+
+.ytunes-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ytunes-dialog-actions button {
+  min-width: 72px;
+  height: 22px;
+  border: 1px solid #7a7a7a;
+  border-radius: 4px;
+  background: linear-gradient(#fff, #d4d4d4);
+  cursor: pointer;
+}
+
+@media (max-width: 860px) {
+  .ytunes-top {
+    grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.2fr) minmax(120px, 0.9fr);
+    gap: 8px;
+  }
+  #ytunes-volume {
+    width: 44px;
+  }
+  .ytunes-search input {
+    width: 96px;
+  }
+  .ytunes-sidebar {
+    width: 168px;
+  }
 }

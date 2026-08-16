@@ -88,15 +88,112 @@ function pickVideoId(node) {
     node?.playlistItemData?.videoId ||
     node?.navigationEndpoint?.watchEndpoint?.videoId ||
     watchEndpoint(node)?.watchEndpoint?.videoId ||
+    node?.videoId ||
     ""
   );
 }
 
-function collectionKind(browseId, playlistId, subtitle) {
-  if (browseId.startsWith("MPRE") || /album/i.test(subtitle)) return "album";
+function browseFromRuns(runs) {
+  for (const run of runs || []) {
+    const id = run?.navigationEndpoint?.browseEndpoint?.browseId || "";
+    if (id) return id;
+  }
+  return "";
+}
+
+function musicVideoType(node) {
+  const watch =
+    watchEndpoint(node)?.watchEndpoint || node?.navigationEndpoint?.watchEndpoint;
+  return (
+    watch?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig
+      ?.musicVideoType || ""
+  );
+}
+
+function yearFromBits(bits) {
+  return (bits || []).find((bit) => /^\d{4}$/.test(bit)) || "";
+}
+
+function likeStatusOf(node) {
+  if (!node || typeof node !== "object") return "";
+  const direct =
+    node.likeStatus ||
+    node.likeButtonRenderer?.likeStatus ||
+    node.likeButtonViewModel?.likeButtonViewModel?.likeStatus ||
+    "";
+  if (/^(LIKE|DISLIKE|INDIFFERENT)$/i.test(direct)) return String(direct).toLowerCase();
+
+  let found = "";
+  const seen = new WeakSet();
+  const visit = (value) => {
+    if (found || !value || typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    const likeBtn = value.likeButtonRenderer;
+    if (likeBtn?.likeStatus) {
+      found = String(likeBtn.likeStatus).toLowerCase();
+      return;
+    }
+    const toggle = value.toggleMenuServiceItemRenderer;
+    if (toggle) {
+      const icon = String(toggle.defaultIcon?.iconType || "").toUpperCase();
+      const label = `${runsText(toggle.defaultText)} ${runsText(toggle.toggledText)}`.toLowerCase();
+      const isLikeItem =
+        icon === "LIKE" ||
+        icon === "FAVORITE" ||
+        /\blike\b/.test(label) ||
+        /liked/.test(label);
+      if (isLikeItem) {
+        const defaultText = runsText(toggle.defaultText).toLowerCase();
+        if (toggle.isToggled === true || /unlike|remove from liked/.test(defaultText)) {
+          found = "like";
+        } else if (toggle.isToggled === false) {
+          found = "indifferent";
+        }
+      }
+    }
+    for (const child of Object.values(value)) visit(child);
+  };
+  visit(node);
+  return found;
+}
+
+function likedFlag(item) {
+  return likeStatusOf(item) === "like";
+}
+
+function collectionKind(browseId, playlistId, subtitle, shelf, videoId) {
+  const hay = `${subtitle || ""} ${shelf || ""}`;
+  if (/podcast/i.test(hay) || String(browseId || "").startsWith("MPSP")) {
+    return "podcast";
+  }
+  if (browseId.startsWith("MPRE")) return "album";
   if (browseId.startsWith("MPLA") || browseId.startsWith("UC")) return "artist";
+  if (/\bsong\b/i.test(subtitle) && !/\bplaylist\b/i.test(subtitle)) return "song";
+  if (/album/i.test(subtitle)) return "album";
   if (playlistId || browseId.startsWith("VL")) return "playlist";
+  if (videoId) return "song";
   return "album";
+}
+
+function durationFromItem(item, columns) {
+  for (const column of columns) {
+    if (/^\d+:\d+(?::\d+)?$/.test(column.text)) return column.text;
+  }
+  const fixed = item.fixedColumns || [];
+  for (const column of fixed) {
+    const text = runsText(
+      column.musicResponsiveListItemFixedColumnRenderer?.text
+    );
+    if (/^\d+:\d+(?::\d+)?$/.test(text)) return text;
+  }
+  const length = runsText(item.lengthText);
+  if (/^\d+:\d+(?::\d+)?$/.test(length)) return length;
+  return "";
 }
 
 function parseTwoRow(item, acc) {
@@ -106,21 +203,46 @@ function parseTwoRow(item, acc) {
   const browseId = pickBrowseId(item);
   const playlistId = pickPlaylistId(item);
   const endpoint = watchEndpoint(item) || item.navigationEndpoint;
-  if (!browseId && !playlistId && !endpoint?.watchEndpoint) return;
+  const videoId = pickVideoId(item) || endpoint?.watchEndpoint?.videoId || "";
+  if (!browseId && !playlistId && !endpoint?.watchEndpoint && !videoId) return;
   if (/^new playlist$/i.test(title)) return;
   const bits = subtitle.split("•").map((part) => part.trim()).filter(Boolean);
-  acc.collections.push({
-    id: browseId || playlistId || title,
-    kind: collectionKind(browseId, playlistId, subtitle),
+  const shelf = acc.shelf || "";
+  const kind = collectionKind(browseId, playlistId, subtitle, shelf, videoId);
+  const artist = bits.find((bit) => !/^(song|video|album|single|ep|playlist)$/i.test(bit) && !/^\d{4}$/.test(bit)) || bits[0] || "";
+  const id = browseId || playlistId || videoId || `c:${title}:${acc.collections.length}`;
+  const collection = {
+    id,
+    kind,
     title,
     subtitle,
-    artist: bits[0] || "",
-    year: bits.find((bit) => /^\d{4}$/.test(bit)) || "",
+    artist,
+    year: yearFromBits(bits),
     artwork: thumbnailUrl(item),
     browseId,
     playlistId,
+    videoId,
     endpoint,
-  });
+    shelf,
+  };
+  if (kind === "song" && (videoId || endpoint?.watchEndpoint)) {
+    collection.tracks = [
+      {
+        id: videoId || id,
+        title,
+        artist,
+        album: "",
+        year: collection.year,
+        artwork: collection.artwork,
+        videoId,
+        playlistId,
+        browseId,
+        shelf,
+        endpoint: endpoint || { watchEndpoint: { videoId, playlistId: playlistId || undefined } },
+      },
+    ];
+  }
+  acc.collections.push(collection);
 }
 
 function parseListItem(item, acc) {
@@ -132,10 +254,7 @@ function parseListItem(item, acc) {
   const title = columns[0]?.text || runsText(item.title);
   if (!title) return;
 
-  let duration = "";
-  for (const column of columns) {
-    if (/^\d+:\d+(?::\d+)?$/.test(column.text)) duration = column.text;
-  }
+  const duration = durationFromItem(item, columns);
   const rest = columns
     .slice(1)
     .map((column) => column.text)
@@ -150,16 +269,37 @@ function parseListItem(item, acc) {
   const browseId = pickBrowseId(item);
   const playlistId = pickPlaylistId(item);
   const endpoint = watchEndpoint(item) || item.navigationEndpoint;
+  const year = yearFromBits(bits);
+  const album = bits.find((bit, i) => i > 0 && bit !== year) || "";
+  const pageType =
+    item.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs
+      ?.browseEndpointContextMusicConfig?.pageType ||
+    endpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs
+      ?.browseEndpointContextMusicConfig?.pageType ||
+    "";
+  const asCollection =
+    browseId.startsWith("MPRE") ||
+    browseId.startsWith("MPLA") ||
+    browseId.startsWith("MPSP") ||
+    /ALBUM|ARTIST|PLAYLIST|PODCAST/i.test(pageType);
 
-  if (videoId || endpoint?.watchEndpoint) {
+  if (!asCollection && (videoId || endpoint?.watchEndpoint)) {
     acc.tracks.push({
+      id: videoId || `t:${title}:${acc.tracks.length}`,
       title,
       artist: bits[0] || "",
-      album: bits[1] || "",
+      album,
+      year,
       duration,
       artwork: thumbnailUrl(item),
       videoId,
       playlistId,
+      browseId,
+      artistBrowseId: browseFromRuns(columns[1]?.runs),
+      albumBrowseId: browseFromRuns(columns[2]?.runs),
+      musicVideoType: musicVideoType(item),
+      shelf: acc.shelf || "",
+      liked: likedFlag(item),
       endpoint: endpoint || {
         watchEndpoint: { videoId, playlistId: playlistId || undefined },
       },
@@ -215,6 +355,7 @@ function parseCardShelf(item, acc) {
 
   if (videoId || endpoint?.watchEndpoint) {
     acc.tracks.push({
+      id: videoId || `t:${title}:${acc.tracks.length}`,
       title,
       artist:
         bits.find(
@@ -226,10 +367,15 @@ function parseCardShelf(item, acc) {
         bits[1] ||
         "",
       album: bits[2] && !/^\d{4}$/.test(bits[2]) ? bits[2] : "",
+      year: yearFromBits(bits),
       duration: bits.find((bit) => /^\d+:\d+(?::\d+)?$/.test(bit)) || "",
       artwork: thumbnailUrl(item),
       videoId,
       playlistId,
+      browseId,
+      musicVideoType: musicVideoType(item),
+      shelf: acc.shelf || "",
+      liked: likedFlag(item),
       endpoint: endpoint || {
         watchEndpoint: { videoId, playlistId: playlistId || undefined },
       },
@@ -252,40 +398,133 @@ function parseCardShelf(item, acc) {
   }
 }
 
+function parsePanelVideo(item, acc) {
+  const title = runsText(item.title);
+  if (!title) return;
+  const videoId = pickVideoId(item);
+  if (!videoId && !item.navigationEndpoint?.watchEndpoint) return;
+  const artist = runsText(item.shortBylineText || item.longBylineText);
+  acc.tracks.push({
+    id: videoId || `t:${title}:${acc.tracks.length}`,
+    title,
+    artist,
+    album: "",
+    duration: runsText(item.lengthText),
+    artwork: thumbnailUrl(item),
+    videoId,
+    playlistId: pickPlaylistId(item),
+    musicVideoType: musicVideoType(item),
+    shelf: acc.shelf || "",
+    liked: likedFlag(item),
+    endpoint: item.navigationEndpoint || {
+      watchEndpoint: { videoId },
+    },
+  });
+}
+
+function parseChip(node, acc) {
+  const title =
+    runsText(node.text) || runsText(node.title) || runsText(node.buttonText);
+  if (!title || /^play all$/i.test(title) || /^show all$/i.test(title)) return;
+  const endpoint =
+    node.navigationEndpoint ||
+    node.clickCommand ||
+    node.onTap ||
+    node.command ||
+    null;
+  const browse = endpoint?.browseEndpoint || node.browseEndpoint;
+  if (!browse?.browseId && !endpoint) return;
+  if (!acc.chips) acc.chips = [];
+  acc.chips.push({
+    title,
+    browseId: browse?.browseId || "",
+    params: browse?.params || "",
+    endpoint,
+  });
+}
+
+function shelfTitle(node) {
+  return (
+    runsText(node.title) ||
+    runsText(node.header?.musicCarouselShelfBasicHeaderRenderer?.title) ||
+    runsText(node.header?.musicShelfHeaderRenderer?.title) ||
+    runsText(node.header?.title) ||
+    ""
+  );
+}
+
+function walkNamedShelf(renderer, acc, walk) {
+  const title = shelfTitle(renderer);
+  const prev = acc.shelf;
+  if (title) acc.shelf = title;
+  for (const value of Object.values(renderer)) {
+    if (value && typeof value === "object") walk(value);
+  }
+  acc.shelf = prev;
+}
+
 function parseBrowse(response) {
-  const acc = { tracks: [], collections: [] };
+  const acc = { tracks: [], collections: [], lyricsId: "", suggestions: [], chips: [] };
   const seen = new Set();
+  const seenNodes = new WeakSet();
+
+  const rememberTrack = (index) => {
+    const key = `t:${acc.tracks[index].videoId || acc.tracks[index].id}`;
+    if (seen.has(key)) acc.tracks.splice(index, 1);
+    else seen.add(key);
+  };
+  const rememberCollection = (index) => {
+    const key = `c:${acc.collections[index].id}`;
+    if (seen.has(key)) acc.collections.splice(index, 1);
+    else seen.add(key);
+  };
 
   const walk = (node) => {
     if (!node || typeof node !== "object") return;
+    if (seenNodes.has(node)) return;
+    seenNodes.add(node);
     if (Array.isArray(node)) {
       node.forEach(walk);
       return;
     }
     if (node.musicCardShelfRenderer) {
+      const prev = acc.shelf;
+      const shelf = shelfTitle(node.musicCardShelfRenderer);
+      if (shelf) acc.shelf = shelf;
       const tracksAt = acc.tracks.length;
       const collectionsAt = acc.collections.length;
       parseCardShelf(node.musicCardShelfRenderer, acc);
-      for (let i = acc.tracks.length - 1; i >= tracksAt; i -= 1) {
-        const key = `t:${acc.tracks[i].videoId || acc.tracks[i].title}`;
-        if (seen.has(key)) acc.tracks.splice(i, 1);
-        else seen.add(key);
-      }
+      for (let i = acc.tracks.length - 1; i >= tracksAt; i -= 1) rememberTrack(i);
       for (let i = acc.collections.length - 1; i >= collectionsAt; i -= 1) {
-        const key = `c:${acc.collections[i].id}`;
-        if (seen.has(key)) acc.collections.splice(i, 1);
-        else seen.add(key);
+        rememberCollection(i);
       }
       walk(node.musicCardShelfRenderer.contents);
+      acc.shelf = prev;
       return;
+    }
+    if (node.musicCarouselShelfRenderer) {
+      walkNamedShelf(node.musicCarouselShelfRenderer, acc, walk);
+      return;
+    }
+    if (node.musicShelfRenderer) {
+      walkNamedShelf(node.musicShelfRenderer, acc, walk);
+      return;
+    }
+    if (node.musicPlaylistShelfRenderer) {
+      walkNamedShelf(node.musicPlaylistShelfRenderer, acc, walk);
+      return;
+    }
+    if (node.chipCloudChipRenderer) {
+      parseChip(node.chipCloudChipRenderer, acc);
+    }
+    if (node.musicNavigationButtonRenderer) {
+      parseChip(node.musicNavigationButtonRenderer, acc);
     }
     if (node.musicTwoRowItemRenderer) {
       const start = acc.collections.length;
       parseTwoRow(node.musicTwoRowItemRenderer, acc);
       for (let i = acc.collections.length - 1; i >= start; i -= 1) {
-        const key = `c:${acc.collections[i].id}`;
-        if (seen.has(key)) acc.collections.splice(i, 1);
-        else seen.add(key);
+        rememberCollection(i);
       }
       return;
     }
@@ -293,17 +532,28 @@ function parseBrowse(response) {
       const tracksAt = acc.tracks.length;
       const collectionsAt = acc.collections.length;
       parseListItem(node.musicResponsiveListItemRenderer, acc);
-      for (let i = acc.tracks.length - 1; i >= tracksAt; i -= 1) {
-        const key = `t:${acc.tracks[i].videoId || acc.tracks[i].title}`;
-        if (seen.has(key)) acc.tracks.splice(i, 1);
-        else seen.add(key);
-      }
+      for (let i = acc.tracks.length - 1; i >= tracksAt; i -= 1) rememberTrack(i);
       for (let i = acc.collections.length - 1; i >= collectionsAt; i -= 1) {
-        const key = `c:${acc.collections[i].id}`;
-        if (seen.has(key)) acc.collections.splice(i, 1);
-        else seen.add(key);
+        rememberCollection(i);
       }
       return;
+    }
+    if (node.playlistPanelVideoRenderer) {
+      const start = acc.tracks.length;
+      parsePanelVideo(node.playlistPanelVideoRenderer, acc);
+      for (let i = acc.tracks.length - 1; i >= start; i -= 1) rememberTrack(i);
+      return;
+    }
+    const browse = node.browseEndpoint || node.navigationEndpoint?.browseEndpoint;
+    const pageType =
+      browse?.browseEndpointContextSupportedConfigs
+        ?.browseEndpointContextMusicConfig?.pageType || "";
+    if (
+      browse?.browseId &&
+      /LYRICS/i.test(pageType) &&
+      !acc.lyricsId
+    ) {
+      acc.lyricsId = browse.browseId;
     }
     for (const value of Object.values(node)) {
       if (value && typeof value === "object") walk(value);
@@ -316,8 +566,11 @@ function parseBrowse(response) {
 
 function continuationToken(response) {
   const found = [];
+  const seenNodes = new WeakSet();
   const walk = (node) => {
     if (!node || typeof node !== "object" || found.length) return;
+    if (seenNodes.has(node)) return;
+    seenNodes.add(node);
     if (node.nextContinuationData?.continuation) {
       found.push(node.nextContinuationData.continuation);
       return;
@@ -343,36 +596,98 @@ const SONGS_SEARCH_PARAMS = "EgWKAQIIAWoMEA4QChADEAQQCRAF";
 function mergeParsed(parts) {
   const tracks = [];
   const collections = [];
+  const chips = [];
   const seen = new Set();
+  let lyricsId = "";
   for (const part of parts) {
-    for (const track of part.tracks) {
-      const key = `t:${track.videoId || track.title}`;
+    if (!lyricsId && part.lyricsId) lyricsId = part.lyricsId;
+    for (const track of part.tracks || []) {
+      const key = `t:${track.videoId || track.id || track.title}`;
       if (seen.has(key)) continue;
       seen.add(key);
       tracks.push(track);
     }
-    for (const item of part.collections) {
+    for (const item of part.collections || []) {
       const key = `c:${item.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
       collections.push(item);
     }
+    for (const chip of part.chips || []) {
+      const key = `chip:${chip.title}:${chip.browseId}:${chip.params || ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      chips.push(chip);
+    }
   }
-  return { tracks, collections };
+  return { tracks, collections, lyricsId, chips };
 }
 
 async function followPages(fetchPage, body, pages) {
   let response = await fetchPage(body);
-  const parsed = parseBrowse(response);
+  const parts = [parseBrowse(response)];
   for (let i = 1; i < pages; i += 1) {
     const token = continuationToken(response);
     if (!token) break;
     response = await fetchPage({ continuation: token });
-    const extra = parseBrowse(response);
-    parsed.tracks.push(...extra.tracks);
-    parsed.collections.push(...extra.collections);
+    parts.push(parseBrowse(response));
   }
-  return parsed;
+  return mergeParsed(parts);
+}
+
+function parseSuggestions(response) {
+  const out = [];
+  const seen = new Set();
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    const renderer =
+      node.searchSuggestionRenderer || node.historySuggestionRenderer;
+    if (renderer) {
+      const query =
+        renderer.navigationEndpoint?.searchEndpoint?.query ||
+        runsText(renderer.suggestion) ||
+        "";
+      if (query && !seen.has(query)) {
+        seen.add(query);
+        out.push(query);
+      }
+      return;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") walk(value);
+    }
+  };
+  walk(response);
+  return out;
+}
+
+function parseLyrics(response) {
+  const chunks = [];
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (node.musicDescriptionShelfRenderer) {
+      const text = runsText(node.musicDescriptionShelfRenderer.description);
+      if (text) chunks.push(text);
+      return;
+    }
+    if (typeof node.lyrics === "string" && node.lyrics.trim()) {
+      chunks.push(node.lyrics);
+      return;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") walk(value);
+    }
+  };
+  walk(response);
+  return chunks.join("\n\n").trim();
 }
 
 const YTM = {
@@ -382,8 +697,14 @@ const YTM = {
   search(body) {
     return pageRequest("innertube", { endpoint: "search", body });
   },
+  next(body) {
+    return pageRequest("innertube", { endpoint: "next", body });
+  },
   play(payload) {
     return pageRequest("play", payload);
+  },
+  player(payload) {
+    return pageRequest("player", payload, 4000);
   },
   browseParsed(body, pages = 2) {
     return followPages(YTM.browse, body, pages);
@@ -397,5 +718,59 @@ const YTM = {
     ).catch(() => ({ tracks: [], collections: [] }));
     const [mixedParsed, songsParsed] = await Promise.all([mixed, songs]);
     return mergeParsed([songsParsed, mixedParsed]);
+  },
+  async suggest(query) {
+    if (!query) return [];
+    try {
+      const response = await pageRequest("innertube", {
+        endpoint: "music/get_search_suggestions",
+        body: { input: query },
+      });
+      return parseSuggestions(response);
+    } catch {
+      return [];
+    }
+  },
+  async queue(videoId, playlistId) {
+    if (!videoId && !playlistId) return { tracks: [], lyricsId: "" };
+    const response = await YTM.next({
+      videoId: videoId || undefined,
+      playlistId: playlistId || undefined,
+    });
+    return parseBrowse(response);
+  },
+  async lyrics(browseId) {
+    if (!browseId) return "";
+    const response = await YTM.browse({ browseId });
+    return parseLyrics(response);
+  },
+  like(videoId, rating) {
+    const endpoint =
+      rating === "like"
+        ? "like/like"
+        : rating === "dislike"
+          ? "like/dislike"
+          : "like/removelike";
+    return pageRequest("innertube", {
+      endpoint,
+      body: {
+        target: { videoId },
+      },
+    });
+  },
+  createPlaylist(title) {
+    return pageRequest("innertube", {
+      endpoint: "playlist/create",
+      body: { title, privacyStatus: "PRIVATE" },
+    });
+  },
+  addToPlaylist(playlistId, videoId) {
+    return pageRequest("innertube", {
+      endpoint: "browse/edit_playlist",
+      body: {
+        playlistId,
+        actions: [{ action: "ACTION_ADD_VIDEO", addedVideoId: videoId }],
+      },
+    });
   },
 };

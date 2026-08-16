@@ -17,22 +17,41 @@
       </label>
     </div>
 
-    <div class="ytunes-lcd" aria-live="polite">
+    <div class="ytunes-lcd is-idle" id="ytunes-lcd" aria-live="polite" title="">
       <div class="ytunes-lcd-art" hidden>
         <img id="ytunes-lcd-img" alt="" />
       </div>
       <div class="ytunes-lcd-meta">
         <div id="ytunes-lcd-title">yTunes</div>
         <div id="ytunes-lcd-sub">YouTube Music</div>
-        <div class="ytunes-lcd-progress">
+        <div class="ytunes-lcd-progress" hidden>
           <span id="ytunes-time-current">0:00</span>
           <input id="ytunes-seek" class="ytunes-range" type="range" min="0" max="1000" value="0" aria-label="Seek" style="--yt-fill: 0%" />
           <span id="ytunes-time-duration">0:00</span>
         </div>
       </div>
+      <div class="ytunes-lcd-tools" hidden>
+        <button type="button" class="ytunes-lcd-tool" data-action="shuffle" aria-pressed="false" title="Shuffle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+        </button>
+        <button type="button" class="ytunes-lcd-tool" data-action="repeat" aria-pressed="false" title="Repeat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+        </button>
+        <button type="button" class="ytunes-lcd-tool" data-action="like" aria-pressed="false" title="Like">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="ytunes-top-right">
+      <div class="ytunes-history">
+        <button type="button" class="ytunes-nav" data-nav="back" aria-label="Back" disabled>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M8.2 1.2 3.4 6l4.8 4.8"/></svg>
+        </button>
+        <button type="button" class="ytunes-nav" data-nav="forward" aria-label="Forward" disabled>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.8 1.2 8.6 6 3.8 10.8"/></svg>
+        </button>
+      </div>
       <div class="ytunes-views" role="tablist" aria-label="View">
         <button type="button" data-view="list" aria-pressed="false" title="List">
           <svg viewBox="0 0 16 12" aria-hidden="true"><path d="M0 1h16v2H0V1zm0 4h16v2H0V5zm0 4h16v2H0V9z"/></svg>
@@ -44,9 +63,13 @@
           <svg viewBox="0 0 16 12" aria-hidden="true"><path d="M0 3h3v6H0V3zm4-3h8v12H4V0zm9 3h3v6h-3V3z"/></svg>
         </button>
       </div>
-      <label class="ytunes-search">
-        <input id="ytunes-search" type="search" placeholder="Search Music" autocomplete="off" spellcheck="false" enterkeyhint="search" />
-      </label>
+      <div class="ytunes-search">
+        <label class="ytunes-search-field">
+          <span class="ytunes-search-icon" aria-hidden="true"></span>
+          <input id="ytunes-search" type="search" placeholder="Search Music" autocomplete="off" spellcheck="false" enterkeyhint="search" />
+        </label>
+        <ul id="ytunes-suggest" class="ytunes-suggest" hidden></ul>
+      </div>
     </div>
   </header>
 
@@ -56,17 +79,22 @@
         <h2>Library</h2>
         <button type="button" class="is-selected" data-source="songs" aria-current="true">Music</button>
         <button type="button" data-source="liked">Liked Songs</button>
+        <button type="button" data-source="videos">Videos</button>
+        <button type="button" data-source="podcasts">Podcasts</button>
         <button type="button" data-source="albums">Albums</button>
         <button type="button" data-source="artists">Artists</button>
+        <button type="button" data-source="recents">Recents</button>
+        <h2>Store</h2>
+        <button type="button" data-source="home">Home</button>
+        <button type="button" data-source="explore">Explore</button>
+        <button type="button" data-source="charts">Charts</button>
+        <h2>Genius</h2>
+        <button type="button" data-source="radio">Radio</button>
+        <button type="button" data-source="mixes">Mixes</button>
+        <div id="ytunes-moods"></div>
         <h2>Playlists</h2>
         <button type="button" data-source="now">Now Playing</button>
         <div id="ytunes-playlists"></div>
-      </div>
-      <div class="ytunes-selected">
-        <div class="ytunes-selected-label">Selected Item</div>
-        <div class="ytunes-selected-art" hidden>
-          <img id="ytunes-selected-img" alt="" />
-        </div>
       </div>
     </aside>
 
@@ -78,18 +106,37 @@
           <div id="ytunes-cover-title"></div>
           <div id="ytunes-cover-artist"></div>
         </div>
+        <div class="ytunes-cf-scroll">
+          <button type="button" data-cf="prev" aria-label="Previous cover">‹</button>
+          <input id="ytunes-cf-range" class="ytunes-range" type="range" min="0" max="0" value="0" aria-label="Cover Flow position" />
+          <button type="button" data-cf="next" aria-label="Next cover">›</button>
+        </div>
         <p id="ytunes-cover-empty">Loading library…</p>
       </div>
 
-      <div class="ytunes-table-wrap">
+      <div class="ytunes-artwell" id="ytunes-artwell">
+        <img id="ytunes-artwell-img" alt="" />
+        <div class="ytunes-artwell-meta">
+          <div id="ytunes-artwell-title"></div>
+          <div id="ytunes-artwell-sub"></div>
+        </div>
+      </div>
+
+      <div class="ytunes-grid" id="ytunes-grid"></div>
+
+      <div class="ytunes-lyrics" id="ytunes-lyrics" hidden>
+        <pre id="ytunes-lyrics-text"></pre>
+      </div>
+
+      <div class="ytunes-table-wrap" id="ytunes-table-wrap" tabindex="0">
         <table class="ytunes-table">
           <thead>
             <tr>
               <th></th>
-              <th>Name</th>
-              <th>Time</th>
-              <th>Artist</th>
-              <th>Album</th>
+              <th data-sort="title">Name</th>
+              <th data-sort="duration">Time</th>
+              <th data-sort="artist">Artist</th>
+              <th data-sort="album">Album</th>
             </tr>
           </thead>
           <tbody id="ytunes-tracks">
@@ -103,8 +150,33 @@
   </div>
 
   <footer class="ytunes-status">
-    <span id="ytunes-status-left">1 item</span>
+    <div class="ytunes-status-tools">
+      <button type="button" id="ytunes-new-playlist" title="New playlist">+</button>
+      <button type="button" data-action="shuffle" title="Shuffle">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+      </button>
+      <button type="button" data-action="repeat" title="Repeat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+      </button>
+      <button type="button" data-action="like" title="Like">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      </button>
+    </div>
+    <span id="ytunes-status-left">0 items</span>
     <span id="ytunes-status-center"></span>
-    <button type="button" id="ytunes-original">Show original YouTube Music</button>
+    <button type="button" id="ytunes-original">Original YouTube Music</button>
   </footer>
+
+  <div class="ytunes-menu" id="ytunes-menu" hidden></div>
+
+  <div class="ytunes-dialog" id="ytunes-dialog" hidden>
+    <form id="ytunes-dialog-form">
+      <h3 id="ytunes-dialog-title">New Playlist</h3>
+      <input id="ytunes-dialog-input" type="text" maxlength="150" />
+      <div class="ytunes-dialog-actions">
+        <button type="button" id="ytunes-dialog-cancel">Cancel</button>
+        <button type="submit" id="ytunes-dialog-ok">Create</button>
+      </div>
+    </form>
+  </div>
 </div>

@@ -3,6 +3,23 @@ const SELECTORS = {
   previous: [".previous-button", "#previous-button"],
   playPause: [".play-pause-button", "#play-pause-button"],
   next: [".next-button", "#next-button"],
+  shuffle: [
+    "#shuffle-button",
+    ".shuffle",
+    "ytmusic-player-bar .shuffle-button",
+    "tp-yt-paper-icon-button.shuffle",
+  ],
+  repeat: [
+    "#repeat-button",
+    ".repeat",
+    "ytmusic-player-bar .repeat",
+    "tp-yt-paper-icon-button.repeat",
+  ],
+  like: [
+    "ytmusic-like-button-renderer",
+    "#like-button-renderer",
+    ".like-button-renderer",
+  ],
   title: [".title.ytmusic-player-bar", ".content-info-wrapper .title"],
   subtitle: [
     ".subtitle.ytmusic-player-bar",
@@ -20,8 +37,11 @@ const SELECTORS = {
   volume: ["#volume-slider", "tp-yt-paper-slider#volume-slider"],
 };
 
+let playerSnap = null;
+let playerRefresh = null;
+
 function firstMatch(root, selectors) {
-  if (!root) return null;
+  if (!root || !selectors) return null;
   for (const selector of selectors) {
     const node = root.querySelector(selector);
     if (node) return node;
@@ -97,16 +117,20 @@ function artworkUrl(root, size) {
 }
 
 function parseClock(value) {
-  const parts = value.split(":").map(Number);
-  if (parts.some((n) => Number.isNaN(n))) return 0;
+  const parts = String(value || "")
+    .split(":")
+    .map(Number);
+  if (!parts.length || parts.some((n) => Number.isNaN(n))) return 0;
   return parts.reduce((sum, n) => sum * 60 + n, 0);
 }
 
 function formatClock(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const whole = Math.floor(seconds);
-  const m = Math.floor(whole / 60);
+  const h = Math.floor(whole / 3600);
+  const m = Math.floor((whole % 3600) / 60);
   const s = whole % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
@@ -127,9 +151,7 @@ function readProgress(bar) {
 
   const slider = firstMatch(bar, SELECTORS.progress);
   const value = Number(slider?.value ?? slider?.getAttribute("aria-valuenow"));
-  const max = Number(
-    slider?.max ?? slider?.getAttribute("aria-valuemax") ?? 0
-  );
+  const max = Number(slider?.max ?? slider?.getAttribute("aria-valuemax") ?? 0);
   if (max > 0 && Number.isFinite(value)) {
     return {
       current: value,
@@ -149,31 +171,225 @@ function readProgress(bar) {
   };
 }
 
+function readVolume(bar) {
+  const slider = firstMatch(bar, SELECTORS.volume);
+  const value = Number(slider?.value ?? slider?.getAttribute("aria-valuenow"));
+  const max = Number(slider?.max ?? slider?.getAttribute("aria-valuemax") ?? 100);
+  if (!Number.isFinite(value) || max <= 0) return 80;
+  return Math.round((value / max) * 100);
+}
+
+function labelOf(node) {
+  return (
+    node?.getAttribute("title") ||
+    node?.getAttribute("aria-label") ||
+    textOf(node) ||
+    ""
+  ).toLowerCase();
+}
+
+function labeledBarControl(bar, kind) {
+  if (!bar) return null;
+  const nodes = bar.querySelectorAll("[aria-label], [title]");
+  for (const node of nodes) {
+    const label = (
+      node.getAttribute("aria-label") ||
+      node.getAttribute("title") ||
+      ""
+    ).toLowerCase();
+    if (!label) continue;
+    if (kind === "shuffle" && label.includes("shuffle")) return node;
+    if (kind === "repeat" && label.includes("repeat")) return node;
+    if (kind === "dislike") {
+      if (/\b(dislike|undislike|disliked)\b/.test(label)) return node;
+    }
+    if (kind === "like") {
+      if (label.includes("dislike")) continue;
+      if (/\bunlike\b/.test(label) || label === "like" || /^like /.test(label)) return node;
+    }
+  }
+  return null;
+}
+
+function controlRoots() {
+  return [
+    playerBar(),
+    document.querySelector("ytmusic-player-page"),
+    document.querySelector("ytmusic-app"),
+  ].filter(Boolean);
+}
+
+function controlNode(action) {
+  for (const root of controlRoots()) {
+    if (action === "like") {
+      const renderer = root.querySelector("ytmusic-like-button-renderer");
+      if (renderer) return renderer;
+    }
+    const labeled = labeledBarControl(root, action);
+    if (labeled) return labeled;
+    const matched = firstMatch(root, SELECTORS[action]);
+    if (matched) return matched;
+  }
+  return null;
+}
+
+function clickTarget(node) {
+  if (!node) return null;
+  if (node.matches?.("ytmusic-like-button-renderer")) {
+    return (
+      node.querySelector(
+        "#button-shape-like button, [aria-label='Like' i], [aria-label='Unlike' i], [aria-label^='Like ' i]"
+      ) || node
+    );
+  }
+  if (node.matches?.("button, [role='button']")) return node;
+  return node.querySelector?.("button, [role='button']") || node;
+}
+
+function pressable(node) {
+  if (!node) return null;
+  return (
+    node.closest?.(
+      "button, [role='button'], tp-yt-paper-icon-button, yt-button-shape, ytmusic-like-button-renderer"
+    ) || node
+  );
+}
+
+function isPressed(node) {
+  if (!node) return false;
+  const target = pressable(node) || node;
+  const pressed =
+    target.getAttribute("aria-pressed") ||
+    target.getAttribute("aria-checked") ||
+    node.getAttribute("aria-pressed") ||
+    node.getAttribute("aria-checked");
+  if (pressed === "true") return true;
+  if (pressed === "false") return false;
+  if (target.classList.contains("active") || target.hasAttribute("selected")) return true;
+  const label = labelOf(target) || labelOf(node);
+  if (label.includes("shuffle")) {
+    if (label.includes("off") || label.includes("enable") || label.includes("turn on")) {
+      return false;
+    }
+    if (label.includes("on") || label.includes("disable") || label.includes("unshuffle")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function readRepeat(node) {
+  const label = labelOf(node);
+  if (label.includes("one")) return "one";
+  if (label.includes("all") || (isPressed(node) && !label.includes("off"))) {
+    return "all";
+  }
+  return "off";
+}
+
+function readLike() {
+  const renderers = document.querySelectorAll("ytmusic-like-button-renderer");
+  for (const renderer of renderers) {
+    const status = String(
+      renderer.getAttribute("like-status") ||
+        renderer.getAttribute("like_status") ||
+        renderer.likeStatus ||
+        renderer.likeStatus_ ||
+        ""
+    ).toUpperCase();
+    if (status === "LIKE" || status === "DISLIKE") return status.toLowerCase();
+    const label = labelOf(renderer) || labelOf(renderer.querySelector?.("[aria-label]"));
+    if (label.includes("unlike") || label.includes("remove like") || label.includes("liked")) {
+      return "like";
+    }
+  }
+  const node = controlNode("like");
+  if (!node) return "indifferent";
+  const renderer = node.closest?.("ytmusic-like-button-renderer") || node;
+  const status = String(
+    renderer.getAttribute("like-status") ||
+      renderer.getAttribute("like_status") ||
+      node.getAttribute("like-status") ||
+      ""
+  ).toUpperCase();
+  if (status === "LIKE" || status === "DISLIKE") return status.toLowerCase();
+  const label = labelOf(node) || labelOf(renderer);
+  if (label.includes("unlike") || label.includes("liked")) return "like";
+  if (label.includes("undislike") || label.includes("disliked")) return "dislike";
+  return "indifferent";
+}
+
+function progressFromSnap(snap) {
+  const current = snap.current || 0;
+  const duration = snap.duration || 0;
+  return {
+    current,
+    duration,
+    ratio: duration ? current / duration : 0,
+    currentLabel: formatClock(current),
+    durationLabel: formatClock(duration),
+  };
+}
+
+function refreshPlayerSnap() {
+  if (playerRefresh) return playerRefresh;
+  if (typeof YTM === "undefined") return Promise.resolve(null);
+  playerRefresh = YTM.player({ method: "get" })
+    .then((snap) => {
+      playerSnap = snap || null;
+      return playerSnap;
+    })
+    .catch(() => {
+      playerSnap = null;
+      return null;
+    })
+    .finally(() => {
+      playerRefresh = null;
+    });
+  return playerRefresh;
+}
+
 function probe() {
   const bar = playerBar();
   const playPause = firstMatch(bar, SELECTORS.playPause);
   const player = document.querySelector("ytmusic-player");
   const subtitle = textOf(firstMatch(bar, SELECTORS.subtitle));
   const bits = subtitle.split("•").map((part) => part.trim()).filter(Boolean);
+  const snap = playerSnap;
+  const barTitle = textOf(firstMatch(bar, SELECTORS.title));
+  const barProgress = readProgress(bar);
+  const title = (snap?.title && snap.videoId ? snap.title : "") || barTitle;
+  const year = bits.find((bit) => /^\d{4}$/.test(bit)) || "";
+  const artist = bits[0] || snap?.author || "";
+  const album = bits.slice(1).find((bit) => bit !== year) || "";
   return {
     hostAlive: Boolean(bar),
-    hasMoviePlayer: Boolean(document.querySelector("#movie_player")),
+    hasMoviePlayer: Boolean(document.querySelector("#movie_player") || snap?.hasPlayer),
     hasApp: Boolean(document.querySelector("ytmusic-app")),
-    playing: isPlaying(playPause),
-    title: textOf(firstMatch(bar, SELECTORS.title)),
-    subtitle,
-    artist: bits[0] || "",
-    album: bits[1] || "",
+    playing: snap && typeof snap.playing === "boolean" ? snap.playing : isPlaying(playPause),
+    title,
+    subtitle: subtitle || [snap?.author, title].filter(Boolean).join(" • "),
+    artist,
+    album,
+    year,
+    videoId: snap?.videoId || "",
     artwork: artworkUrl(bar, 240) || artworkUrl(player, 240),
     cover: artworkUrl(bar, 600) || artworkUrl(player, 600),
-    progress: readProgress(bar),
-    volume: readVolume(bar),
+    progress: snap?.duration > 0 ? progressFromSnap(snap) : barProgress,
+    volume:
+      typeof snap?.volume === "number" && !snap.muted
+        ? Math.round(snap.volume)
+        : snap?.muted
+          ? 0
+          : readVolume(bar),
+    shuffle: isPressed(controlNode("shuffle")),
+    repeat: readRepeat(controlNode("repeat")),
+    liked: readLike(),
   };
 }
 
 function clickControl(action) {
-  const bar = playerBar();
-  const node = firstMatch(bar, SELECTORS[action]);
+  const node = clickTarget(controlNode(action));
   if (!node) return false;
   node.click();
   return true;
@@ -192,30 +408,70 @@ function setSlider(selectors, ratio) {
   return true;
 }
 
-function seekToRatio(ratio) {
+async function playerMethod(payload) {
+  if (typeof YTM === "undefined") return null;
+  try {
+    return await YTM.player(payload);
+  } catch {
+    return null;
+  }
+}
+
+async function controlPlayback(action) {
+  const methods = {
+    playPause: { method: "playPause" },
+    next: { method: "next" },
+    previous: { method: "previous" },
+  };
+  const payload = methods[action];
+  if (payload) {
+    const result = await playerMethod(payload);
+    if (result?.ok) {
+      await refreshPlayerSnap();
+      return true;
+    }
+  }
+  const ok = clickControl(action);
+  if (ok) await refreshPlayerSnap();
+  return ok;
+}
+
+async function seekToRatio(ratio) {
+  const duration = playerSnap?.duration || 0;
+  if (duration > 0) {
+    const result = await playerMethod({
+      method: "seek",
+      seconds: Math.max(0, Math.min(1, ratio)) * duration,
+    });
+    if (result?.ok) {
+      await refreshPlayerSnap();
+      return true;
+    }
+  }
   return setSlider(SELECTORS.progress, ratio);
 }
 
-function setVolumeRatio(ratio) {
+async function setVolumeRatio(ratio) {
+  const volume = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+  const result = await playerMethod({ method: "volume", volume });
+  if (result?.ok) {
+    await refreshPlayerSnap();
+    return true;
+  }
   return setSlider(SELECTORS.volume, ratio);
-}
-
-function readVolume(bar) {
-  const slider = firstMatch(bar, SELECTORS.volume);
-  const value = Number(slider?.value ?? slider?.getAttribute("aria-valuenow"));
-  const max = Number(slider?.max ?? slider.getAttribute("aria-valuemax") ?? 100);
-  if (!Number.isFinite(value) || max <= 0) return 80;
-  return Math.round((value / max) * 100);
 }
 
 function markHostReady() {
   document.documentElement.dataset.ytunesHost = "ready";
 }
 
+function markHostIdle() {
+  delete document.documentElement.dataset.ytunesHost;
+}
+
 function waitForPlayerBar() {
   return new Promise((resolve) => {
     if (playerBar()) {
-      markHostReady();
       resolve(true);
       return;
     }
@@ -228,8 +484,6 @@ function waitForPlayerBar() {
       settled = true;
       observer?.disconnect();
       clearTimeout(timer);
-      if (ok) markHostReady();
-      else document.documentElement.dataset.ytunesHost = "missing";
       resolve(ok);
     };
 

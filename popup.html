@@ -21,9 +21,13 @@
         </button>
         <button type="button" data-action="next">Next</button>
       </div>
-      <button type="button" id="show-original" class="linkish">
-        Show original YouTube Music
-      </button>
+      <label class="toggle">
+        <input type="checkbox" id="overlay-enabled" />
+        Show yTunes overlay
+      </label>
+      <p id="overlay-hint" class="status">
+        Off uses stock YouTube Music. This choice survives refresh.
+      </p>
     </main>
     <main id="off-ytm" hidden>
       <h1>yTunes</h1>

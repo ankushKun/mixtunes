@@ -9,11 +9,6 @@ function isYouTubeMusic(url) {
   }
 }
 
-async function activeTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
-}
-
 async function sendToTab(tabId, message) {
   try {
     return await chrome.tabs.sendMessage(tabId, message);
@@ -69,12 +64,23 @@ async function refresh(tabId) {
   renderStatus(await sendToTab(tabId, { type: "ytunes.probe" }));
 }
 
+async function syncOverlayToggle() {
+  const toggle = document.getElementById("overlay-enabled");
+  const stored = await chrome.storage.local.get({ overlayEnabled: true });
+  toggle.checked = stored.overlayEnabled !== false;
+  toggle.addEventListener("change", async () => {
+    await chrome.storage.local.set({ overlayEnabled: toggle.checked });
+    window.close();
+  });
+}
+
 chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
   const onYtm = isYouTubeMusic(tab?.url);
   document.getElementById("on-ytm").hidden = !onYtm;
   document.getElementById("off-ytm").hidden = onYtm;
   if (!onYtm || tab?.id == null) return;
 
+  await syncOverlayToggle();
   await refresh(tab.id);
 
   document.querySelector(".transport").addEventListener("click", async (event) => {
@@ -85,15 +91,6 @@ chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
       action: button.dataset.action,
     });
     await refresh(tab.id);
-  });
-
-  document.getElementById("show-original").addEventListener("click", async () => {
-    const current = await activeTab();
-    if (!current?.id || !current.url) return;
-    const url = new URL(current.url);
-    url.searchParams.set("newytm", "true");
-    await chrome.tabs.update(current.id, { url: url.toString() });
-    window.close();
   });
 
   setInterval(() => refresh(tab.id), 800);

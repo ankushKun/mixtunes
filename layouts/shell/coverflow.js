@@ -1,6 +1,6 @@
 /**
  * Cover Flow posing — adapted from ankushKun.github.io music-player.js.
- * Geometry: CF_WINDOW 6, angle 56°, depth 48, gap 52, spacing 58, 480ms ease.
+ * Geometry: CF_WINDOW 6, angle 56°, depth 48, gap 52, spacing 58, 400ms ease.
  * Center cover uses -webkit-box-reflect; side covers stay square (no reflect).
  */
 const CF_WINDOW = 6;
@@ -11,7 +11,8 @@ const CF_ANGLE = 56;
 const CF_CENTER_Z = 70;
 const CF_DEPTH = 48;
 const CF_GAP = 52;
-const CF_MS = 480;
+const CF_MS = 400;
+const CF_WHEEL_STEP = 48;
 
 function prefersReducedMotion() {
   try {
@@ -19,6 +20,14 @@ function prefersReducedMotion() {
   } catch {
     return false;
   }
+}
+
+function coverCaptionSub(item) {
+  if (!item) return "";
+  const shelf = item.shelf || "";
+  const rest = item.artist || item.subtitle || "";
+  if (shelf && rest && shelf !== rest) return `${shelf} · ${rest}`;
+  return rest || shelf;
 }
 
 function clamp(n, min, max) {
@@ -31,20 +40,24 @@ function CoverFlow(root, handlers) {
   const empty = root.querySelector("#ytunes-cover-empty");
   const titleEl = root.querySelector("#ytunes-cover-title");
   const artistEl = root.querySelector("#ytunes-cover-artist");
+  const range = root.querySelector("#ytunes-cf-range");
   const reduced = prefersReducedMotion();
   let covers = [];
   let center = 0;
   let lastKey = "";
   let captionTimer = null;
+  let wheelAcc = 0;
+  let drag = null;
+  let skipClick = false;
 
   if (reduced) flow.classList.add("is-reduced");
   flow.style.setProperty("--yt-cf-ms", `${CF_MS}ms`);
 
   function coverSize() {
     const centerEl = stage.querySelector(".ytunes-cf-cover.is-center");
-    const probe = centerEl || stage.querySelector(".ytunes-cf-cover");
-    if (probe) {
-      const w = probe.offsetWidth;
+    const probeEl = centerEl || stage.querySelector(".ytunes-cf-cover");
+    if (probeEl) {
+      const w = probeEl.offsetWidth;
       if (w > 8) return w;
     }
     const raw = getComputedStyle(flow).getPropertyValue("--yt-cf-size").trim();
@@ -145,6 +158,18 @@ function CoverFlow(root, handlers) {
     return covers[center] || null;
   }
 
+  function syncRange() {
+    if (!range) return;
+    const max = Math.max(0, covers.length - 1);
+    range.max = String(max);
+    range.value = String(center);
+    range.disabled = covers.length < 2;
+    range.style.setProperty(
+      "--yt-fill",
+      `${max ? (center / max) * 100 : 0}%`
+    );
+  }
+
   function render() {
     if (!covers.length) {
       flow.classList.add("is-empty");
@@ -152,13 +177,15 @@ function CoverFlow(root, handlers) {
       stage.replaceChildren();
       lastKey = "";
       setCaption("", "");
+      syncRange();
       return;
     }
     flow.classList.remove("is-empty");
     empty.hidden = true;
     center = clamp(center, 0, covers.length - 1);
     const item = covers[center];
-    setCaption(item.title, item.artist || item.subtitle || "");
+    setCaption(item.title, coverCaptionSub(item));
+    syncRange();
 
     const start = reduced ? center : Math.max(0, center - CF_WINDOW);
     const end = reduced
@@ -199,11 +226,7 @@ function CoverFlow(root, handlers) {
       });
     }
 
-    setImg(
-      root.querySelector("#ytunes-selected-img"),
-      item.artwork || "",
-      item.title || ""
-    );
+    handlers?.onIndex?.(center, covers.length);
   }
 
   function setList(list, selectedId) {
@@ -219,10 +242,21 @@ function CoverFlow(root, handlers) {
   }
 
   function move(delta) {
-    if (!covers.length) return;
-    center = clamp(center + delta, 0, covers.length - 1);
+    if (!covers.length || !delta) return;
+    const next = clamp(center + delta, 0, covers.length - 1);
+    if (next === center) return;
+    center = next;
     render();
     handlers?.onBrowse?.(current());
+  }
+
+  function setIndex(index, silent) {
+    if (!covers.length) return;
+    const next = clamp(index, 0, covers.length - 1);
+    if (next === center) return;
+    center = next;
+    render();
+    if (!silent) handlers?.onBrowse?.(current());
   }
 
   function coverFromEvent(event) {
@@ -250,7 +284,12 @@ function CoverFlow(root, handlers) {
     return best;
   }
 
-  function onPointer(event) {
+  function onClick(event) {
+    if (skipClick) {
+      skipClick = false;
+      return;
+    }
+    if (event.target.closest(".ytunes-cf-scroll")) return;
     const cover = coverFromEvent(event);
     if (!cover) {
       flow.focus({ preventScroll: true });
@@ -266,10 +305,11 @@ function CoverFlow(root, handlers) {
       handlers?.onPlay?.(covers[idx]);
       return;
     }
-    if (cover.classList.contains("is-center")) return;
-    center = idx;
-    render();
-    handlers?.onBrowse?.(covers[idx]);
+    if (cover.classList.contains("is-center")) {
+      if (!covers[idx]?.tracks?.length) handlers?.onBrowse?.(covers[idx]);
+      return;
+    }
+    setIndex(idx);
   }
 
   function onWheel(event) {
@@ -278,8 +318,59 @@ function CoverFlow(root, handlers) {
       Math.abs(event.deltaX) > Math.abs(event.deltaY)
         ? event.deltaX
         : event.deltaY;
-    if (Math.abs(delta) < 2) return;
-    move(delta > 0 ? 1 : -1);
+    wheelAcc += delta;
+    while (Math.abs(wheelAcc) >= CF_WHEEL_STEP) {
+      move(wheelAcc > 0 ? 1 : -1);
+      wheelAcc -= Math.sign(wheelAcc) * CF_WHEEL_STEP;
+    }
+  }
+
+  function onPointerDown(event) {
+    if (event.button !== 0) return;
+    if (event.target.closest("input, [data-cf], .ytunes-cf-scroll")) return;
+    flow.setPointerCapture(event.pointerId);
+    drag = {
+      id: event.pointerId,
+      x: event.clientX,
+      acc: 0,
+      moved: false,
+      samples: [{ x: event.clientX, t: Date.now() }],
+    };
+  }
+
+  function onPointerMove(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x;
+    drag.x = event.clientX;
+    drag.acc += dx;
+    drag.samples.push({ x: event.clientX, t: Date.now() });
+    if (drag.samples.length > 6) drag.samples.shift();
+    const threshold = Math.max(28, coverSize() * 0.28);
+    if (Math.abs(drag.acc) >= threshold) {
+      move(drag.acc > 0 ? -1 : 1);
+      drag.acc = 0;
+      drag.moved = true;
+    }
+  }
+
+  function onPointerUp(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    const samples = drag.samples;
+    const moved = drag.moved;
+    const pointerId = drag.id;
+    skipClick = moved;
+    drag = null;
+    try {
+      if (flow.hasPointerCapture?.(pointerId)) flow.releasePointerCapture(pointerId);
+    } catch {
+      /* capture already released */
+    }
+    if (!moved || samples.length < 2) return;
+    const first = samples[0];
+    const last = samples[samples.length - 1];
+    const dt = Math.max(1, last.t - first.t);
+    const v = (last.x - first.x) / dt;
+    if (Math.abs(v) > 0.35) move(v > 0 ? -1 : 1);
   }
 
   function onKey(event) {
@@ -287,20 +378,42 @@ function CoverFlow(root, handlers) {
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
       move(event.key === "ArrowLeft" ? -1 : 1);
-    } else if (event.key === "Enter" || event.key === " ") {
+    } else if (event.key === "Enter") {
       event.preventDefault();
       handlers?.onPlay?.(current());
     }
   }
 
   flow.addEventListener("wheel", onWheel, { passive: false });
-  flow.addEventListener("click", onPointer);
-  flow.addEventListener("dblclick", onPointer);
+  flow.addEventListener("click", onClick);
+  flow.addEventListener("dblclick", onClick);
+  flow.addEventListener("pointerdown", onPointerDown);
+  flow.addEventListener("pointermove", onPointerMove);
+  flow.addEventListener("pointerup", onPointerUp);
+  flow.addEventListener("pointercancel", onPointerUp);
   flow.addEventListener("keydown", onKey);
+
+  if (range) {
+    range.addEventListener("input", () => {
+      setIndex(Number(range.value) || 0);
+    });
+  }
+
+  flow.querySelectorAll("[data-cf]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      move(button.dataset.cf === "prev" ? -1 : 1);
+    });
+  });
 
   return {
     setList,
     current,
     index: () => center,
+    count: () => covers.length,
+    move,
+    setIndex,
+    focus: () => flow.focus({ preventScroll: true }),
   };
 }

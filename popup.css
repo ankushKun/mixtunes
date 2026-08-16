@@ -105,9 +105,16 @@ a:hover {
   flex: 1;
 }
 
-.linkish {
-  display: block;
-  width: 100%;
-  margin-top: 12px;
-  text-align: left;
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--fg);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.toggle input {
+  margin: 0;
 }
