@@ -3,12 +3,12 @@
  * Geometry: CF_WINDOW 6, angle 56°, depth/gap/spacing scale with cover size, 400ms ease.
  * Cover box is taller than the square so the flipped reflection sits inside the 3D plane.
  */
-const CF_WINDOW = 4;
-const CF_WINDOW_DRAG = 3;
+const CF_WINDOW = 3;
+const CF_WINDOW_DRAG = 2;
 const CF_SIZE = 150;
 const CF_SIZE_NARROW = 108;
 const CF_SIZE_MIN = 72;
-const CF_SIZE_MAX = 560;
+const CF_SIZE_MAX = 240;
 const CF_SPACING = 58;
 const CF_ANGLE = 56;
 const CF_CENTER_Z = 70;
@@ -132,6 +132,20 @@ function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n));
 }
 
+function coverArtSrc(url) {
+  const src = String(url || "");
+  if (!src) return "";
+  try {
+    const parsed = new URL(src, location.href);
+    if (/googleusercontent|ggpht/.test(parsed.hostname)) {
+      return src.replace(/w\d+-h\d+/g, "w300-h300").replace(/=s\d+/g, "=s300");
+    }
+  } catch {
+    /* keep original */
+  }
+  return src;
+}
+
 function CoverFlow(root, handlers) {
   const flow = root.querySelector(".ytunes-coverflow");
   const stage = root.querySelector("#ytunes-covers");
@@ -164,6 +178,8 @@ function CoverFlow(root, handlers) {
   let ticking = false;
   const pool = [];
   const byId = new Map();
+  const live = [];
+  let lastWindow = "";
   const cap = flow.querySelector(".ytunes-coverflow-caption");
 
   if (reduced) flow.classList.add("is-reduced");
@@ -205,11 +221,12 @@ function CoverFlow(root, handlers) {
   }
 
   function poseCover(cover, offset, metrics) {
-    const abs = Math.abs(offset);
-    if (cover._offset === offset && cover._size === metrics.size) return;
-    cover._offset = offset;
+    const snapped = Math.round(offset * 64) / 64;
+    const abs = Math.abs(snapped);
+    if (cover._offset === snapped && cover._size === metrics.size) return;
+    cover._offset = snapped;
     cover._size = metrics.size;
-    const sign = offset < 0 ? -1 : 1;
+    const sign = snapped < 0 ? -1 : 1;
     let transform;
     if (reduced) {
       transform = `translate3d(-50%, -${originY}, 0) rotateY(0deg)`;
@@ -237,7 +254,6 @@ function CoverFlow(root, handlers) {
       cover.classList.toggle("is-near", near);
     }
     cover.style.transform = transform;
-    cover.style.zIndex = String(200 - ((abs * 2) | 0));
   }
 
   function markMoving() {
@@ -251,15 +267,22 @@ function CoverFlow(root, handlers) {
   function startTick() {
     if (ticking) return;
     ticking = true;
+    flow.classList.add("is-moving");
     lastTick = performance.now();
     requestAnimationFrame(step);
+  }
+
+  function stopTick() {
+    ticking = false;
+    flow.classList.remove("is-moving");
+    scheduleBrowse();
   }
 
   function step(now) {
     const dt = Math.min(0.032, Math.max(0.008, (now - lastTick) / 1000));
     lastTick = now;
     if (drag) {
-      paint(visual, { skipCaption: true });
+      poseOnly(visual);
       ticking = false;
       return;
     }
@@ -267,28 +290,15 @@ function CoverFlow(root, handlers) {
     target = clamp(target, 0, max);
     const k = 1 - Math.exp(-dt / CF_TAU);
     visual += (target - visual) * k;
-    const done = Math.abs(target - visual) < 0.002;
+    const done = Math.abs(target - visual) < 0.003;
     if (done) visual = target;
     center = Math.round(visual);
-    paint(visual, { skipCaption: !done });
+    poseOnly(visual);
     if (done) {
-      ticking = false;
-      scheduleBrowse();
+      stopTick();
       return;
     }
     requestAnimationFrame(step);
-  }
-
-  function prefetchAround(index) {
-    const from = Math.max(0, index - CF_WINDOW - 2);
-    const to = Math.min(covers.length, index + CF_WINDOW + 3);
-    for (let i = from; i < to; i += 1) {
-      const src = covers[i]?.artwork;
-      if (!src) continue;
-      const img = new Image();
-      img.decoding = "async";
-      img.src = src;
-    }
   }
 
   function goTo(index) {
@@ -296,7 +306,6 @@ function CoverFlow(root, handlers) {
     target = clamp(index, 0, covers.length - 1);
     center = target;
     markMoving();
-    prefetchAround(target);
     startTick();
   }
 
@@ -441,7 +450,7 @@ function CoverFlow(root, handlers) {
     else delete cover.dataset.video;
     if (playlistId) cover.dataset.playlist = playlistId;
     else delete cover.dataset.playlist;
-    const src = item.artwork || "";
+    const src = coverArtSrc(item.artwork);
     if (src) {
       if (cover._img.getAttribute("src") !== src) cover._img.src = src;
       if (cover._mirror.getAttribute("src") !== src) cover._mirror.src = src;
@@ -488,10 +497,54 @@ function CoverFlow(root, handlers) {
     };
   }
 
+  function syncWindow(centerFloat) {
+    const { start, end } = windowFor(centerFloat);
+    const key = `${start}:${end}`;
+    if (key === lastWindow && live.length) return false;
+    lastWindow = key;
+    ensurePool(Math.max(CF_WINDOW * 2 + 1, end - start));
+    const used = new Set();
+    live.length = 0;
+    let slot = 0;
+    for (let i = start; i < end; i += 1) {
+      const item = covers[i];
+      let cover = byId.get(item.id);
+      if (!cover || used.has(cover)) {
+        while (slot < pool.length && used.has(pool[slot])) slot += 1;
+        cover = pool[slot] || pool[0];
+        if (cover._boundId && cover._boundId !== item.id) byId.delete(cover._boundId);
+        bindCover(cover, item);
+        byId.set(item.id, cover);
+      }
+      used.add(cover);
+      cover.classList.remove("is-idle");
+      cover.style.zIndex = String(200 - Math.abs(i - Math.round(centerFloat)));
+      live.push({ cover, index: i });
+    }
+    pool.forEach((node) => {
+      if (used.has(node)) return;
+      node.classList.add("is-idle");
+      node._offset = NaN;
+    });
+    return true;
+  }
+
+  function poseOnly(centerFloat) {
+    if (!covers.length) return;
+    const metrics = geo || layout();
+    syncWindow(centerFloat);
+    for (let i = 0; i < live.length; i += 1) {
+      const slot = live[i];
+      poseCover(slot.cover, slot.index - centerFloat, metrics);
+    }
+  }
+
   function paint(centerFloat, opts = {}) {
     if (!covers.length) {
       flow.classList.add("is-empty");
       empty.hidden = false;
+      live.length = 0;
+      lastWindow = "";
       pool.forEach((node) => {
         node.classList.add("is-idle");
       });
@@ -502,33 +555,8 @@ function CoverFlow(root, handlers) {
     }
     flow.classList.remove("is-empty");
     empty.hidden = true;
-    const metrics = geo || layout();
-    const { start, end } = windowFor(centerFloat);
-    ensurePool(Math.max(CF_WINDOW * 2 + 1, end - start));
-    const used = new Set();
-    let slot = 0;
-    for (let i = start; i < end; i += 1) {
-      const item = covers[i];
-      let cover = byId.get(item.id);
-      let fresh = false;
-      if (!cover || used.has(cover)) {
-        while (slot < pool.length && used.has(pool[slot])) slot += 1;
-        cover = pool[slot] || pool[0];
-        if (cover._boundId && cover._boundId !== item.id) byId.delete(cover._boundId);
-        fresh = bindCover(cover, item);
-        byId.set(item.id, cover);
-      }
-      used.add(cover);
-      cover.classList.remove("is-idle");
-      if (fresh) cover.classList.add("is-enter");
-      poseCover(cover, i - centerFloat, metrics);
-      if (fresh) cover.classList.remove("is-enter");
-    }
-    pool.forEach((node) => {
-      if (used.has(node)) return;
-      node.classList.add("is-idle");
-      node._offset = NaN;
-    });
+    lastWindow = "";
+    poseOnly(centerFloat);
     const nearest = clamp(Math.round(centerFloat), 0, covers.length - 1);
     if (!opts.skipCaption) applyCaption(covers[nearest], nearest);
   }
@@ -541,6 +569,8 @@ function CoverFlow(root, handlers) {
   function setList(list, selectedId) {
     covers = list || [];
     byId.clear();
+    live.length = 0;
+    lastWindow = "";
     pool.forEach((node) => {
       node._boundId = "";
       node._offset = NaN;
