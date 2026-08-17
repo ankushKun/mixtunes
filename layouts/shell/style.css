@@ -10,29 +10,41 @@
   color: #1b1b1b;
   font: 12px/1.25 "Lucida Grande", "Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
+  --yt-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --yt-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --yt-row-odd: #ffffff;
+  --yt-row-even: #f2f2f2;
+  --yt-row-hover: #dcdcdc;
+  --yt-row-browse: #e8e8e8;
+  --yt-row-selected: linear-gradient(180deg, #6aa8e8 0%, #3a7ec8 100%);
+  -webkit-tap-highlight-color: transparent;
 }
 
 #ytunes-root * {
   box-sizing: border-box;
 }
 
-#ytunes-root,
-#ytunes-root *:focus,
-#ytunes-root *:focus-visible,
-#ytunes-root *:focus-within {
-  outline: none !important;
-  -webkit-tap-highlight-color: transparent;
+#ytunes-root *:focus {
+  outline: none;
 }
 
-#ytunes-root .ytunes-coverflow:focus,
-#ytunes-root .ytunes-coverflow:focus-visible,
-#ytunes-root .ytunes-table-wrap:focus,
-#ytunes-root .ytunes-table-wrap:focus-visible,
-#ytunes-root .ytunes-main:focus,
-#ytunes-root .ytunes-main:focus-visible,
-#ytunes-root [tabindex]:focus,
+#ytunes-root *:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+#ytunes-root button:focus-visible,
+#ytunes-root input:focus-visible,
+#ytunes-root summary:focus-visible,
+#ytunes-root a:focus-visible,
 #ytunes-root [tabindex]:focus-visible {
-  outline: none !important;
+  outline: none;
+  box-shadow: inset 0 0 0 2px #3a7ec8;
+}
+
+#ytunes-root .ytunes-table-wrap:focus-visible,
+#ytunes-root .ytunes-coverflow:focus-visible,
+#ytunes-root .ytunes-table tbody tr:focus-visible {
   box-shadow: none;
 }
 
@@ -47,7 +59,82 @@
   font: inherit;
 }
 
+.ytunes-marquee {
+  display: block;
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ytunes-marquee-track {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#ytunes-root .ytunes-marquee-item,
+.ytunes-marquee-item {
+  display: inline-block;
+  width: auto;
+  max-width: none;
+  overflow: visible;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.ytunes-marquee.is-overflow .ytunes-marquee-track {
+  display: inline-flex;
+  overflow: visible;
+  text-overflow: unset;
+  column-gap: 48px;
+}
+
+.ytunes-marquee.is-overflow .ytunes-marquee-item {
+  flex: none;
+}
+
+.ytunes-marquee.is-overflow[data-marquee="live"] .ytunes-marquee-track {
+  animation: ytunes-marquee-scroll var(--yt-marquee-duration, 8s) linear infinite;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ytunes-source-list button:hover .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track,
+  .ytunes-table tbody tr:hover .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track,
+  .ytunes-tile:hover .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track,
+  .ytunes-marquee.is-overflow[data-marquee="hover"]:hover .ytunes-marquee-track {
+    animation: ytunes-marquee-scroll var(--yt-marquee-duration, 8s) linear infinite;
+  }
+}
+
+.ytunes-source-list button.is-selected .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track,
+.ytunes-source-list button[aria-current="true"] .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track,
+.ytunes-table tbody tr.is-selected .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track,
+.ytunes-table tbody tr:focus-within .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track,
+.ytunes-tile.is-selected .ytunes-marquee.is-overflow[data-marquee="hover"] .ytunes-marquee-track {
+  animation: ytunes-marquee-scroll var(--yt-marquee-duration, 8s) linear infinite;
+}
+
+@keyframes ytunes-marquee-scroll {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(calc(-1 * var(--yt-marquee-shift, 0px)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ytunes-marquee.is-overflow .ytunes-marquee-track {
+    animation: none !important;
+  }
+}
+
 .ytunes-app {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -189,8 +276,9 @@
   align-items: center;
   min-width: 0;
   height: 50px;
-  padding: 5px 10px;
+  padding: 0 10px;
   border-radius: 6px;
+  cursor: pointer;
   background: linear-gradient(180deg, #c5d0c8 0%, #a8b8ac 48%, #9aaba0 100%);
   border: 1px solid rgba(70, 76, 86, 0.55);
   box-shadow:
@@ -199,12 +287,10 @@
     inset 0 -1px 0 rgba(255, 255, 255, 0.45),
     0 1px 0 rgba(255, 255, 255, 0.55);
   overflow: hidden;
-  cursor: pointer;
 }
 
 .ytunes-lcd.is-idle {
   grid-template-columns: minmax(0, 1fr);
-  cursor: default;
 }
 
 .ytunes-lcd-art[hidden],
@@ -214,18 +300,13 @@
   display: none !important;
 }
 
-.ytunes-lcd[aria-pressed="true"] {
-  box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(0, 0, 0, 0.16),
-    0 1px 0 rgba(255, 255, 255, 0.55);
-}
-
 .ytunes-lcd-art {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   align-self: center;
+  display: grid;
+  place-items: center;
   overflow: hidden;
   background: #8a9098;
   border-radius: 3px;
@@ -253,15 +334,24 @@
   align-items: center;
   text-align: center;
   gap: 1px;
-  padding: 1px 2px 0;
+  padding: 0 2px;
+  align-self: center;
 }
 
 #ytunes-lcd-title,
 #ytunes-lcd-sub {
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
+}
+
+.ytunes-lcd-meta .ytunes-marquee:not(.is-overflow) {
+  text-align: center;
+}
+
+.ytunes-lcd-meta .ytunes-marquee.is-overflow {
+  text-align: left;
 }
 
 #ytunes-lcd-title {
@@ -493,9 +583,9 @@
   right: 0;
   z-index: 20;
   margin: 0;
-  padding: 4px 0;
+  padding: 0;
   list-style: none;
-  background: #fff;
+  background: var(--yt-row-odd);
   border: 1px solid #8a8a8a;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
   max-height: 220px;
@@ -507,14 +597,18 @@
   width: 100%;
   text-align: left;
   border: 0;
-  background: transparent;
+  background: var(--yt-row-odd);
   padding: 4px 10px;
   cursor: pointer;
 }
 
+.ytunes-suggest li:nth-child(even) button {
+  background: var(--yt-row-even);
+}
+
 .ytunes-suggest button:hover,
 .ytunes-suggest button.is-active {
-  background: #3a7ec8;
+  background: var(--yt-row-selected);
   color: #fff;
 }
 
@@ -533,35 +627,110 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: #d6dde5;
+  background: var(--yt-row-odd);
   border-right: 1px solid #a8b0b8;
 }
 
 .ytunes-source-list {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 8px 0 12px;
 }
 
-.ytunes-source-list h2 {
-  margin: 10px 12px 4px;
+.ytunes-icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.ytunes-source-group {
+  display: block;
+}
+
+.ytunes-source-group > summary {
+  display: block;
+  list-style: none;
+  margin: 10px 8px 4px;
+  padding: 1px 4px 1px 14px;
   font-size: 11px;
   font-weight: 700;
   color: #707880;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.ytunes-source-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ytunes-source-group > summary::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 3.5px 0 3.5px 5px;
+  border-color: transparent transparent transparent #8a929a;
+  transform: translateY(-50%) rotate(0deg);
+  transform-origin: 2px center;
+  transition: transform 140ms var(--yt-ease-out);
+}
+
+.ytunes-source-group[open] > summary::before {
+  transform: translateY(-50%) rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ytunes-source-group > summary::before {
+    transition: none;
+  }
+}
+
+.ytunes-source-icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: currentColor;
+  color: #c47820;
+  pointer-events: none;
+}
+
+.ytunes-source-group[data-group="store"] .ytunes-source-icon {
+  color: #3a7ec8;
+}
+
+.ytunes-source-group[data-group="genius"] .ytunes-source-icon {
+  color: #8b5cc7;
+}
+
+.ytunes-source-group[data-group="playlists"] .ytunes-source-icon {
+  color: #4a9a4a;
+}
+
+.ytunes-source-label {
+  min-width: 0;
+  flex: 1;
 }
 
 #ytunes-root .ytunes-source-list button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
   border: 0 !important;
   appearance: none;
   -webkit-appearance: none;
-  background: transparent !important;
+  background: var(--yt-row-odd);
   text-align: left;
-  padding: 4px 12px 4px 18px;
+  padding: 4px 12px 4px 16px;
   color: #1a1a1a !important;
   cursor: pointer;
   font: inherit;
@@ -569,15 +738,28 @@
   text-shadow: none;
 }
 
+#ytunes-root .ytunes-source-list button:nth-of-type(even) {
+  background: var(--yt-row-even);
+}
+
+#ytunes-root .ytunes-source-list button:hover:not(.is-selected):not([aria-current="true"]) {
+  background: var(--yt-row-hover);
+}
+
 #ytunes-root .ytunes-source-list button.is-selected,
 #ytunes-root .ytunes-source-list button[aria-current="true"] {
-  background: linear-gradient(180deg, #6aa8e8 0%, #3a7ec8 100%) !important;
+  background: var(--yt-row-selected) !important;
   color: #fff !important;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
+#ytunes-root .ytunes-source-list button.is-selected .ytunes-source-icon,
+#ytunes-root .ytunes-source-list button[aria-current="true"] .ytunes-source-icon {
+  color: #fff;
+}
+
 .ytunes-source-list .ytunes-source-empty {
-  margin: 4px 12px 0 18px;
+  margin: 4px 12px 0 36px;
   font-size: 11px;
   color: #5c656d;
 }
@@ -595,19 +777,19 @@
   flex-direction: column;
   background: #fff;
   position: relative;
+  isolation: isolate;
 }
 
 .ytunes-coverflow {
   --yt-cf-ms: 400ms;
   --yt-cf-ease: cubic-bezier(0.22, 0.7, 0.25, 1);
   --yt-cf-size: 150px;
-  container-type: size;
-  container-name: coverflow;
-  flex: 0 1 42%;
-  min-height: 168px;
-  max-height: 48%;
+  flex: 0 1 var(--yt-split, 34%);
+  min-height: 160px;
+  max-height: 46%;
   overflow: hidden;
   position: relative;
+  isolation: isolate;
   outline: none;
   background:
     radial-gradient(ellipse 90% 50% at 50% 36%, #242424 0%, #0a0a0a 70%, #000 100%);
@@ -619,7 +801,9 @@
 }
 
 .ytunes-coverflow.is-snap .ytunes-cf-cover,
-.ytunes-coverflow.is-snap .ytunes-coverflow-caption {
+.ytunes-coverflow.is-snap .ytunes-coverflow-caption,
+.ytunes-coverflow.is-dragging .ytunes-cf-cover,
+.ytunes-coverflow.is-dragging .ytunes-coverflow-caption {
   transition: none !important;
 }
 
@@ -627,36 +811,37 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 10px;
-  bottom: 52px;
-  perspective: 1200px;
-  perspective-origin: 50% 45%;
+  top: 8px;
+  bottom: 44px;
+  perspective: calc(var(--yt-cf-size) * 8);
+  perspective-origin: 50% 42%;
   transform-style: preserve-3d;
   overflow: visible;
+  z-index: 1;
 }
 
 .ytunes-coverflow-floor {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 22px;
-  height: 48px;
+  bottom: 0;
+  height: 88px;
   pointer-events: none;
   z-index: 0;
   background: linear-gradient(
     180deg,
-    transparent 0%,
-    rgba(0, 0, 0, 0.35) 45%,
-    rgba(0, 0, 0, 0.72) 100%
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.12) 50%,
+    rgba(0, 0, 0, 0.4) 100%
   );
 }
 
 .ytunes-cf-cover {
   position: absolute;
-  top: 50%;
+  top: 40%;
   left: 50%;
-  width: min(var(--yt-cf-size), 58cqh);
-  height: min(var(--yt-cf-size), 58cqh);
+  width: var(--yt-cf-size);
+  height: calc(var(--yt-cf-size) * 1.52);
   margin: 0;
   transform-style: flat;
   transition: transform var(--yt-cf-ms) var(--yt-cf-ease);
@@ -667,11 +852,15 @@
   overflow: visible;
 }
 
+.ytunes-coverflow.is-reduced .ytunes-cf-cover {
+  height: var(--yt-cf-size);
+}
+
 .ytunes-cf-face {
   position: relative;
   box-sizing: border-box;
   width: 100%;
-  height: 100%;
+  height: var(--yt-cf-size);
   aspect-ratio: 1 / 1;
   border-radius: 1px;
   overflow: hidden;
@@ -699,25 +888,73 @@
 
 .ytunes-cf-cover.is-center {
   cursor: default;
+  isolation: isolate;
 }
 
 .ytunes-cf-cover.is-center .ytunes-cf-face {
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.85),
-    0 0 0 1px rgba(255, 255, 255, 0.18);
-  -webkit-box-reflect: below 3px
-    linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.5) 40%, transparent 100%);
+    0 6px 16px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
-.ytunes-coverflow.is-reduced .ytunes-cf-cover.is-center .ytunes-cf-face {
-  -webkit-box-reflect: none;
+.ytunes-cf-reflect {
+  position: absolute;
+  left: 0;
+  top: var(--yt-cf-size);
+  width: 100%;
+  height: calc(var(--yt-cf-size) * 0.52);
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.68;
+  z-index: 1;
+  transition: opacity calc(var(--yt-cf-ms) * 0.7) ease;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.92) 0%,
+    rgba(0, 0, 0, 0.55) 24%,
+    rgba(0, 0, 0, 0.2) 58%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.92) 0%,
+    rgba(0, 0, 0, 0.55) 24%,
+    rgba(0, 0, 0, 0.2) 58%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
-.ytunes-cf-cover:not(.is-center) .ytunes-cf-face {
-  -webkit-box-reflect: none;
+.ytunes-cf-cover.is-center .ytunes-cf-reflect {
+  opacity: 1;
 }
 
-#ytunes-root .ytunes-cf-cover img {
+.ytunes-cf-reflect-inner {
+  position: absolute;
+  inset: 0;
+  transform: scaleY(-1);
+  transform-origin: center center;
+}
+
+#ytunes-root .ytunes-cf-reflect-inner img,
+.ytunes-cf-reflect-inner img,
+.ytunes-cf-reflect-inner .ytunes-cf-ph {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 192.31%;
+  max-width: none;
+  margin: 0;
+  object-fit: cover;
+  object-position: center;
+  filter: brightness(1.35) saturate(0.94);
+}
+
+.ytunes-coverflow.is-reduced .ytunes-cf-reflect {
+  display: none;
+}
+
+#ytunes-root .ytunes-cf-face img {
   width: 100%;
   height: 100%;
   max-width: none;
@@ -734,7 +971,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 42px;
+  font-size: calc(var(--yt-cf-size) * 0.28);
   font-weight: 700;
   color: rgba(255, 255, 255, 0.35);
   background: linear-gradient(145deg, #4a4a4a, #222);
@@ -744,11 +981,11 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 22px;
+  bottom: 10px;
   text-align: center;
   color: #f5f5f5;
   pointer-events: none;
-  z-index: 40;
+  z-index: 260;
   padding: 0 24px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
   opacity: 1;
@@ -764,51 +1001,22 @@
 #ytunes-cover-title {
   font-size: 13px;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: 100%;
+  max-width: min(72vw, 560px);
+  margin-inline: auto;
 }
 
 #ytunes-cover-artist {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.7);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   margin-top: 2px;
+  width: 100%;
+  max-width: min(72vw, 560px);
+  margin-inline: auto;
 }
 
-.ytunes-cf-scroll {
-  position: absolute;
-  left: 12%;
-  right: 12%;
-  bottom: 4px;
-  z-index: 45;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ytunes-cf-scroll button {
-  width: 16px;
-  height: 14px;
-  padding: 0;
-  border: 1px solid #555;
-  border-radius: 2px;
-  background: linear-gradient(#6a6a6a, #3a3a3a);
-  color: #eee;
-  cursor: pointer;
-  line-height: 1;
-}
-
-.ytunes-cf-scroll .ytunes-range {
-  flex: 1;
-  background: linear-gradient(
-    90deg,
-    #6a6a6a 0%,
-    #6a6a6a var(--yt-fill, 0%),
-    rgba(255, 255, 255, 0.12) var(--yt-fill, 0%)
-  );
+#ytunes-cover-artist:empty {
+  display: none;
 }
 
 #ytunes-cover-empty {
@@ -821,7 +1029,7 @@
   right: 0;
   top: 50%;
   transform: translateY(-50%);
-  z-index: 50;
+  z-index: 270;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -833,9 +1041,9 @@
 
 .ytunes-artwell {
   display: none;
-  flex: 0 0 42%;
+  flex: 0 0 var(--yt-split, 34%);
   min-height: 160px;
-  max-height: 48%;
+  max-height: 46%;
   align-items: center;
   justify-content: center;
   gap: 24px;
@@ -855,6 +1063,7 @@
 
 .ytunes-artwell-meta {
   min-width: 0;
+  flex: 1;
 }
 
 #ytunes-artwell-title {
@@ -869,9 +1078,9 @@
 
 .ytunes-grid {
   display: none;
-  flex: 0 1 42%;
+  flex: 0 1 var(--yt-split, 34%);
   min-height: 160px;
-  max-height: 48%;
+  max-height: 46%;
   overflow: auto;
   padding: 12px;
   gap: 12px;
@@ -906,9 +1115,6 @@
 .ytunes-tile-sub {
   display: block;
   margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .ytunes-tile-title {
@@ -924,12 +1130,21 @@
   position: absolute;
   inset: 0 auto auto 0;
   width: 100%;
-  height: 42%;
+  height: var(--yt-split, 34%);
   z-index: 30;
   overflow: auto;
-  padding: 16px 20px;
+  padding: 28px 20px 16px;
   background: rgba(12, 12, 12, 0.92);
   color: #eee;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms var(--yt-ease-out), transform 200ms var(--yt-ease-out);
+}
+
+.ytunes-lyrics.is-leave {
+  opacity: 0;
+  transform: translateY(8px);
+  transition-duration: 160ms;
 }
 
 .ytunes-lyrics pre {
@@ -938,11 +1153,15 @@
   font: 13px/1.45 "Lucida Grande", Helvetica, sans-serif;
 }
 
+.ytunes-lyrics pre span {
+  display: block;
+}
+
 .ytunes-table-wrap {
-  flex: 1 1 58%;
-  min-height: 0;
+  flex: 1 1 66%;
+  min-height: 38%;
   overflow: auto;
-  background: #fff;
+  background: var(--yt-row-odd);
   outline: none;
 }
 
@@ -951,7 +1170,7 @@
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 #ytunes-root .ytunes-table thead {
@@ -971,11 +1190,20 @@
   display: table-cell;
   text-align: left;
   vertical-align: middle;
-  padding: 2px 8px;
+  padding: 4px 10px;
   border-right: 1px solid #ececec;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#ytunes-root .ytunes-table td .ytunes-marquee {
+  width: 100%;
+}
+
+#ytunes-root .ytunes-table thead,
+#ytunes-root .ytunes-table thead tr {
+  background: linear-gradient(#f6f6f6, #dcdcdc);
 }
 
 #ytunes-root .ytunes-table th {
@@ -983,7 +1211,7 @@
   top: 0;
   z-index: 1;
   font-weight: 600;
-  padding: 3px 8px;
+  padding: 5px 10px;
   background: linear-gradient(#f6f6f6, #dcdcdc);
   border-bottom: 1px solid #b4b4b4;
   border-right: 1px solid #cfcfcf;
@@ -1012,8 +1240,12 @@
   width: 64px;
 }
 
-.ytunes-table tbody tr:nth-child(even):not(.is-selected) {
-  background: #edf3fe;
+.ytunes-table tbody tr:nth-child(odd):not(.is-selected):not(.is-browse) {
+  background: var(--yt-row-odd);
+}
+
+.ytunes-table tbody tr:nth-child(even):not(.is-selected):not(.is-browse) {
+  background: var(--yt-row-even);
 }
 
 .ytunes-table tbody tr:not(.is-empty) {
@@ -1021,15 +1253,15 @@
 }
 
 .ytunes-table tbody tr:not(.is-empty):hover:not(.is-selected) {
-  background: #dcdcdc;
+  background: var(--yt-row-hover);
 }
 
 .ytunes-table tbody tr.is-browse:not(.is-selected) {
-  background: #e8eef6;
+  background: var(--yt-row-browse);
 }
 
 .ytunes-table tbody tr.is-selected {
-  background: linear-gradient(180deg, #6aa8e8 0%, #3a7ec8 100%);
+  background: var(--yt-row-selected);
   color: #fff;
 }
 
@@ -1052,6 +1284,127 @@
   visibility: visible;
 }
 
+.ytunes-track-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ytunes-track-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.ytunes-row-acts {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  margin-left: auto;
+}
+
+.ytunes-row-like,
+.ytunes-row-act {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  opacity: 0.28;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.ytunes-row-like svg,
+.ytunes-row-act svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  display: block;
+}
+
+.ytunes-row-like:hover,
+.ytunes-row-act:hover {
+  opacity: 0.7;
+}
+
+.ytunes-row-like.is-liked,
+.ytunes-row-like.is-liked:hover {
+  opacity: 1;
+  color: #c12b3a;
+}
+
+.ytunes-row-act {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ytunes-table tbody tr:hover .ytunes-row-act,
+.ytunes-table tbody tr:focus-within .ytunes-row-act,
+.ytunes-row-act:focus-visible {
+  opacity: 0.28;
+  pointer-events: auto;
+}
+
+.ytunes-table tbody tr:hover .ytunes-row-act:hover,
+.ytunes-table tbody tr:focus-within .ytunes-row-act:hover,
+.ytunes-row-act:focus-visible {
+  opacity: 0.7;
+}
+
+.ytunes-row-act:active,
+.ytunes-row-like:active {
+  transform: scale(0.92);
+}
+
+.ytunes-row-like:focus,
+.ytunes-row-act:focus {
+  outline: none;
+}
+
+.ytunes-row-like:focus-visible,
+.ytunes-row-act:focus-visible {
+  outline: 2px solid #3d8fe8;
+  outline-offset: 1px;
+}
+
+.ytunes-table tbody tr.is-selected .ytunes-row-like:not(.is-liked),
+.ytunes-table tbody tr.is-selected:hover .ytunes-row-act,
+.ytunes-table tbody tr.is-selected:focus-within .ytunes-row-act {
+  color: #fff;
+  opacity: 0.72;
+}
+
+.ytunes-table tbody tr.ytunes-section {
+  cursor: default;
+}
+
+.ytunes-table tbody tr.ytunes-section td {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5a5a5a;
+  background: linear-gradient(#efefef, #d6d6d6);
+  border-top: 1px solid #c8c8c8;
+  border-bottom: 1px solid #b0b0b0;
+  padding: 4px 10px;
+}
+
+.ytunes-table tbody tr.is-suggested:nth-child(odd):not(.is-selected):not(.is-browse) {
+  background: #e6ebe6;
+  color: #3a3a3a;
+}
+
+.ytunes-table tbody tr.is-suggested:nth-child(even):not(.is-selected):not(.is-browse) {
+  background: #dde4dd;
+  color: #3a3a3a;
+}
+
 .ytunes-main[data-view="list"] .ytunes-coverflow,
 .ytunes-main[data-view="list"] .ytunes-grid,
 .ytunes-main[data-view="coverflow"] .ytunes-artwell,
@@ -1072,12 +1425,13 @@
 .ytunes-status {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   height: 24px;
   flex: none;
   padding: 0 8px;
   font-size: 11px;
   color: #333;
+  position: relative;
   background-image:
     repeating-linear-gradient(
       90deg,
@@ -1090,10 +1444,58 @@
   border-top: 1px solid #9a9a9a;
 }
 
+.ytunes-status-start {
+  flex: none;
+}
+
+.ytunes-status-meta {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(52%, 420px);
+  pointer-events: none;
+}
+
+#ytunes-status-center {
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ytunes-status-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+#ytunes-root .ytunes-status-credit {
+  flex: none;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  letter-spacing: 0.01em;
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.72;
+}
+
+#ytunes-root .ytunes-status-credit:hover,
+#ytunes-root .ytunes-status-credit:focus-visible {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 .ytunes-status-tools {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex: none;
 }
 
 .ytunes-status-tools button {
@@ -1124,16 +1526,6 @@
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
-.ytunes-status-tools button[data-action="like"][aria-pressed="true"] {
-  color: #b22233;
-}
-
-#ytunes-status-left,
-#ytunes-status-center {
-  flex: 1;
-  text-align: center;
-}
-
 #ytunes-original {
   border: 1px solid #8a8a8a;
   border-radius: 3px;
@@ -1157,8 +1549,8 @@
   position: fixed;
   z-index: 2147483646;
   min-width: 180px;
-  padding: 4px 0;
-  background: #fff;
+  padding: 0;
+  background: var(--yt-row-odd);
   border: 1px solid #8a8a8a;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
@@ -1168,13 +1560,17 @@
   width: 100%;
   text-align: left;
   border: 0;
-  background: transparent;
+  background: var(--yt-row-odd);
   padding: 4px 14px;
   cursor: pointer;
 }
 
+.ytunes-menu button:nth-of-type(even) {
+  background: var(--yt-row-even);
+}
+
 .ytunes-menu button:hover {
-  background: #3a7ec8;
+  background: var(--yt-row-selected);
   color: #fff;
 }
 
@@ -1186,7 +1582,7 @@
 .ytunes-dialog {
   position: absolute;
   inset: 0;
-  z-index: 40;
+  z-index: 400;
   display: grid;
   place-items: center;
   background: rgba(0, 0, 0, 0.28);
@@ -1233,6 +1629,788 @@
   cursor: pointer;
 }
 
+.ytunes-dialog form,
+.ytunes-prefs-sheet,
+.ytunes-pick-sheet {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 200ms var(--yt-ease-out), transform 200ms var(--yt-ease-out);
+}
+
+@starting-style {
+  .ytunes-dialog form,
+  .ytunes-prefs-sheet,
+  .ytunes-pick-sheet {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.ytunes-pick-sheet {
+  width: min(320px, calc(100% - 32px));
+  padding: 14px 16px 12px;
+  background: linear-gradient(#f6f6f6, #dcdcdc);
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.ytunes-pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--yt-row-odd);
+  border: 1px solid #b4b4b4;
+}
+
+.ytunes-pick-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: var(--yt-row-odd);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.ytunes-pick-list li:nth-child(even) button {
+  background: var(--yt-row-even);
+}
+
+.ytunes-pick-list button.is-active,
+.ytunes-pick-list button:hover {
+  background: var(--yt-row-selected);
+  color: #fff;
+}
+
+.ytunes-pick-empty {
+  padding: 12px 10px;
+  color: #555;
+}
+
+.ytunes-lcd-tool[data-repeat="one"] {
+  position: relative;
+}
+
+.ytunes-lcd-tool[data-repeat="one"]::after {
+  content: "1";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ytunes-lyrics-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: #eee;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.ytunes-lyrics .is-current {
+  color: #fff;
+  font-weight: 700;
+}
+
+.ytunes-splitter {
+  flex: none;
+  height: 5px;
+  cursor: ns-resize;
+  background: linear-gradient(#ececec, #c8c8c8);
+  border-top: 1px solid #b4b4b4;
+  border-bottom: 1px solid #9a9a9a;
+}
+
+.ytunes-sidebar-well {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 8px 6px 8px;
+  border: 0;
+  border-top: 1px solid #b4b4b4;
+  background: #c5ccd4;
+  min-height: 56px;
+}
+
+.ytunes-sidebar-well[hidden] {
+  display: none;
+}
+
+.ytunes-sidebar-well-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ytunes-sidebar-well img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  background: #888;
+  flex: none;
+}
+
+.ytunes-sidebar-well-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  color: #1a1a1a;
+}
+
+.ytunes-sidebar-well-acts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+#ytunes-root .ytunes-sidebar-well-acts[hidden],
+#ytunes-root .ytunes-sidebar-well-act[hidden] {
+  display: none;
+}
+
+#ytunes-root .ytunes-sidebar-well-act {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #4a5258;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 100ms var(--yt-ease-out);
+}
+
+#ytunes-root .ytunes-sidebar-well-act svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  display: block;
+}
+
+#ytunes-root .ytunes-sidebar-well-act:hover {
+  color: #1a1a1a;
+}
+
+#ytunes-root .ytunes-sidebar-well-like.is-liked,
+#ytunes-root .ytunes-sidebar-well-like.is-liked:hover {
+  color: #c12b3a;
+}
+
+#ytunes-root .ytunes-sidebar-well-act:active {
+  transform: scale(0.97);
+}
+
+#ytunes-sidebar-well-title,
+#ytunes-sidebar-well-sub {
+  display: block;
+  width: 100%;
+}
+
+#ytunes-sidebar-well-title {
+  font-weight: 700;
+}
+
+#ytunes-sidebar-well-sub {
+  font-size: 11px;
+  color: #4a5258;
+}
+
+#ytunes-toast {
+  flex: none;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1a1a1a;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+#ytunes-toast[data-kind="error"] {
+  color: #8b1d1d;
+}
+
+#ytunes-sleep-label {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.ytunes-sleep-menu {
+  position: absolute;
+  bottom: 28px;
+  right: 8px;
+  left: auto;
+  z-index: 420;
+  min-width: 140px;
+  padding: 0;
+  background: var(--yt-row-odd);
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.ytunes-sleep-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: var(--yt-row-odd);
+  padding: 4px 14px;
+  cursor: pointer;
+}
+
+.ytunes-sleep-menu button:nth-of-type(even) {
+  background: var(--yt-row-even);
+}
+
+.ytunes-sleep-menu button:hover {
+  background: var(--yt-row-selected);
+  color: #fff;
+}
+
+.ytunes-prefs-sheet {
+  width: min(380px, calc(100% - 32px));
+  padding: 14px 16px 12px;
+  background: linear-gradient(#f6f6f6, #dcdcdc);
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.ytunes-prefs-sheet h4 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+}
+
+.ytunes-prefs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+
+.ytunes-prefs-hint {
+  margin: 0 0 8px 24px;
+  color: #555;
+  font-size: 11px;
+}
+
+.ytunes-hotkeys {
+  margin: 0;
+  padding-left: 18px;
+  color: #333;
+}
+
+.ytunes-hotkeys kbd {
+  font: 11px/1.2 "Lucida Grande", sans-serif;
+  padding: 0 4px;
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  background: #f3f3f3;
+}
+
+.ytunes-jump {
+  position: absolute;
+  inset: 0;
+  z-index: 410;
+  display: grid;
+  place-items: start center;
+  padding-top: 18vh;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.ytunes-jump[hidden],
+.ytunes-dialog[hidden],
+.ytunes-sleep-menu[hidden] {
+  display: none;
+}
+
+.ytunes-jump-sheet {
+  width: min(420px, calc(100% - 32px));
+  padding: 10px;
+  background: linear-gradient(#f6f6f6, #dcdcdc);
+  border: 1px solid #8a8a8a;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+#ytunes-jump-input {
+  width: 100%;
+  height: 26px;
+  border: 1px solid #7a7a7a;
+  padding: 0 8px;
+  background: #fff;
+}
+
+#ytunes-jump-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--yt-row-odd);
+}
+
+#ytunes-jump-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: var(--yt-row-odd);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+#ytunes-jump-list li:nth-child(even) button {
+  background: var(--yt-row-even);
+}
+
+#ytunes-jump-list button.is-active,
+#ytunes-jump-list button:hover {
+  background: var(--yt-row-selected);
+  color: #fff;
+}
+
+.ytunes-boot-fail .ytunes-top {
+  display: flex;
+  justify-content: center;
+}
+
+.ytunes-boot-body {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+#ytunes-root .ytunes-table th:nth-child(6),
+#ytunes-root .ytunes-table td:nth-child(6),
+#ytunes-root .ytunes-table th:nth-child(7),
+#ytunes-root .ytunes-table td:nth-child(7) {
+  width: 56px;
+}
+
+#ytunes-root .ytunes-table th:nth-child(8),
+#ytunes-root .ytunes-table td:nth-child(8) {
+  width: 88px;
+}
+
+.ytunes-app.is-graphite {
+  color-scheme: dark;
+  color: #e6e6e6;
+  background: #3a3a3a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --yt-row-odd: #1e1e1e;
+  --yt-row-even: #262626;
+  --yt-row-hover: #333333;
+  --yt-row-browse: #2e2e2e;
+}
+
+.ytunes-app.is-graphite .ytunes-top,
+.ytunes-app.is-graphite .ytunes-status {
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05) 0,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    linear-gradient(#5e5e5e, #3a3a3a 48%, #2a2a2a 52%, #404040);
+  color: #ececec;
+  border-color: #1a1a1a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.ytunes-app.is-graphite .ytunes-status {
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05) 0,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    linear-gradient(#4a4a4a, #323232);
+}
+
+.ytunes-app.is-graphite .ytunes-round {
+  color: #ececec;
+  border-color: #1f1f1f;
+  background: radial-gradient(circle at 50% 28%, #7a7a7a 0%, #4a4a4a 42%, #2e2e2e 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.ytunes-app.is-graphite .ytunes-round:active {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+.ytunes-app.is-graphite .ytunes-vol-icon {
+  background: #d0d0d0;
+}
+
+.ytunes-app.is-graphite .ytunes-nav,
+.ytunes-app.is-graphite .ytunes-status-tools button,
+.ytunes-app.is-graphite .ytunes-views {
+  color: #e8e8e8;
+  border-color: #1c1c1c;
+  background: linear-gradient(#5a5a5a, #3a3a3a);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.ytunes-app.is-graphite .ytunes-views {
+  background: linear-gradient(#4e4e4e, #343434);
+}
+
+.ytunes-app.is-graphite .ytunes-views button {
+  color: #d8d8d8;
+  border-right-color: #1c1c1c;
+}
+
+.ytunes-app.is-graphite .ytunes-views button[aria-pressed="true"],
+.ytunes-app.is-graphite .ytunes-status-tools button[aria-pressed="true"] {
+  background: linear-gradient(#2e2e2e, #3c3c3c);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  color: #fff;
+}
+
+.ytunes-app.is-graphite .ytunes-lcd {
+  background: linear-gradient(180deg, #8fa097 0%, #6f7d74 48%, #5e6c64 100%);
+  border-color: rgba(0, 0, 0, 0.55);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.35),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.ytunes-app.is-graphite .ytunes-search-field {
+  background: #2a2a2a;
+  border-color: #141414;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.ytunes-app.is-graphite .ytunes-search input {
+  color: #ececec;
+}
+
+.ytunes-app.is-graphite .ytunes-search input::placeholder {
+  color: #8a8a8a;
+}
+
+.ytunes-app.is-graphite .ytunes-search-icon {
+  border-color: #8a8a8a;
+}
+
+.ytunes-app.is-graphite .ytunes-search-icon::after {
+  background: #8a8a8a;
+}
+
+.ytunes-app.is-graphite .ytunes-suggest,
+.ytunes-app.is-graphite .ytunes-menu,
+.ytunes-app.is-graphite .ytunes-sleep-menu {
+  background: var(--yt-row-odd);
+  border-color: #1a1a1a;
+  color: #ececec;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+.ytunes-app.is-graphite .ytunes-suggest button,
+.ytunes-app.is-graphite .ytunes-menu button,
+.ytunes-app.is-graphite .ytunes-sleep-menu button,
+.ytunes-app.is-graphite .ytunes-pick-list button {
+  color: #ececec;
+}
+
+.ytunes-app.is-graphite .ytunes-pick-list button.is-active,
+.ytunes-app.is-graphite .ytunes-pick-list button:hover {
+  color: #fff;
+}
+
+.ytunes-app.is-graphite .ytunes-sidebar {
+  border-right-color: #1a1a1a;
+}
+
+.ytunes-app.is-graphite .ytunes-source-group > summary {
+  color: #8b93a0;
+}
+
+.ytunes-app.is-graphite .ytunes-source-group > summary::before {
+  border-left-color: #9aa3ae;
+}
+
+.ytunes-app.is-graphite .ytunes-source-group[data-group="library"] .ytunes-source-icon {
+  color: #e09a40;
+}
+
+.ytunes-app.is-graphite .ytunes-source-group[data-group="store"] .ytunes-source-icon {
+  color: #6eb0ee;
+}
+
+.ytunes-app.is-graphite .ytunes-source-group[data-group="genius"] .ytunes-source-icon {
+  color: #c09ae8;
+}
+
+.ytunes-app.is-graphite .ytunes-source-group[data-group="playlists"] .ytunes-source-icon {
+  color: #7dcc7d;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-source-list button {
+  color: #e8e8e8 !important;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-source-list button.is-selected,
+#ytunes-root .ytunes-app.is-graphite .ytunes-source-list button[aria-current="true"] {
+  color: #fff !important;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-source-list button.is-selected .ytunes-source-icon,
+#ytunes-root .ytunes-app.is-graphite .ytunes-source-list button[aria-current="true"] .ytunes-source-icon {
+  color: #fff;
+}
+
+.ytunes-app.is-graphite .ytunes-source-list .ytunes-source-empty {
+  color: #8b93a0;
+}
+
+.ytunes-app.is-graphite .ytunes-sidebar-well {
+  background: #323840;
+  border-top-color: #1a1a1a;
+}
+
+.ytunes-app.is-graphite .ytunes-sidebar-well-meta,
+.ytunes-app.is-graphite #ytunes-sidebar-well-title {
+  color: #ececec;
+}
+
+.ytunes-app.is-graphite #ytunes-sidebar-well-sub {
+  color: #9aa3ad;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-sidebar-well-act {
+  color: #c4ccd4;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-sidebar-well-act:hover {
+  color: #fff;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-sidebar-well-like.is-liked,
+#ytunes-root .ytunes-app.is-graphite .ytunes-sidebar-well-like.is-liked:hover {
+  color: #ff5a6a;
+}
+
+.ytunes-app.is-graphite .ytunes-main {
+  background: #1e1e1e;
+}
+
+.ytunes-app.is-graphite .ytunes-splitter {
+  background: linear-gradient(#4a4a4a, #2e2e2e);
+  border-color: #1a1a1a;
+}
+
+.ytunes-app.is-graphite .ytunes-grid {
+  background: #1e1e1e;
+  color: #e6e6e6;
+}
+
+.ytunes-app.is-graphite .ytunes-tile-title {
+  color: #ececec;
+}
+
+.ytunes-app.is-graphite .ytunes-tile-sub {
+  color: #9a9a9a;
+}
+
+.ytunes-app.is-graphite .ytunes-tile.is-selected .ytunes-tile-title {
+  color: #7eb6f0;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-table-wrap {
+  color: #e6e6e6;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-table th,
+#ytunes-root .ytunes-app.is-graphite .ytunes-table td {
+  border-right-color: #333;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-table thead,
+#ytunes-root .ytunes-app.is-graphite .ytunes-table thead tr,
+#ytunes-root .ytunes-app.is-graphite .ytunes-table th {
+  color: #ececec;
+  background: linear-gradient(#4a4a4a, #323232);
+  border-bottom-color: #1a1a1a;
+  border-right-color: #2a2a2a;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-empty td {
+  color: #8a8a8a;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.ytunes-section td {
+  color: #b0b0b0;
+  background: linear-gradient(#3a3a3a, #2a2a2a);
+  border-top-color: #222;
+  border-bottom-color: #1a1a1a;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested:nth-child(odd):not(.is-selected):not(.is-browse) {
+  background: #232823;
+  color: #c8c8c8;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested:nth-child(even):not(.is-selected):not(.is-browse) {
+  background: #1d221d;
+  color: #c8c8c8;
+}
+
+#ytunes-root .ytunes-app.is-graphite .ytunes-row-like:not(.is-liked),
+#ytunes-root .ytunes-app.is-graphite .ytunes-row-act {
+  color: #d8d8d8;
+}
+
+.ytunes-app.is-graphite .ytunes-table-wrap::-webkit-scrollbar,
+.ytunes-app.is-graphite .ytunes-source-list::-webkit-scrollbar,
+.ytunes-app.is-graphite .ytunes-grid::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.ytunes-app.is-graphite .ytunes-table-wrap::-webkit-scrollbar-track,
+.ytunes-app.is-graphite .ytunes-source-list::-webkit-scrollbar-track,
+.ytunes-app.is-graphite .ytunes-grid::-webkit-scrollbar-track {
+  background: var(--yt-row-odd);
+}
+
+.ytunes-app.is-graphite .ytunes-table-wrap::-webkit-scrollbar-thumb,
+.ytunes-app.is-graphite .ytunes-source-list::-webkit-scrollbar-thumb,
+.ytunes-app.is-graphite .ytunes-grid::-webkit-scrollbar-thumb {
+  background: #5a5a5a;
+  border: 2px solid var(--yt-row-odd);
+  border-radius: 6px;
+}
+
+.ytunes-app.is-graphite .ytunes-dialog form,
+.ytunes-app.is-graphite .ytunes-prefs-sheet,
+.ytunes-app.is-graphite .ytunes-jump-sheet,
+.ytunes-app.is-graphite .ytunes-pick-sheet {
+  color: #ececec;
+  background: linear-gradient(#4e4e4e, #353535);
+  border-color: #1a1a1a;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+}
+
+.ytunes-app.is-graphite .ytunes-dialog h3,
+.ytunes-app.is-graphite .ytunes-prefs-sheet h3,
+.ytunes-app.is-graphite .ytunes-prefs-sheet h4,
+.ytunes-app.is-graphite .ytunes-pick-sheet h3 {
+  color: #f2f2f2;
+}
+
+.ytunes-app.is-graphite .ytunes-prefs-row {
+  color: #ececec;
+}
+
+.ytunes-app.is-graphite .ytunes-prefs-hint {
+  color: #b0b0b0;
+}
+
+.ytunes-app.is-graphite .ytunes-hotkeys {
+  color: #d8d8d8;
+}
+
+.ytunes-app.is-graphite .ytunes-hotkeys kbd {
+  color: #ececec;
+  background: #2a2a2a;
+  border-color: #111;
+}
+
+.ytunes-app.is-graphite .ytunes-dialog input,
+.ytunes-app.is-graphite #ytunes-jump-input {
+  color: #ececec;
+  background: #2a2a2a;
+  border-color: #141414;
+}
+
+.ytunes-app.is-graphite .ytunes-pick-list {
+  border-color: #1a1a1a;
+}
+
+.ytunes-app.is-graphite .ytunes-pick-empty {
+  color: #b0b0b0;
+}
+
+.ytunes-app.is-graphite .ytunes-dialog-actions button {
+  color: #ececec;
+  background: linear-gradient(#5a5a5a, #3a3a3a);
+  border-color: #1a1a1a;
+}
+
+.ytunes-app.is-graphite .ytunes-dialog-actions button:active {
+  background: linear-gradient(#3a3a3a, #2e2e2e);
+}
+
+.ytunes-app.is-graphite #ytunes-toast {
+  color: #ececec;
+}
+
+.ytunes-app.is-graphite #ytunes-toast[data-kind="error"] {
+  color: #ff9a9a;
+}
+
+.ytunes-app.is-graphite #ytunes-sleep-label {
+  color: #d0d0d0;
+}
+
+.ytunes-app.is-graphite .ytunes-status-credit {
+  color: #ececec;
+}
+
+@media (prefers-contrast: more) {
+  .ytunes-app.is-graphite .ytunes-dialog form,
+  .ytunes-app.is-graphite .ytunes-prefs-sheet,
+  .ytunes-app.is-graphite .ytunes-jump-sheet,
+  .ytunes-app.is-graphite .ytunes-pick-sheet {
+    background: #2a2a2a;
+    border-color: #eee;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ytunes-lyrics,
+  .ytunes-dialog form,
+  .ytunes-prefs-sheet,
+  .ytunes-pick-sheet {
+    transition: opacity 160ms ease;
+    transform: none;
+  }
+}
+
 @media (max-width: 860px) {
   .ytunes-top {
     grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.2fr) minmax(120px, 0.9fr);
@@ -1246,5 +2424,8 @@
   }
   .ytunes-sidebar {
     width: 168px;
+  }
+  .ytunes-status-credit {
+    display: none;
   }
 }

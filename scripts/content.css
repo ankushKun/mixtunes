@@ -31,3 +31,48 @@ html[data-ytunes-host="ready"] #player-page {
   pointer-events: none !important;
   z-index: 0 !important;
 }
+
+#ytunes-launch {
+  box-sizing: border-box;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ytmusic-text-primary, var(--yt-spec-text-primary, currentColor));
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+#ytunes-launch svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  display: block;
+  pointer-events: none;
+}
+
+#ytunes-launch:focus {
+  outline: none;
+}
+
+#ytunes-launch:focus-visible {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #ytunes-launch:hover {
+    background: color-mix(in srgb, currentColor 12%, transparent);
+  }
+}
+
+html[data-ytunes-host="ready"] #ytunes-launch {
+  display: none !important;
+}

@@ -17,7 +17,7 @@
       </label>
     </div>
 
-    <div class="ytunes-lcd is-idle" id="ytunes-lcd" aria-live="polite" title="">
+    <div class="ytunes-lcd is-idle" id="ytunes-lcd" aria-live="polite" title="Now Playing">
       <div class="ytunes-lcd-art" hidden>
         <img id="ytunes-lcd-img" alt="" />
       </div>
@@ -34,11 +34,14 @@
         <button type="button" class="ytunes-lcd-tool" data-action="shuffle" aria-pressed="false" title="Shuffle">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
         </button>
-        <button type="button" class="ytunes-lcd-tool" data-action="repeat" aria-pressed="false" title="Repeat">
+        <button type="button" class="ytunes-lcd-tool" data-action="repeat" data-repeat="off" aria-pressed="false" title="Repeat Off">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
         </button>
         <button type="button" class="ytunes-lcd-tool" data-action="like" aria-pressed="false" title="Like">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </button>
+        <button type="button" class="ytunes-lcd-tool" data-action="lyrics" aria-pressed="false" title="Lyrics">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11v2H5V4zm0 5h11v2H5V9zm0 5h7v2H5v-2zm13-6.2v8.05A2.5 2.5 0 1 0 20 18V9.5l3-1V6.2l-5 2.1z"/></svg>
         </button>
       </div>
     </div>
@@ -76,40 +79,82 @@
   <div class="ytunes-body">
     <aside class="ytunes-sidebar">
       <div class="ytunes-source-list">
-        <h2>Library</h2>
-        <button type="button" class="is-selected" data-source="songs" aria-current="true">Music</button>
-        <button type="button" data-source="liked">Liked Songs</button>
-        <button type="button" data-source="videos">Videos</button>
-        <button type="button" data-source="podcasts">Podcasts</button>
-        <button type="button" data-source="albums">Albums</button>
-        <button type="button" data-source="artists">Artists</button>
-        <button type="button" data-source="recents">Recents</button>
-        <h2>Store</h2>
-        <button type="button" data-source="home">Home</button>
-        <button type="button" data-source="explore">Explore</button>
-        <button type="button" data-source="charts">Charts</button>
-        <h2>Genius</h2>
-        <button type="button" data-source="radio">Radio</button>
-        <button type="button" data-source="mixes">Mixes</button>
-        <div id="ytunes-moods"></div>
-        <h2>Playlists</h2>
-        <button type="button" data-source="now">Now Playing</button>
-        <div id="ytunes-playlists"></div>
+        <svg class="ytunes-icon-sprite" aria-hidden="true" focusable="false">
+          <symbol id="ytunes-icon-note" viewBox="0 0 16 16"><path d="M5.2 13.4c0 1 .8 1.7 1.8 1.7s1.8-.7 1.8-1.7-.8-1.7-1.8-1.7c-.2 0-.4 0-.6.1V6.2l6.4-1.4v6.8c0 1 .8 1.7 1.8 1.7s1.8-.7 1.8-1.7-.8-1.7-1.8-1.7c-.2 0-.4 0-.6.1V2.4L5.2 4.2z"/></symbol>
+          <symbol id="ytunes-icon-heart" viewBox="0 0 16 16"><path d="M8 14S2.2 9.5 2.2 5.9c0-1.8 1.5-3.2 3.2-3.2 1.1 0 2 .6 2.6 1.4.6-.8 1.5-1.4 2.6-1.4 1.7 0 3.2 1.4 3.2 3.2C13.8 9.5 8 14 8 14z"/></symbol>
+          <symbol id="ytunes-icon-video" viewBox="0 0 16 16"><path d="M1.8 3.6h12.4v8.8H1.8V3.6zm4.4 1.8v5.2L11 8 6.2 5.4z"/></symbol>
+          <symbol id="ytunes-icon-podcast" viewBox="0 0 16 16"><path d="M8 1.6A2.4 2.4 0 0 0 5.6 4v3.6a2.4 2.4 0 1 0 4.8 0V4A2.4 2.4 0 0 0 8 1.6zM3.4 7.6a4.6 4.6 0 0 0 4 4.5V14H6v1.4h4V14H8.6v-1.9a4.6 4.6 0 0 0 4-4.5h-1.5a3.1 3.1 0 0 1-6.2 0H3.4z"/></symbol>
+          <symbol id="ytunes-icon-album" viewBox="0 0 16 16"><path d="M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4zm0 5a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2z"/></symbol>
+          <symbol id="ytunes-icon-artist" viewBox="0 0 16 16"><path d="M8 7.8A2.7 2.7 0 1 0 8 2.4a2.7 2.7 0 0 0 0 5.4zm0 1.2c-2.5 0-5.3 1.2-5.3 3.6V14h10.6v-1.4c0-2.4-2.8-3.6-5.3-3.6z"/></symbol>
+          <symbol id="ytunes-icon-clock" viewBox="0 0 16 16"><path d="M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4zM8 3v5.1l3.1 1.8-.7 1.2L6.6 8.6V3H8z"/></symbol>
+          <symbol id="ytunes-icon-home" viewBox="0 0 16 16"><path d="M8 2 1.6 7.2h1.6V14h3.4V9.4h2.8V14h3.4V7.2h1.6L8 2z"/></symbol>
+          <symbol id="ytunes-icon-explore" viewBox="0 0 16 16"><path d="M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4zm2.3 3.1L7.2 7.2 4.7 11.2 8.8 8.8 11.3 4.5z"/></symbol>
+          <symbol id="ytunes-icon-chart" viewBox="0 0 16 16"><path d="M2 13h12v1.4H2V13zM3.4 8h2.2v4.6H3.4V8zM7 3.6h2.2v9H7v-9zm3.6 2.4H13v6.6h-2.4V6z"/></symbol>
+          <symbol id="ytunes-icon-radio" viewBox="0 0 16 16"><path d="M3.2 6.4h9.6v7.2H3.2V6.4zm2 2v3.2h5.6V8.4H5.2zM4.4 4.2l7.8-2 .5 1.5-7.8 2-.5-1.5zM8 5.2a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8z"/></symbol>
+          <symbol id="ytunes-icon-mix" viewBox="0 0 16 16"><path d="M2.8 2.8h7.2v7.2H2.8V2.8zm3.2 3.2h7.2v7.2H6V6z"/></symbol>
+          <symbol id="ytunes-icon-speaker" viewBox="0 0 16 16"><path d="M2 6.2h2.8L8 3.2v9.6L4.8 9.8H2V6.2zm8.2 1a2.2 2.2 0 0 1 0 3.2l.9.9a3.5 3.5 0 0 0 0-5l-.9.9zm1.7-1.7a4.6 4.6 0 0 1 0 6.6l.9.9a5.9 5.9 0 0 0 0-8.4l-.9.9z"/></symbol>
+          <symbol id="ytunes-icon-playlist" viewBox="0 0 16 16"><path d="M2.6 3h10.8v1.5H2.6V3zm0 3.8h6.2v1.5H2.6V6.8zm0 3.8h6.2V12H2.6v-1.4zm8.2-1.1 3.4 1.9-3.4 1.9V9.5z"/></symbol>
+          <symbol id="ytunes-icon-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></symbol>
+          <symbol id="ytunes-icon-mood" viewBox="0 0 16 16"><path d="M8 1.6 9 5l3.4.3-2.6 2.3.8 3.3L8 8.9 5.4 10.9l.8-3.3L3.6 5.3 7 5z"/></symbol>
+        </svg>
+
+        <details class="ytunes-source-group" data-group="library" open>
+          <summary>Library</summary>
+          <button type="button" class="is-selected" data-source="songs" aria-current="true"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-note"></use></svg><span class="ytunes-source-label">Music</span></button>
+          <button type="button" data-source="liked"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-heart"></use></svg><span class="ytunes-source-label">Liked Songs</span></button>
+          <button type="button" data-source="videos"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-video"></use></svg><span class="ytunes-source-label">Videos</span></button>
+          <button type="button" data-source="podcasts"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-podcast"></use></svg><span class="ytunes-source-label">Podcasts</span></button>
+          <button type="button" data-source="albums"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-album"></use></svg><span class="ytunes-source-label">Albums</span></button>
+          <button type="button" data-source="artists"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-artist"></use></svg><span class="ytunes-source-label">Artists</span></button>
+          <button type="button" data-source="recents"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-clock"></use></svg><span class="ytunes-source-label">Recents</span></button>
+        </details>
+
+        <details class="ytunes-source-group" data-group="store" open>
+          <summary>Store</summary>
+          <button type="button" data-source="home"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-home"></use></svg><span class="ytunes-source-label">Home</span></button>
+          <button type="button" data-source="explore"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-explore"></use></svg><span class="ytunes-source-label">Explore</span></button>
+          <button type="button" data-source="charts"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-chart"></use></svg><span class="ytunes-source-label">Charts</span></button>
+        </details>
+
+        <details class="ytunes-source-group" data-group="genius">
+          <summary>Genius</summary>
+          <button type="button" data-source="radio"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-radio"></use></svg><span class="ytunes-source-label">Radio</span></button>
+          <button type="button" data-source="mixes"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-mix"></use></svg><span class="ytunes-source-label">Mixes</span></button>
+          <div id="ytunes-moods"></div>
+        </details>
+
+        <details class="ytunes-source-group" data-group="playlists" open>
+          <summary>Playlists</summary>
+          <button type="button" data-source="now"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-speaker"></use></svg><span class="ytunes-source-label">Now Playing</span></button>
+          <div id="ytunes-playlists"></div>
+        </details>
+      </div>
+      <div class="ytunes-sidebar-well" id="ytunes-sidebar-well" hidden>
+        <button type="button" class="ytunes-sidebar-well-main" id="ytunes-sidebar-well-main" aria-label="Now Playing">
+          <img id="ytunes-sidebar-well-img" alt="" />
+          <span class="ytunes-sidebar-well-meta">
+            <span id="ytunes-sidebar-well-title"></span>
+            <span id="ytunes-sidebar-well-sub"></span>
+          </span>
+        </button>
+        <div class="ytunes-sidebar-well-acts">
+          <button type="button" class="ytunes-sidebar-well-act ytunes-sidebar-well-like" id="ytunes-sidebar-well-like" aria-pressed="false" title="Like" aria-label="Like">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ytunes-icon-heart"></use></svg>
+          </button>
+          <button type="button" class="ytunes-sidebar-well-act" id="ytunes-sidebar-well-more" title="More" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><use href="#ytunes-icon-more"></use></svg>
+          </button>
+        </div>
       </div>
     </aside>
 
-    <section class="ytunes-main" data-view="coverflow">
+    <section class="ytunes-main" data-view="coverflow" style="--yt-split: 34%">
       <div class="ytunes-coverflow" id="ytunes-coverflow" tabindex="0" role="listbox" aria-label="Cover Flow">
         <div id="ytunes-covers" class="ytunes-coverflow-stage"></div>
         <div class="ytunes-coverflow-floor" aria-hidden="true"></div>
         <div class="ytunes-coverflow-caption">
           <div id="ytunes-cover-title"></div>
           <div id="ytunes-cover-artist"></div>
-        </div>
-        <div class="ytunes-cf-scroll">
-          <button type="button" data-cf="prev" aria-label="Previous cover">‹</button>
-          <input id="ytunes-cf-range" class="ytunes-range" type="range" min="0" max="0" value="0" aria-label="Cover Flow position" />
-          <button type="button" data-cf="next" aria-label="Next cover">›</button>
         </div>
         <p id="ytunes-cover-empty">Loading library…</p>
       </div>
@@ -125,8 +170,11 @@
       <div class="ytunes-grid" id="ytunes-grid"></div>
 
       <div class="ytunes-lyrics" id="ytunes-lyrics" hidden>
+        <button type="button" class="ytunes-lyrics-close" data-action="lyrics-close" aria-label="Close lyrics">×</button>
         <pre id="ytunes-lyrics-text"></pre>
       </div>
+
+      <div class="ytunes-splitter" id="ytunes-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize track list"></div>
 
       <div class="ytunes-table-wrap" id="ytunes-table-wrap" tabindex="0">
         <table class="ytunes-table">
@@ -137,11 +185,14 @@
               <th data-sort="duration">Time</th>
               <th data-sort="artist">Artist</th>
               <th data-sort="album">Album</th>
+              <th data-sort="year">Year</th>
+              <th data-sort="plays">Plays</th>
+              <th data-sort="lastPlayed">Last Played</th>
             </tr>
           </thead>
           <tbody id="ytunes-tracks">
             <tr class="is-empty">
-              <td colspan="5">No tracks yet.</td>
+              <td colspan="8">No tracks yet.</td>
             </tr>
           </tbody>
         </table>
@@ -150,24 +201,57 @@
   </div>
 
   <footer class="ytunes-status">
-    <div class="ytunes-status-tools">
-      <button type="button" id="ytunes-new-playlist" title="New playlist">+</button>
-      <button type="button" data-action="shuffle" title="Shuffle">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
-      </button>
-      <button type="button" data-action="repeat" title="Repeat">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-      </button>
-      <button type="button" data-action="like" title="Like">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35 10.55 20.03C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-      </button>
+    <div class="ytunes-status-start">
+      <div class="ytunes-status-tools">
+        <button type="button" id="ytunes-new-playlist" title="New playlist" aria-label="New playlist">+</button>
+      </div>
     </div>
-    <span id="ytunes-status-left">0 items</span>
-    <span id="ytunes-status-center"></span>
-    <button type="button" id="ytunes-original">Original YouTube Music</button>
+    <div class="ytunes-status-meta">
+      <span id="ytunes-status-center">0 items</span>
+      <span id="ytunes-sleep-label" hidden></span>
+      <span id="ytunes-toast" hidden></span>
+    </div>
+    <div class="ytunes-status-end">
+      <a
+        class="ytunes-status-credit"
+        href="https://ankush.one"
+        target="_blank"
+        rel="noopener noreferrer"
+      >Built by ankushKun</a>
+      <div class="ytunes-status-tools">
+        <button type="button" id="ytunes-theme" title="Switch to Graphite" aria-pressed="false" aria-label="Toggle Graphite theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 4a8 8 0 0 0 0 16V4z"/></svg>
+        </button>
+        <button type="button" id="ytunes-sleep" title="Sleep timer" aria-label="Sleep timer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3zm1 4v5.2l3.4 2-1 1.6L11 12V7h2z"/></svg>
+        </button>
+        <button type="button" id="ytunes-prefs-open" title="Preferences" aria-label="Preferences">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58-1.92-3.32-2.39.96a7.1 7.1 0 0 0-1.63-.94L14.5 3h-5l-.78 2.2c-.6.22-1.14.53-1.63.94l-2.39-.96-1.92 3.32 2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.78 14.5l1.92 3.32 2.39-.96c.49.41 1.03.72 1.63.94L9.5 21h5l.78-2.2c.6-.22 1.14-.53 1.63-.94l2.39.96 1.92-3.32-2.08-1.56zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>
+        </button>
+      </div>
+    </div>
   </footer>
 
+  <div class="ytunes-sleep-menu" id="ytunes-sleep-menu" hidden>
+    <button type="button" data-sleep="15">15 minutes</button>
+    <button type="button" data-sleep="30">30 minutes</button>
+    <button type="button" data-sleep="60">60 minutes</button>
+    <button type="button" data-sleep="album">End of album</button>
+    <button type="button" data-sleep="off">Off</button>
+  </div>
+
   <div class="ytunes-menu" id="ytunes-menu" hidden></div>
+
+  <div class="ytunes-dialog" id="ytunes-pick" hidden>
+    <div class="ytunes-pick-sheet" role="dialog" aria-labelledby="ytunes-pick-title">
+      <h3 id="ytunes-pick-title">Add to Playlist</h3>
+      <ul id="ytunes-pick-list" class="ytunes-pick-list"></ul>
+      <div class="ytunes-dialog-actions">
+        <button type="button" id="ytunes-pick-new">New Playlist</button>
+        <button type="button" id="ytunes-pick-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <div class="ytunes-dialog" id="ytunes-dialog" hidden>
     <form id="ytunes-dialog-form">
@@ -178,5 +262,50 @@
         <button type="submit" id="ytunes-dialog-ok">Create</button>
       </div>
     </form>
+  </div>
+
+  <div class="ytunes-dialog ytunes-prefs" id="ytunes-prefs" hidden>
+    <div class="ytunes-prefs-sheet" role="dialog" aria-labelledby="ytunes-prefs-title">
+      <h3 id="ytunes-prefs-title">Preferences</h3>
+      <label class="ytunes-prefs-row">
+        <input type="checkbox" id="ytunes-pref-overlay" />
+        Show yTunes overlay
+      </label>
+      <p class="ytunes-prefs-hint">Turning the overlay off reloads YouTube Music.</p>
+      <h4>Appearance</h4>
+      <label class="ytunes-prefs-row">
+        <input type="radio" name="ytunes-pref-theme" value="auto" />
+        Auto (match computer)
+      </label>
+      <label class="ytunes-prefs-row">
+        <input type="radio" name="ytunes-pref-theme" value="light" />
+        Metal
+      </label>
+      <label class="ytunes-prefs-row">
+        <input type="radio" name="ytunes-pref-theme" value="graphite" />
+        Graphite
+      </label>
+      <h4>Keyboard</h4>
+      <ul class="ytunes-hotkeys">
+        <li><kbd>Space</kbd> Play / Pause</li>
+        <li><kbd>⌘F</kbd> Search Music</li>
+        <li><kbd>⌘K</kbd> Jump to</li>
+        <li><kbd>L</kbd> Lyrics</li>
+        <li><kbd>↑</kbd> <kbd>↓</kbd> Select track</li>
+        <li><kbd>←</kbd> <kbd>→</kbd> Cover Flow</li>
+        <li><kbd>[</kbd> <kbd>]</kbd> Back / Forward</li>
+      </ul>
+      <div class="ytunes-dialog-actions">
+        <button type="button" id="ytunes-prefs-original">Original YouTube Music</button>
+        <button type="button" id="ytunes-prefs-close">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ytunes-jump" id="ytunes-jump" hidden>
+    <div class="ytunes-jump-sheet">
+      <input id="ytunes-jump-input" type="search" placeholder="Jump to playlist, source, or track" autocomplete="off" spellcheck="false" />
+      <ul id="ytunes-jump-list"></ul>
+    </div>
   </div>
 </div>

@@ -1,5 +1,34 @@
 const YTM_ORIGIN = "https://music.youtube.com";
 
+function paintPopupTheme(theme) {
+  const mode = sanitizeTheme(theme);
+  const dark = resolveGraphite(mode);
+  document.documentElement.classList.toggle("is-light", mode === "light");
+  document.documentElement.classList.toggle("is-graphite", dark);
+}
+
+async function syncPopupTheme() {
+  const prefs = await loadPrefs();
+  paintPopupTheme(prefs.theme);
+}
+
+syncPopupTheme();
+try {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.ytunesPrefs) return;
+    paintPopupTheme(migratePrefs(changes.ytunesPrefs.newValue).theme);
+  });
+} catch {
+  /* storage events unavailable in tests */
+}
+try {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    syncPopupTheme();
+  });
+} catch {
+  /* matchMedia can be missing */
+}
+
 function isYouTubeMusic(url) {
   if (!url) return false;
   try {
@@ -7,6 +36,24 @@ function isYouTubeMusic(url) {
   } catch {
     return false;
   }
+}
+
+async function openYouTubeMusic() {
+  const tabs = await chrome.tabs.query({ url: `${YTM_ORIGIN}/*` });
+  const current = await chrome.windows.getCurrent();
+  const sameWindow = tabs.filter((tab) => tab.windowId === current?.id);
+  const pool = sameWindow.length ? sameWindow : tabs;
+  const existing =
+    pool.find((tab) => tab.audible) ||
+    pool.slice().sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+  if (existing?.id != null) {
+    await chrome.tabs.update(existing.id, { active: true });
+    if (existing.windowId != null) {
+      await chrome.windows.update(existing.windowId, { focused: true });
+    }
+    return;
+  }
+  await chrome.tabs.create({ url: YTM_ORIGIN });
 }
 
 async function sendToTab(tabId, message) {
@@ -18,11 +65,12 @@ async function sendToTab(tabId, message) {
 }
 
 const artwork = document.getElementById("artwork");
-artwork.addEventListener("error", () => {
+artwork?.addEventListener("error", () => {
   const src = artwork.getAttribute("src") || "";
-  if (src.includes("/hq720.")) {
-    artwork.src = src.replace("/hq720.", "/mqdefault.");
-  }
+  const next = src
+    .replace("/hq720.", "/hqdefault.")
+    .replace("/maxresdefault.", "/hqdefault.");
+  if (next !== src) artwork.src = next;
 });
 
 function renderStatus(status) {
@@ -35,7 +83,8 @@ function renderStatus(status) {
   if (!status?.hostAlive) {
     nowPlaying.textContent = "Player bar not found. Start a song, then reload.";
     hostStatus.textContent = "Host: missing";
-    playPause.textContent = "Play/Pause";
+    playPause.classList.remove("is-playing");
+    playPause.setAttribute("aria-label", "Play");
     artwork.removeAttribute("src");
     artworkFrame.hidden = true;
     return;
@@ -46,7 +95,8 @@ function renderStatus(status) {
   hostStatus.textContent = status.hasMoviePlayer
     ? "Host: player bar + movie player"
     : "Host: player bar";
-  playPause.textContent = status.playing ? "Pause" : "Play";
+  playPause.classList.toggle("is-playing", Boolean(status.playing));
+  playPause.setAttribute("aria-label", status.playing ? "Pause" : "Play");
 
   if (status.artwork) {
     artwork.alt = status.title ? `Artwork for ${status.title}` : "Album artwork";
@@ -73,6 +123,16 @@ async function syncOverlayToggle() {
     window.close();
   });
 }
+
+document.getElementById("open-ytm")?.addEventListener("click", async (event) => {
+  event.preventDefault();
+  try {
+    await openYouTubeMusic();
+  } catch {
+    window.open(YTM_ORIGIN, "_blank", "noopener,noreferrer");
+  }
+  window.close();
+});
 
 chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
   const onYtm = isYouTubeMusic(tab?.url);

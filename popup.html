@@ -8,34 +8,47 @@
   </head>
   <body>
     <main id="on-ytm" hidden>
-      <h1>yTunes</h1>
-      <div class="artwork" hidden>
-        <img id="artwork" alt="" />
+      <div class="lcd">
+        <div class="artwork" hidden>
+          <img id="artwork" alt="" />
+        </div>
+        <div class="lcd-meta">
+          <div id="now-playing">Looking for the player…</div>
+          <p id="host-status" class="status"></p>
+        </div>
       </div>
-      <p id="now-playing">Looking for the player…</p>
-      <p id="host-status" class="status"></p>
       <div class="transport" role="group" aria-label="Playback">
-        <button type="button" data-action="previous">Previous</button>
-        <button type="button" id="play-pause" data-action="playPause">
-          Play/Pause
+        <button type="button" data-action="previous" aria-label="Previous">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2.2v12H6V6zm3.2 6 8.8 6.2V5.8L9.2 12z"/></svg>
         </button>
-        <button type="button" data-action="next">Next</button>
+        <button type="button" id="play-pause" class="play" data-action="playPause" aria-label="Play">
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5L8 5.5z"/></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7V5zm6.5 0H17v14h-3.5V5z"/></svg>
+        </button>
+        <button type="button" data-action="next" aria-label="Next">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 6H18v12h-2.2V6zM6 5.8v12.4L14.8 12 6 5.8z"/></svg>
+        </button>
       </div>
       <label class="toggle">
         <input type="checkbox" id="overlay-enabled" />
         Show yTunes overlay
       </label>
       <p id="overlay-hint" class="status">
-        Off uses stock YouTube Music. This choice survives refresh.
+        Off uses stock YouTube Music. Reloads the tab.
       </p>
     </main>
     <main id="off-ytm" hidden>
-      <h1>yTunes</h1>
-      <p>This only works on YouTube Music.</p>
-      <a href="https://music.youtube.com" target="_blank" rel="noreferrer">
+      <div class="lcd idle">
+        <div class="lcd-meta">
+          <div id="off-title">yTunes</div>
+          <p>This only works on YouTube Music.</p>
+        </div>
+      </div>
+      <a id="open-ytm" href="https://music.youtube.com">
         Open YouTube Music
       </a>
     </main>
+    <script src="layouts/shell/prefs.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

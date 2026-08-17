@@ -83,6 +83,21 @@ function pickBrowseId(node) {
   );
 }
 
+function pickSetVideoId(node) {
+  return (
+    node?.playlistItemData?.setVideoId ||
+    node?.playlistSetVideoId ||
+    node?.setVideoId ||
+    node?.navigationEndpoint?.watchEndpoint?.playlistSetVideoId ||
+    watchEndpoint(node)?.watchEndpoint?.playlistSetVideoId ||
+    ""
+  );
+}
+
+function isSuggestionShelf(title) {
+  return /suggest|recommend|you might|more like|more from/i.test(String(title || ""));
+}
+
 function pickVideoId(node) {
   return (
     node?.playlistItemData?.videoId ||
@@ -99,6 +114,15 @@ function browseFromRuns(runs) {
     if (id) return id;
   }
   return "";
+}
+
+function isPlayableVideoId(id) {
+  return /^[\w-]{11}$/.test(String(id || ""));
+}
+
+function isConcretePlaylist(id) {
+  const value = String(id || "").replace(/^VL/, "");
+  return Boolean(value) && !value.startsWith("RD");
 }
 
 function musicVideoType(node) {
@@ -166,16 +190,35 @@ function likedFlag(item) {
   return likeStatusOf(item) === "like";
 }
 
+function isMetaBit(bit) {
+  const text = String(bit || "").trim();
+  if (!text) return true;
+  if (/^\d{4}$/.test(text)) return true;
+  if (/^(song|songs|video|videos|album|single|ep|playlist|mix)$/i.test(text)) return true;
+  if (/^[\d.,]+\s*[kmb]?\s*(plays?|views?)$/i.test(text)) return true;
+  if (/^\d+:\d+(?::\d+)?$/.test(text)) return true;
+  return false;
+}
+
 function collectionKind(browseId, playlistId, subtitle, shelf, videoId) {
   const hay = `${subtitle || ""} ${shelf || ""}`;
-  if (/podcast/i.test(hay) || String(browseId || "").startsWith("MPSP")) {
-    return "podcast";
+  const browse = String(browseId || "");
+  if (/podcast/i.test(hay) || browse.startsWith("MPSP")) return "podcast";
+  if (browse.startsWith("MPRE")) return "album";
+  if (browse.startsWith("MPLA") || browse.startsWith("UC")) return "artist";
+  if (/\b(album|single|ep)\b/i.test(subtitle) && !/\b(song|video)\b/i.test(subtitle)) {
+    return "album";
   }
-  if (browseId.startsWith("MPRE")) return "album";
-  if (browseId.startsWith("MPLA") || browseId.startsWith("UC")) return "artist";
-  if (/\bsong\b/i.test(subtitle) && !/\bplaylist\b/i.test(subtitle)) return "song";
-  if (/album/i.test(subtitle)) return "album";
-  if (playlistId || browseId.startsWith("VL")) return "playlist";
+  if (/\bplaylist\b/i.test(subtitle) && !/\b(song|video)\b/i.test(subtitle)) {
+    return "playlist";
+  }
+  if (/\b(mix|radio|station)\b/i.test(subtitle) && !/\b(song|video)\b/i.test(subtitle)) {
+    return "playlist";
+  }
+  if (/\bsong\b/i.test(subtitle) || /\bvideo\b/i.test(subtitle)) return "song";
+  if (videoId && /(plays?|views?)/i.test(subtitle)) return "song";
+  if (videoId && !browse.startsWith("VL") && !/\bplaylist\b/i.test(hay)) return "song";
+  if (playlistId || browse.startsWith("VL")) return "playlist";
   if (videoId) return "song";
   return "album";
 }
@@ -209,7 +252,7 @@ function parseTwoRow(item, acc) {
   const bits = subtitle.split("•").map((part) => part.trim()).filter(Boolean);
   const shelf = acc.shelf || "";
   const kind = collectionKind(browseId, playlistId, subtitle, shelf, videoId);
-  const artist = bits.find((bit) => !/^(song|video|album|single|ep|playlist)$/i.test(bit) && !/^\d{4}$/.test(bit)) || bits[0] || "";
+  const artist = bits.find((bit) => !isMetaBit(bit)) || bits[0] || "";
   const id = browseId || playlistId || videoId || `c:${title}:${acc.collections.length}`;
   const collection = {
     id,
@@ -238,6 +281,8 @@ function parseTwoRow(item, acc) {
         playlistId,
         browseId,
         shelf,
+        suggested: isSuggestionShelf(shelf),
+        setVideoId: pickSetVideoId(item),
         endpoint: endpoint || { watchEndpoint: { videoId, playlistId: playlistId || undefined } },
       },
     ];
@@ -270,7 +315,8 @@ function parseListItem(item, acc) {
   const playlistId = pickPlaylistId(item);
   const endpoint = watchEndpoint(item) || item.navigationEndpoint;
   const year = yearFromBits(bits);
-  const album = bits.find((bit, i) => i > 0 && bit !== year) || "";
+  const artist = bits.find((bit) => !isMetaBit(bit)) || bits[0] || "";
+  const album = bits.find((bit) => bit !== artist && !isMetaBit(bit)) || "";
   const pageType =
     item.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs
       ?.browseEndpointContextMusicConfig?.pageType ||
@@ -287,7 +333,7 @@ function parseListItem(item, acc) {
     acc.tracks.push({
       id: videoId || `t:${title}:${acc.tracks.length}`,
       title,
-      artist: bits[0] || "",
+      artist,
       album,
       year,
       duration,
@@ -299,7 +345,9 @@ function parseListItem(item, acc) {
       albumBrowseId: browseFromRuns(columns[2]?.runs),
       musicVideoType: musicVideoType(item),
       shelf: acc.shelf || "",
+      suggested: isSuggestionShelf(acc.shelf),
       liked: likedFlag(item),
+      setVideoId: pickSetVideoId(item),
       endpoint: endpoint || {
         watchEndpoint: { videoId, playlistId: playlistId || undefined },
       },
@@ -357,16 +405,8 @@ function parseCardShelf(item, acc) {
     acc.tracks.push({
       id: videoId || `t:${title}:${acc.tracks.length}`,
       title,
-      artist:
-        bits.find(
-          (bit) =>
-            !/^(song|video|album|single|ep)$/i.test(bit) &&
-            !/^\d{4}$/.test(bit) &&
-            !/^\d+:\d+(?::\d+)?$/.test(bit)
-        ) ||
-        bits[1] ||
-        "",
-      album: bits[2] && !/^\d{4}$/.test(bits[2]) ? bits[2] : "",
+      artist: bits.find((bit) => !isMetaBit(bit)) || bits[1] || "",
+      album: bits.find((bit, i) => i > 0 && !isMetaBit(bit)) || "",
       year: yearFromBits(bits),
       duration: bits.find((bit) => /^\d+:\d+(?::\d+)?$/.test(bit)) || "",
       artwork: thumbnailUrl(item),
@@ -375,7 +415,9 @@ function parseCardShelf(item, acc) {
       browseId,
       musicVideoType: musicVideoType(item),
       shelf: acc.shelf || "",
+      suggested: isSuggestionShelf(acc.shelf),
       liked: likedFlag(item),
+      setVideoId: pickSetVideoId(item),
       endpoint: endpoint || {
         watchEndpoint: { videoId, playlistId: playlistId || undefined },
       },
@@ -415,7 +457,9 @@ function parsePanelVideo(item, acc) {
     playlistId: pickPlaylistId(item),
     musicVideoType: musicVideoType(item),
     shelf: acc.shelf || "",
+    suggested: isSuggestionShelf(acc.shelf),
     liked: likedFlag(item),
+    setVideoId: pickSetVideoId(item),
     endpoint: item.navigationEndpoint || {
       watchEndpoint: { videoId },
     },
@@ -538,6 +582,12 @@ function parseBrowse(response) {
       }
       return;
     }
+    if (node.playlistPanelVideoWrapperRenderer) {
+      const wrapper = node.playlistPanelVideoWrapperRenderer;
+      walk(wrapper.primaryRenderer);
+      walk(wrapper.counterpartRenderer);
+      return;
+    }
     if (node.playlistPanelVideoRenderer) {
       const start = acc.tracks.length;
       parsePanelVideo(node.playlistPanelVideoRenderer, acc);
@@ -592,6 +642,138 @@ function continuationToken(response) {
 }
 
 const SONGS_SEARCH_PARAMS = "EgWKAQIIAWoMEA4QChADEAQQCRAF";
+
+const queueMemo = { key: "", at: 0, data: null, inflight: null, gen: 0 };
+
+function parseQueuePanel(response) {
+  const acc = { tracks: [], collections: [], lyricsId: "", chips: [] };
+  const seen = new Set();
+  const seenWalk = new WeakSet();
+  const rememberTrack = (index) => {
+    const key = `t:${acc.tracks[index].videoId || acc.tracks[index].id}`;
+    if (seen.has(key) || !isPlayableVideoId(acc.tracks[index].videoId)) {
+      acc.tracks.splice(index, 1);
+    } else {
+      seen.add(key);
+    }
+  };
+
+  const walkPanel = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (seenWalk.has(node)) return;
+    seenWalk.add(node);
+    if (Array.isArray(node)) {
+      node.forEach(walkPanel);
+      return;
+    }
+    if (node.automixPreviewVideoRenderer) return;
+    if (node.playlistPanelVideoWrapperRenderer) {
+      walkPanel(node.playlistPanelVideoWrapperRenderer.primaryRenderer);
+      return;
+    }
+    if (node.playlistPanelVideoRenderer) {
+      const start = acc.tracks.length;
+      parsePanelVideo(node.playlistPanelVideoRenderer, acc);
+      for (let i = acc.tracks.length - 1; i >= start; i -= 1) rememberTrack(i);
+      return;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") walkPanel(value);
+    }
+  };
+
+  const collect = (node, buckets, visited) => {
+    if (!node || typeof node !== "object") return;
+    if (visited.has(node)) return;
+    visited.add(node);
+    if (node.musicQueueRenderer) {
+      buckets.queues.push(node.musicQueueRenderer);
+      return;
+    }
+    if (node.playlistPanelRenderer) {
+      buckets.panels.push(node.playlistPanelRenderer);
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((child) => collect(child, buckets, visited));
+      return;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") collect(value, buckets, visited);
+    }
+  };
+
+  const buckets = { queues: [], panels: [] };
+  collect(response, buckets, new WeakSet());
+  (buckets.queues.length ? buckets.queues : buckets.panels).forEach(walkPanel);
+  acc.lyricsId = parseBrowse(response).lyricsId || "";
+  return acc;
+}
+
+function automixPlaylistId(response) {
+  let found = "";
+  const seenNodes = new WeakSet();
+  const walk = (node) => {
+    if (!node || typeof node !== "object" || found) return;
+    if (seenNodes.has(node)) return;
+    seenNodes.add(node);
+    const preview = node.automixPreviewVideoRenderer;
+    if (preview) {
+      found =
+        preview.content?.automixPlaylistVideoRenderer?.navigationEndpoint
+          ?.watchEndpoint?.playlistId ||
+        preview.navigationEndpoint?.watchEndpoint?.playlistId ||
+        pickPlaylistId(preview) ||
+        "";
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    for (const value of Object.values(node)) {
+      if (value && typeof value === "object") walk(value);
+    }
+  };
+  walk(response);
+  return found;
+}
+
+function playableQueueTracks(tracks) {
+  return (tracks || []).filter((track) => isPlayableVideoId(track.videoId));
+}
+
+function mergeQueueTracks(hostTracks, nextTracks) {
+  const host = playableQueueTracks(hostTracks);
+  const next = playableQueueTracks(nextTracks);
+  const extras = new Map();
+  for (const track of next) extras.set(track.videoId, track);
+  const out = [];
+  const seen = new Set();
+  for (const track of host) {
+    const extra = extras.get(track.videoId);
+    out.push(
+      extra
+        ? {
+            ...extra,
+            ...track,
+            artwork: track.artwork || extra.artwork,
+            duration: track.duration || extra.duration,
+            album: track.album || extra.album,
+            artist: track.artist || extra.artist,
+          }
+        : track
+    );
+    seen.add(track.videoId);
+  }
+  if (host.length > 1) return out;
+  for (const track of next) {
+    if (seen.has(track.videoId)) continue;
+    seen.add(track.videoId);
+    out.push(track);
+  }
+  return out;
+}
 
 function mergeParsed(parts) {
   const tracks = [];
@@ -667,11 +849,28 @@ function parseSuggestions(response) {
 
 function parseLyrics(response) {
   const chunks = [];
+  const lines = [];
   const walk = (node) => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
       node.forEach(walk);
       return;
+    }
+    const msRaw =
+      node.startTimeMs ??
+      node.start_time_ms ??
+      node.cueRange?.startTimeMilliseconds;
+    const startRaw = msRaw ?? node.cueRange?.startTimeMs ?? node.startTime;
+    const lineText =
+      runsText(node.lyricLine) ||
+      runsText(node.text) ||
+      (typeof node.line === "string" ? node.line : "");
+    const start = Number(startRaw);
+    if (lineText && Number.isFinite(start) && start >= 0) {
+      lines.push({
+        t: msRaw != null || start >= 1000 ? start / 1000 : start,
+        text: lineText,
+      });
     }
     if (node.musicDescriptionShelfRenderer) {
       const text = runsText(node.musicDescriptionShelfRenderer.description);
@@ -687,7 +886,17 @@ function parseLyrics(response) {
     }
   };
   walk(response);
-  return chunks.join("\n\n").trim();
+  const unique = [];
+  const seen = new Set();
+  for (const line of lines.sort((a, b) => a.t - b.t)) {
+    const key = `${line.t}:${line.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(line);
+  }
+  const text =
+    chunks.join("\n\n").trim() || unique.map((line) => line.text).join("\n");
+  return { text, lines: unique };
 }
 
 const YTM = {
@@ -731,18 +940,138 @@ const YTM = {
       return [];
     }
   },
+  playerQueue() {
+    return pageRequest("playerQueue", {}, 4000).catch(() => ({
+      tracks: [],
+      playlistId: "",
+    }));
+  },
   async queue(videoId, playlistId) {
-    if (!videoId && !playlistId) return { tracks: [], lyricsId: "" };
-    const response = await YTM.next({
+    if (!videoId && !playlistId) return { tracks: [], lyricsId: "", playlistId: "" };
+    let host = { tracks: [], playlistId: "" };
+    try {
+      host = await YTM.playerQueue();
+    } catch {
+      host = { tracks: [], playlistId: "" };
+    }
+    const resolvedPlaylist = host.playlistId || playlistId || "";
+    const nextBody = {
       videoId: videoId || undefined,
-      playlistId: playlistId || undefined,
-    });
-    return parseBrowse(response);
+      playlistId: resolvedPlaylist || undefined,
+      enablePersistentPlaylistPanel: true,
+      isAudioOnly: true,
+    };
+    let response = {};
+    try {
+      response = await YTM.next(nextBody);
+    } catch {
+      response = {};
+    }
+    let parsed = parseQueuePanel(response);
+    const hostPlayable = playableQueueTracks(host.tracks);
+    if (
+      (parsed.tracks || []).length <= 1 &&
+      hostPlayable.length <= 1 &&
+      !isConcretePlaylist(resolvedPlaylist)
+    ) {
+      const followId =
+        automixPlaylistId(response) ||
+        (!resolvedPlaylist && videoId ? `RDAMVM${videoId}` : "");
+      if (followId && followId !== resolvedPlaylist) {
+        try {
+          const more = await YTM.next({
+            videoId: videoId || undefined,
+            playlistId: followId,
+            enablePersistentPlaylistPanel: true,
+            isAudioOnly: true,
+          });
+          parsed = mergeParsed([parsed, parseQueuePanel(more)]);
+        } catch {
+          /* keep the first panel */
+        }
+      }
+    }
+    return {
+      tracks: mergeQueueTracks(host.tracks || [], parsed.tracks || []),
+      lyricsId: parsed.lyricsId || "",
+      playlistId: resolvedPlaylist || parsed.tracks?.[0]?.playlistId || "",
+    };
+  },
+  async queueCached(videoId, playlistId) {
+    const key = `${videoId || ""}|${playlistId || ""}`;
+    const ttl = (queueMemo.data?.tracks || []).length > 1 ? 4000 : 500;
+    if (
+      queueMemo.key === key &&
+      queueMemo.data &&
+      Date.now() - queueMemo.at < ttl
+    ) {
+      return queueMemo.data;
+    }
+    if (queueMemo.inflight && queueMemo.key === key) return queueMemo.inflight;
+    const gen = queueMemo.gen;
+    queueMemo.key = key;
+    queueMemo.inflight = YTM.queue(videoId, playlistId)
+      .then((data) => {
+        if (gen === queueMemo.gen) {
+          queueMemo.data = data;
+          queueMemo.at = Date.now();
+          queueMemo.inflight = null;
+        }
+        return data;
+      })
+      .catch((error) => {
+        if (gen === queueMemo.gen) queueMemo.inflight = null;
+        throw error;
+      });
+    return queueMemo.inflight;
+  },
+  invalidateQueue() {
+    queueMemo.gen += 1;
+    queueMemo.key = "";
+    queueMemo.data = null;
+    queueMemo.at = 0;
+    queueMemo.inflight = null;
   },
   async lyrics(browseId) {
-    if (!browseId) return "";
+    const parsed = await YTM.lyricsParsed(browseId);
+    return parsed.text;
+  },
+  async lyricsParsed(browseId) {
+    if (!browseId) return { text: "", lines: [] };
     const response = await YTM.browse({ browseId });
     return parseLyrics(response);
+  },
+  signedIn() {
+    return pageRequest("signedIn", {}, 4000)
+      .then((result) => Boolean(result?.signedIn))
+      .catch(() => false);
+  },
+  enqueue(videoId, position) {
+    // Spike verdict: enqueue works through the live host
+    // (ytmusic-app.handleCommand + queueAddEndpoint). There is no
+    // InnerTube REST insert. Context menu Play Next / Add to Queue
+    // uses this path; absence would be clearer than a disabled tease.
+    if (!videoId) return Promise.reject(new Error("No video"));
+    return pageRequest("queueAdd", { videoId, position: position || "end" });
+  },
+  renamePlaylist(playlistId, title) {
+    // Spike API only — no rename UI until this endpoint is proven.
+    return pageRequest("innertube", {
+      endpoint: "browse/edit_playlist",
+      body: {
+        playlistId,
+        actions: [{ action: "ACTION_SET_PLAYLIST_NAME", playlistName: title }],
+      },
+    });
+  },
+  removeFromPlaylist(playlistId, setVideoId, videoId) {
+    const actions = setVideoId
+      ? [{ action: "ACTION_REMOVE_VIDEO", setVideoId }]
+      : [{ action: "ACTION_REMOVE_VIDEO_BY_VIDEO_ID", removedVideoId: videoId }];
+    return pageRequest("innertube", {
+      endpoint: "browse/edit_playlist",
+      body: { playlistId, actions },
+    });
   },
   like(videoId, rating) {
     const endpoint =

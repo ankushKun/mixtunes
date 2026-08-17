@@ -46,6 +46,10 @@
       "js": [
         "scripts/host.js",
         "scripts/ytm.js",
+        "layouts/shell/prefs.js",
+        "layouts/shell/toast.js",
+        "layouts/shell/dialog.js",
+        "layouts/shell/marquee.js",
         "layouts/shell/coverflow.js",
         "layouts/shell/script.js",
         "scripts/content.js"

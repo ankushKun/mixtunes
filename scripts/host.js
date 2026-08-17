@@ -39,6 +39,27 @@ const SELECTORS = {
 
 let playerSnap = null;
 let playerRefresh = null;
+let barMeta = { videoId: "", subtitle: "" };
+
+function metaLooksLike(a, b) {
+  const x = String(a || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  const y = String(b || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!x || !y) return false;
+  return x === y || x.startsWith(y) || y.startsWith(x);
+}
+
+function splitByline(text) {
+  return String(text || "")
+    .split(/\s*[•·—–]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
 
 function firstMatch(root, selectors) {
   if (!root || !selectors) return null;
@@ -72,13 +93,19 @@ function isArtworkSrc(src) {
   return /ytimg|googleusercontent|ggpht/.test(src);
 }
 
+function videoThumb(videoId) {
+  if (!videoId) return "";
+  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+}
+
 function squareArtwork(url, size = 240) {
   try {
     const parsed = new URL(url, location.href);
     if (parsed.hostname.includes("ytimg.com")) {
+      // hq720 / maxres often 200-OK a gray "..." tile. hqdefault exists for almost every id.
       parsed.pathname = parsed.pathname.replace(
-        /\/(hqdefault|mqdefault|sddefault|maxresdefault|default|hq720|[0-3])(\.jpg|\.webp)$/i,
-        "/hq720$2"
+        /\/(hq720|maxresdefault|sddefault|mqdefault|hqdefault|default|[0-3])(\.jpg|\.webp)$/i,
+        "/hqdefault$2"
       );
       return parsed.toString();
     }
@@ -95,8 +122,19 @@ function squareArtwork(url, size = 240) {
 }
 
 function srcFromImg(img, size) {
-  const src = img.currentSrc || img.src || "";
-  if (isArtworkSrc(src)) return squareArtwork(src, size);
+  if (!img) return "";
+  const shadow = img.closest?.("yt-img-shadow");
+  const candidates = [
+    img.currentSrc,
+    img.getAttribute("src"),
+    img.getAttribute("data-src"),
+    img.getAttribute("data-thumb"),
+    shadow?.src,
+    shadow?.getAttribute?.("src"),
+  ];
+  for (const src of candidates) {
+    if (isArtworkSrc(src)) return squareArtwork(src, size);
+  }
   const srcset = img.getAttribute("srcset") || "";
   const last = srcset.split(",").pop()?.trim().split(/\s+/)[0] || "";
   return isArtworkSrc(last) ? squareArtwork(last, size) : "";
@@ -353,28 +391,57 @@ function probe() {
   const bar = playerBar();
   const playPause = firstMatch(bar, SELECTORS.playPause);
   const player = document.querySelector("ytmusic-player");
-  const subtitle = textOf(firstMatch(bar, SELECTORS.subtitle));
-  const bits = subtitle.split("•").map((part) => part.trim()).filter(Boolean);
   const snap = playerSnap;
   const barTitle = textOf(firstMatch(bar, SELECTORS.title));
+  const barSubtitle = textOf(firstMatch(bar, SELECTORS.subtitle));
   const barProgress = readProgress(bar);
-  const title = (snap?.title && snap.videoId ? snap.title : "") || barTitle;
+  const snapTitle = snap?.title && snap.videoId ? snap.title : "";
+  const snapAuthor = String(snap?.author || "").trim();
+  const title = snapTitle || barTitle;
+  const videoId = snap?.videoId || "";
+  const barTitleOk = !snapTitle || !barTitle || metaLooksLike(snapTitle, barTitle);
+  const barStillOld =
+    Boolean(videoId && barSubtitle && videoId !== barMeta.videoId && barSubtitle === barMeta.subtitle);
+  const barFresh = Boolean(barSubtitle && barTitleOk && !barStillOld);
+  const subtitle = barFresh
+    ? barSubtitle
+    : [snapAuthor, title].filter(Boolean).join(" • ");
+  const bits = splitByline(barFresh ? barSubtitle : "");
   const year = bits.find((bit) => /^\d{4}$/.test(bit)) || "";
-  const artist = bits[0] || snap?.author || "";
-  const album = bits.slice(1).find((bit) => bit !== year) || "";
+  const artist = (barFresh && bits[0]) || snapAuthor || "";
+  const album = barFresh ? bits.slice(1).find((bit) => bit !== year) || "" : "";
+  if (barFresh) {
+    barMeta.videoId = videoId;
+    barMeta.subtitle = barSubtitle;
+  }
+
   return {
     hostAlive: Boolean(bar),
     hasMoviePlayer: Boolean(document.querySelector("#movie_player") || snap?.hasPlayer),
     hasApp: Boolean(document.querySelector("ytmusic-app")),
     playing: snap && typeof snap.playing === "boolean" ? snap.playing : isPlaying(playPause),
     title,
-    subtitle: subtitle || [snap?.author, title].filter(Boolean).join(" • "),
+    subtitle,
     artist,
     album,
     year,
-    videoId: snap?.videoId || "",
-    artwork: artworkUrl(bar, 240) || artworkUrl(player, 240),
-    cover: artworkUrl(bar, 600) || artworkUrl(player, 600),
+    author: snapAuthor,
+    videoId,
+    playlistId: snap?.playlistId || "",
+    artwork:
+      (snap?.thumbnail && isArtworkSrc(snap.thumbnail)
+        ? squareArtwork(snap.thumbnail, 240)
+        : "") ||
+      artworkUrl(bar, 240) ||
+      artworkUrl(player, 240) ||
+      videoThumb(snap?.videoId),
+    cover:
+      (snap?.thumbnail && isArtworkSrc(snap.thumbnail)
+        ? squareArtwork(snap.thumbnail, 600)
+        : "") ||
+      artworkUrl(bar, 600) ||
+      artworkUrl(player, 600) ||
+      videoThumb(snap?.videoId),
     progress: snap?.duration > 0 ? progressFromSnap(snap) : barProgress,
     volume:
       typeof snap?.volume === "number" && !snap.muted
@@ -420,6 +487,8 @@ async function playerMethod(payload) {
 async function controlPlayback(action) {
   const methods = {
     playPause: { method: "playPause" },
+    pause: { method: "pause" },
+    play: { method: "play" },
     next: { method: "next" },
     previous: { method: "previous" },
   };

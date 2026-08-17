@@ -1,15 +1,69 @@
 :root {
-  color-scheme: light dark;
-  --bg: #f6f6f6;
-  --fg: #111;
-  --muted: #6b6b6b;
+  color-scheme: light;
+  --pop-fg: #1b1b1b;
+  --pop-muted: #3d3d3d;
+  --pop-metal-a: #f6f6f6;
+  --pop-metal-b: #d0d0d0;
+  --pop-metal-c: #c2c2c2;
+  --pop-metal-d: #d8d8d8;
+  --pop-stripe: rgba(255, 255, 255, 0.12);
+  --pop-lcd-a: #c5d0c8;
+  --pop-lcd-b: #9aaba0;
+  --pop-lcd-border: #6f7a74;
+  --pop-art: #6a756e;
+  --pop-btn-fg: #2c2c2c;
+  --pop-btn-a: #ffffff;
+  --pop-btn-b: #e7e7e7;
+  --pop-btn-c: #bdbdbd;
+  --pop-btn-border: #7d7d7d;
+  --pop-btn-hi: rgba(255, 255, 255, 0.9);
+  --pop-btn-lift: rgba(255, 255, 255, 0.45);
+  --pop-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+html.is-graphite {
+  color-scheme: dark;
+  --pop-fg: #ececec;
+  --pop-muted: #c4c4c4;
+  --pop-metal-a: #5e5e5e;
+  --pop-metal-b: #3a3a3a;
+  --pop-metal-c: #2a2a2a;
+  --pop-metal-d: #404040;
+  --pop-stripe: rgba(255, 255, 255, 0.05);
+  --pop-lcd-a: #8fa097;
+  --pop-lcd-b: #5e6c64;
+  --pop-lcd-border: rgba(0, 0, 0, 0.55);
+  --pop-art: #4a5550;
+  --pop-btn-fg: #ececec;
+  --pop-btn-a: #7a7a7a;
+  --pop-btn-b: #4a4a4a;
+  --pop-btn-c: #2e2e2e;
+  --pop-btn-border: #1f1f1f;
+  --pop-btn-hi: rgba(255, 255, 255, 0.22);
+  --pop-btn-lift: rgba(255, 255, 255, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1c1c;
-    --fg: #f2f2f2;
-    --muted: #9a9a9a;
+  html:not(.is-light) {
+    color-scheme: dark;
+    --pop-fg: #ececec;
+    --pop-muted: #c4c4c4;
+    --pop-metal-a: #5e5e5e;
+    --pop-metal-b: #3a3a3a;
+    --pop-metal-c: #2a2a2a;
+    --pop-metal-d: #404040;
+    --pop-stripe: rgba(255, 255, 255, 0.05);
+    --pop-lcd-a: #8fa097;
+    --pop-lcd-b: #5e6c64;
+    --pop-lcd-border: rgba(0, 0, 0, 0.55);
+    --pop-art: #4a5550;
+    --pop-btn-fg: #ececec;
+    --pop-btn-a: #7a7a7a;
+    --pop-btn-b: #4a4a4a;
+    --pop-btn-c: #2e2e2e;
+    --pop-btn-border: #1f1f1f;
+    --pop-btn-hi: rgba(255, 255, 255, 0.22);
+    --pop-btn-lift: rgba(255, 255, 255, 0.12);
   }
 }
 
@@ -20,30 +74,53 @@
 
 html,
 body {
-  width: 240px;
-  background: var(--bg);
-  color: var(--fg);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  width: 260px;
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      var(--pop-stripe) 0,
+      var(--pop-stripe) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    linear-gradient(
+      var(--pop-metal-a),
+      var(--pop-metal-b) 48%,
+      var(--pop-metal-c) 52%,
+      var(--pop-metal-d)
+    );
+  color: var(--pop-fg);
+  font: 12px/1.25 "Lucida Grande", "Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 main {
-  padding: 16px;
+  padding: 10px;
 }
 
-h1 {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+.lcd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: 6px 8px;
+  border: 1px solid var(--pop-lcd-border);
+  border-radius: 6px;
+  background: linear-gradient(var(--pop-lcd-a), var(--pop-lcd-b));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.lcd.idle .lcd-meta {
+  text-align: center;
+  width: 100%;
 }
 
 .artwork {
   position: relative;
-  width: 100%;
-  margin-top: 12px;
-  aspect-ratio: 1 / 1;
+  width: 48px;
+  height: 48px;
+  flex: none;
   overflow: hidden;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--fg) 8%, var(--bg));
+  background: var(--pop-art);
 }
 
 .artwork img {
@@ -53,68 +130,146 @@ h1 {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
 }
 
-p {
-  margin-top: 4px;
-  color: var(--muted);
+.lcd-meta {
+  min-width: 0;
+  flex: 1;
 }
 
-a {
-  display: inline-block;
-  margin-top: 10px;
-  color: var(--fg);
-  font-weight: 500;
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-.status {
-  margin-top: 2px;
+#now-playing,
+#off-title {
+  font-weight: 700;
   font-size: 11px;
+}
+
+.status,
+.lcd-meta p {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--pop-muted);
 }
 
 .transport {
   display: flex;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.transport button,
-.linkish {
-  appearance: none;
-  border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
-  background: color-mix(in srgb, var(--fg) 6%, var(--bg));
-  color: var(--fg);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font: inherit;
-  cursor: pointer;
-}
-
-.transport button:hover,
-.linkish:hover {
-  background: color-mix(in srgb, var(--fg) 12%, var(--bg));
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .transport button {
-  flex: 1;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--pop-btn-border);
+  border-radius: 50%;
+  color: var(--pop-btn-fg);
+  background: radial-gradient(
+    circle at 50% 28%,
+    var(--pop-btn-a) 0%,
+    var(--pop-btn-b) 42%,
+    var(--pop-btn-c) 100%
+  );
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 1px 0 var(--pop-btn-hi);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.transport button.play {
+  width: 42px;
+  height: 42px;
+}
+
+.transport button svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.transport button.play svg {
+  width: 18px;
+  height: 18px;
+}
+
+.transport button:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.transport button.is-playing .icon-play,
+.transport button:not(.is-playing) .icon-pause {
+  display: none;
 }
 
 .toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
-  color: var(--fg);
-  font-weight: 500;
+  margin-top: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .toggle input {
   margin: 0;
+}
+
+#open-ytm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 26px;
+  margin-top: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--pop-btn-border);
+  border-radius: 4px;
+  background: linear-gradient(var(--pop-btn-a), var(--pop-btn-c));
+  box-shadow:
+    0 1px 0 var(--pop-btn-lift),
+    inset 0 1px 0 var(--pop-btn-hi);
+  color: var(--pop-btn-fg);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 140ms var(--pop-ease-out);
+}
+
+#open-ytm:focus-visible {
+  outline: 2px solid #3a7ec8;
+  outline-offset: 2px;
+}
+
+#open-ytm:active {
+  transform: scale(0.97);
+  background: linear-gradient(var(--pop-btn-c), var(--pop-btn-b));
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #open-ytm:hover {
+    background: linear-gradient(var(--pop-btn-a), var(--pop-btn-b));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #open-ytm {
+    transition: none;
+  }
+
+  #open-ytm:active {
+    transform: none;
+  }
+}
+
+#overlay-hint {
+  margin-top: 6px;
 }
