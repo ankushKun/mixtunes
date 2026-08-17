@@ -3015,6 +3015,7 @@ function bindShell(root) {
       if (!dragSplit) return;
       dragSplit = null;
       main.classList.remove("is-resizing");
+      state.coverFlow?.endResize?.();
       if (persist) persistChrome();
     };
     split.addEventListener("pointerdown", (event) => {
@@ -3022,6 +3023,7 @@ function bindShell(root) {
       event.preventDefault();
       split.setPointerCapture(event.pointerId);
       main.classList.add("is-resizing");
+      state.coverFlow?.beginResize?.();
       dragSplit = { y: event.clientY, start: state.prefs.splitRatio || 0.34 };
     });
     split.addEventListener("pointermove", (event) => {

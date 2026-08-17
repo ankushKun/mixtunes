@@ -150,24 +150,30 @@ function CoverFlow(root, handlers) {
   let fitted = 0;
   let geo = null;
   let raf = 0;
+  let resizeRaf = 0;
+  let resizing = false;
+  let resizeStart = 0;
   let browseTimer = 0;
   const pool = [];
+  const byId = new Map();
 
   if (reduced) flow.classList.add("is-reduced");
   flow.style.setProperty("--yt-cf-ms", `${CF_MS}ms`);
 
-  function fitCoverSize() {
+  function measureCoverSize() {
     const stageH = stage.clientHeight;
     const stageW = stage.clientWidth;
-    if (stageH < 40 || stageW < 40) {
-      return fitted || CF_SIZE;
-    }
-    const size = clamp(
+    if (stageH < 40 || stageW < 40) return fitted || CF_SIZE;
+    return clamp(
       Math.round(Math.min(stageH * 0.62, stageW * 0.56)),
       CF_SIZE_MIN,
       CF_SIZE_MAX
     );
-    if (Math.abs(size - fitted) >= 1) {
+  }
+
+  function fitCoverSize() {
+    const size = measureCoverSize();
+    if (Math.abs(size - fitted) >= 2 || !fitted) {
       fitted = size;
       geo = null;
       flow.style.setProperty("--yt-cf-size", `${size}px`);
@@ -215,9 +221,15 @@ function CoverFlow(root, handlers) {
       }
       transform = `translate3d(-50%, -${originY}, 0) translateX(${x}px) translateZ(${z}px) rotateY(${angle}deg)`;
     }
+    if (cover._offset === offset && cover._size === metrics.size) return;
+    cover._offset = offset;
+    cover._size = metrics.size;
     const centered = abs < 0.45;
-    cover.classList.toggle("is-center", centered);
-    cover.setAttribute("aria-selected", centered ? "true" : "false");
+    if (cover._centered !== centered) {
+      cover._centered = centered;
+      cover.classList.toggle("is-center", centered);
+      cover.setAttribute("aria-selected", centered ? "true" : "false");
+    }
     cover.style.transformOrigin = origin;
     cover.style.transform = transform;
     cover.style.zIndex = String(200 - Math.round(abs * 2));
@@ -287,10 +299,13 @@ function CoverFlow(root, handlers) {
         .replace("/maxresdefault.", "/hqdefault.");
       if (next !== src) {
         img.src = next;
+        if (cover._mirror) cover._mirror.src = next;
         return;
       }
       img.hidden = true;
       ph.hidden = false;
+      if (cover._mirror) cover._mirror.hidden = true;
+      if (cover._mirrorPh) cover._mirrorPh.hidden = false;
     };
     const ph = document.createElement("div");
     ph.className = "ytunes-cf-ph";
@@ -302,12 +317,23 @@ function CoverFlow(root, handlers) {
     reflect.setAttribute("aria-hidden", "true");
     const inner = document.createElement("div");
     inner.className = "ytunes-cf-reflect-inner";
+    const mirror = document.createElement("img");
+    mirror.alt = "";
+    mirror.draggable = false;
+    mirror.decoding = "async";
+    mirror.hidden = true;
+    const mirrorPh = document.createElement("div");
+    mirrorPh.className = "ytunes-cf-ph";
+    mirrorPh.hidden = true;
+    inner.appendChild(mirror);
+    inner.appendChild(mirrorPh);
     reflect.appendChild(inner);
     cover.appendChild(face);
     cover.appendChild(reflect);
     cover._img = img;
     cover._ph = ph;
-    cover._reflect = inner;
+    cover._mirror = mirror;
+    cover._mirrorPh = mirrorPh;
     cover._boundId = "";
     stage.appendChild(cover);
     return cover;
@@ -332,15 +358,21 @@ function CoverFlow(root, handlers) {
     const src = item.artwork || "";
     if (src) {
       if (cover._img.getAttribute("src") !== src) cover._img.src = src;
+      if (cover._mirror.getAttribute("src") !== src) cover._mirror.src = src;
       cover._img.hidden = false;
+      cover._mirror.hidden = false;
       cover._ph.hidden = true;
-      cover._reflect.style.backgroundImage = `url(${JSON.stringify(src)})`;
+      cover._mirrorPh.hidden = true;
     } else {
+      const letter = (item.title || "?").charAt(0).toUpperCase();
       cover._img.removeAttribute("src");
+      cover._mirror.removeAttribute("src");
       cover._img.hidden = true;
+      cover._mirror.hidden = true;
       cover._ph.hidden = false;
-      cover._ph.textContent = (item.title || "?").charAt(0).toUpperCase();
-      cover._reflect.style.backgroundImage = "";
+      cover._mirrorPh.hidden = false;
+      cover._ph.textContent = letter;
+      cover._mirrorPh.textContent = letter;
     }
     return true;
   }
@@ -385,17 +417,19 @@ function CoverFlow(root, handlers) {
     empty.hidden = true;
     const metrics = layout();
     const { start, end } = windowFor(centerFloat);
-    ensurePool(Math.max(1, end - start));
+    ensurePool(Math.max(CF_WINDOW * 2 + 1, end - start));
     const used = new Set();
     let slot = 0;
     for (let i = start; i < end; i += 1) {
       const item = covers[i];
-      let cover = pool.find((node) => node._boundId === item.id);
+      let cover = byId.get(item.id);
       let fresh = false;
-      if (!cover) {
+      if (!cover || used.has(cover)) {
         while (slot < pool.length && used.has(pool[slot])) slot += 1;
         cover = pool[slot] || pool[0];
+        if (cover._boundId && cover._boundId !== item.id) byId.delete(cover._boundId);
         fresh = bindCover(cover, item);
+        byId.set(item.id, cover);
       }
       used.add(cover);
       cover.hidden = false;
@@ -407,7 +441,9 @@ function CoverFlow(root, handlers) {
       }
     }
     pool.forEach((node) => {
-      if (!used.has(node)) node.hidden = true;
+      if (used.has(node)) return;
+      node.hidden = true;
+      node._offset = NaN;
     });
     const nearest = clamp(Math.round(centerFloat), 0, covers.length - 1);
     if (!opts.skipCaption) applyCaption(covers[nearest], nearest);
@@ -421,6 +457,11 @@ function CoverFlow(root, handlers) {
 
   function setList(list, selectedId) {
     covers = list || [];
+    byId.clear();
+    pool.forEach((node) => {
+      node._boundId = "";
+      node._offset = NaN;
+    });
     if (selectedId) {
       const idx = covers.findIndex((item) => item.id === selectedId);
       if (idx >= 0) center = idx;
@@ -429,6 +470,26 @@ function CoverFlow(root, handlers) {
     }
     captionIndex = -1;
     flow.classList.add("is-snap");
+    render();
+    requestAnimationFrame(() => flow.classList.remove("is-snap"));
+  }
+
+  function beginResize() {
+    resizing = true;
+    resizeStart = fitted || fitCoverSize();
+    flow.classList.add("is-snap");
+  }
+
+  function endResize() {
+    resizing = false;
+    resizeStart = 0;
+    stage.style.transform = "";
+    geo = null;
+    pool.forEach((node) => {
+      node._size = 0;
+      node._offset = NaN;
+    });
+    fitCoverSize();
     render();
     requestAnimationFrame(() => flow.classList.remove("is-snap"));
   }
@@ -615,18 +676,36 @@ function CoverFlow(root, handlers) {
   flow.addEventListener("keydown", onKey);
 
   const resize = new ResizeObserver(() => {
-    const before = fitted;
-    fitCoverSize();
-    if (!covers.length) return;
-    if (Math.abs(fitted - before) < 1 && before) return;
-    flow.classList.add("is-snap");
-    if (drag) paint(drag.visual);
-    else render();
-    requestAnimationFrame(() => {
-      if (!drag) flow.classList.remove("is-snap");
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0;
+      if (resizing) {
+        const live = measureCoverSize();
+        if (resizeStart) {
+          const scale = live / resizeStart;
+          stage.style.transform = `scale(${scale})`;
+          stage.style.transformOrigin = "50% 42%";
+        }
+        return;
+      }
+      const before = fitted;
+      fitCoverSize();
+      if (!covers.length) return;
+      if (Math.abs(fitted - before) < 2 && before) return;
+      flow.classList.add("is-snap");
+      pool.forEach((node) => {
+        node._size = 0;
+        node._offset = NaN;
+      });
+      if (drag) paint(drag.visual, { skipCaption: true });
+      else render({ skipCaption: true });
+      requestAnimationFrame(() => {
+        if (!drag && !resizing) flow.classList.remove("is-snap");
+      });
     });
   });
   resize.observe(flow);
+  ensurePool(CF_WINDOW * 2 + 1);
   requestAnimationFrame(() => fitCoverSize());
 
   return {
@@ -637,6 +716,8 @@ function CoverFlow(root, handlers) {
     move,
     setIndex,
     setCaptionTrack,
+    beginResize,
+    endResize,
     isDragging: () => Boolean(drag),
     focus: () => flow.focus({ preventScroll: true }),
   };
