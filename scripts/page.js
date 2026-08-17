@@ -747,8 +747,12 @@ function overlayRepeat() {
   return "off";
 }
 
+function watchListId(id) {
+  return String(id || "").replace(/^VL/, "");
+}
+
 function concreteListId(id) {
-  const list = String(id || "").replace(/^VL/, "");
+  const list = watchListId(id);
   if (!list || list.startsWith("RD")) return "";
   return list;
 }
@@ -761,10 +765,16 @@ function overlaySkipRoster() {
     .split(",")
     .map((id) => id.trim())
     .filter((id) => /^[\w-]{11}$/.test(id));
-  const playlistId = concreteListId(
-    transport?.dataset?.skipPlaylist || root?.dataset?.skipPlaylist || ""
-  );
-  return { ids, playlistId };
+  const rawList = transport?.dataset?.skipPlaylist || root?.dataset?.skipPlaylist || "";
+  const ownList = (transport?.dataset?.ownList || root?.dataset?.ownList) === "1";
+  const indexRaw = transport?.dataset?.skipIndex || root?.dataset?.skipIndex || "";
+  const skipIndex = Number(indexRaw);
+  return {
+    ids,
+    playlistId: ownList ? "" : watchListId(rawList),
+    ownList,
+    skipIndex: Number.isFinite(skipIndex) ? skipIndex : -1,
+  };
 }
 
 function queueSkipIds() {
@@ -780,24 +790,25 @@ function queueSkipIds() {
   };
 }
 
-function adjacentVideoId(ids, currentId, kind, wrap = true) {
-  if (!ids.length) return "";
-  const index = currentId ? ids.indexOf(currentId) : -1;
+function adjacentInRoster(ids, currentId, kind, wrap = true, hintIndex = -1) {
+  if (!ids.length) return { videoId: "", index: -1 };
+  const index =
+    hintIndex >= 0 &&
+    (!currentId || ids[hintIndex] === currentId || !ids.includes(currentId))
+      ? hintIndex
+      : currentId
+        ? ids.indexOf(currentId)
+        : -1;
   if (kind === "next") {
-    if (index < 0) return ids[0];
-    const limit = wrap ? ids.length : Math.max(0, ids.length - index - 1);
-    for (let step = 1; step <= limit; step += 1) {
-      const id = ids[(index + step) % ids.length];
-      if (id !== currentId) return id;
-    }
-    return "";
+    if (index < 0) return { videoId: ids[0], index: 0 };
+    if (index + 1 < ids.length) return { videoId: ids[index + 1], index: index + 1 };
+    if (wrap) return { videoId: ids[0], index: 0 };
+    return { videoId: "", index: -1 };
   }
-  if (index < 0) return ids[ids.length - 1];
-  for (let step = 1; step <= ids.length; step += 1) {
-    const id = ids[(index - step + ids.length) % ids.length];
-    if (id !== currentId) return id;
-  }
-  return "";
+  if (index < 0) return { videoId: ids[ids.length - 1], index: ids.length - 1 };
+  if (index > 0) return { videoId: ids[index - 1], index: index - 1 };
+  if (wrap) return { videoId: ids[ids.length - 1], index: ids.length - 1 };
+  return { videoId: "", index: -1 };
 }
 
 function skipPlayback(kind, options = {}) {
@@ -824,26 +835,32 @@ function skipPlayback(kind, options = {}) {
   const overlay = overlaySkipRoster();
   const queued = overlay.ids.length > 1 ? overlay : queueSkipIds();
   const ids = queued.ids.length ? queued.ids : overlay.ids;
-  const playlistId =
-    queued.playlistId ||
-    overlay.playlistId ||
-    concreteListId(snap.playlistId) ||
-    concreteListId(document.querySelector("#ytunes-lcd")?.dataset?.playlist);
+  const ownList = Boolean(overlay.ownList);
+  const playlistId = ownList
+    ? ""
+    : queued.playlistId ||
+      overlay.playlistId ||
+      watchListId(snap.playlistId) ||
+      watchListId(document.querySelector("#ytunes-lcd")?.dataset?.playlist);
   const currentId =
     snap.videoId || document.querySelector("#ytunes-lcd")?.dataset?.video || "";
   const wrap = !auto || repeat === "all";
-  const videoId = adjacentVideoId(ids, currentId, kind, wrap);
-  if (videoId) {
-    const index = ids.indexOf(videoId);
+  const next = adjacentInRoster(ids, currentId, kind, wrap, overlay.skipIndex);
+  if (next.videoId) {
+    if (auto && snap.videoId === next.videoId) return { ok: true };
+    const transport = document.querySelector("#ytunes-root .ytunes-transport");
+    if (transport && next.index >= 0) transport.dataset.skipIndex = String(next.index);
     const ok = play({
+      ownList,
       endpoint: {
-        watchEndpoint: playlistId
-          ? {
-              videoId,
-              playlistId,
-              index: index >= 0 ? index : undefined,
-            }
-          : { videoId },
+        watchEndpoint:
+          playlistId && !ownList
+            ? {
+                videoId: next.videoId,
+                playlistId,
+                index: next.index >= 0 ? next.index : undefined,
+              }
+            : { videoId: next.videoId },
       },
     });
     if (auto) {
@@ -1042,9 +1059,13 @@ function bindOverlayPlayGesture() {
       if (!videoId) return;
       markGesture();
       const playlistId = row?.dataset.playlist || cover?.dataset.playlist || "";
+      const ownList =
+        document.querySelector("#ytunes-root .ytunes-transport")?.dataset?.ownList === "1";
       play({
+        ownList,
         endpoint: {
-          watchEndpoint: playlistId ? { videoId, playlistId } : { videoId },
+          watchEndpoint:
+            playlistId && !ownList ? { videoId, playlistId } : { videoId },
         },
       });
     },
@@ -1089,9 +1110,15 @@ function play(payload) {
   const snap = playerSnapshot();
   const playlistId = watch.playlistId || "";
   const videoId = watch.videoId || "";
+  const ownList = Boolean(payload?.ownList);
   const command = endpoint?.watchEndpoint
     ? { ...endpoint, watchEndpoint: { ...endpoint.watchEndpoint, ...watch } }
     : { watchEndpoint: watch };
+
+  if (playlistId && ownList) {
+    if (loadWatch(watch)) return true;
+    return tryNavigate({ watchEndpoint: { videoId } }) || tryNavigate(command);
+  }
 
   if (playlistId) {
     tryNavigate(command);
