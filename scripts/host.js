@@ -409,8 +409,8 @@ function progressFromSnap(snap) {
   };
 }
 
-function refreshPlayerSnap() {
-  if (playerRefresh) return playerRefresh;
+function refreshPlayerSnap(force) {
+  if (!force && playerRefresh) return playerRefresh;
   if (typeof YTM === "undefined") return Promise.resolve(null);
   playerRefresh = YTM.player({ method: "get" })
     .then((snap) => {
@@ -484,11 +484,9 @@ function probe() {
       videoThumb(snap?.videoId),
     progress: snap?.duration > 0 ? progressFromSnap(snap) : barProgress,
     volume:
-      typeof snap?.volume === "number" && !snap.muted
+      typeof snap?.volume === "number"
         ? Math.round(snap.volume)
-        : snap?.muted
-          ? 0
-          : readVolume(bar),
+        : readVolume(bar),
     shuffle: isPressed(controlNode("shuffle")),
     repeat: readRepeat(controlNode("repeat")),
     liked: readLike(),
@@ -574,9 +572,15 @@ async function seekToRatio(ratio) {
 
 async function setVolumeRatio(ratio) {
   const volume = Math.max(0, Math.min(100, Math.round(Number(ratio) * 100)));
+  if (playerSnap) {
+    playerSnap = { ...playerSnap, volume, muted: volume === 0 };
+  }
   const result = await playerMethod({ method: "volume", volume });
   if (result?.ok) {
-    await refreshPlayerSnap();
+    await refreshPlayerSnap(true);
+    if (playerSnap) {
+      playerSnap = { ...playerSnap, volume, muted: volume === 0 };
+    }
     return true;
   }
   return setSlider(SELECTORS.volume, volume / 100);

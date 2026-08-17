@@ -1189,9 +1189,25 @@ function renderPlayer(root, status, state) {
     markPlayingRows(root, status?.videoId || "");
   }
 
-  if (!state.draggingVolume && typeof status?.volume === "number") {
-    volume.value = String(status.volume);
-    setRangeFill(volume, status.volume, 100);
+  const locked =
+    state.volumeLock?.value != null && Date.now() < (state.volumeLock.until || 0)
+      ? state.volumeLock.value
+      : null;
+  if (
+    locked != null &&
+    typeof status?.volume === "number" &&
+    Math.abs(status.volume - locked) <= 2
+  ) {
+    state.volumeLock = { value: null, until: 0 };
+  }
+  const shownVolume = state.draggingVolume
+    ? Number(volume.value)
+    : state.volumeLock?.value != null && Date.now() < (state.volumeLock.until || 0)
+      ? state.volumeLock.value
+      : status?.volume;
+  if (!state.draggingVolume && typeof shownVolume === "number") {
+    volume.value = String(shownVolume);
+    setRangeFill(volume, shownVolume, 100);
   }
 
   if (state.likeOverride && status?.videoId && state.likeOverride.videoId !== status.videoId) {
@@ -1587,6 +1603,7 @@ function bindShell(root) {
   const toast = bindToast(root);
   const state = {
     draggingVolume: false,
+    volumeLock: { value: null, until: 0 },
     draggingSeek: false,
     source: "songs",
     playlistId: "",
@@ -1959,6 +1976,8 @@ function bindShell(root) {
 
   let volumeHold = 0;
   let seekHold = 0;
+  let volumeFlush = 0;
+  let lastVolumeSent = null;
 
   function holdRange(key, timerName) {
     state[key] = true;
@@ -1967,7 +1986,7 @@ function bindShell(root) {
 
   function releaseRange(key, apply) {
     if (apply) apply();
-    const delay = key === "draggingVolume" ? 280 : 320;
+    const delay = key === "draggingVolume" ? 700 : 320;
     if (key === "draggingVolume") {
       window.clearTimeout(volumeHold);
       volumeHold = window.setTimeout(() => {
@@ -1981,21 +2000,40 @@ function bindShell(root) {
     }
   }
 
+  function lockVolume(value) {
+    const next = Math.max(0, Math.min(100, Math.round(Number(value))));
+    state.volumeLock = { value: next, until: Date.now() + 1500 };
+    return next;
+  }
+
+  function flushVolume() {
+    window.clearTimeout(volumeFlush);
+    volumeFlush = 0;
+    const next = lockVolume(volume.value);
+    if (lastVolumeSent === next) return;
+    lastVolumeSent = next;
+    setVolumeRatio(next / 100);
+  }
+
   volume.addEventListener("pointerdown", (event) => {
     if (event.button != null && event.button !== 0) return;
     holdRange("draggingVolume", "volume");
   });
   volume.addEventListener("input", () => {
     holdRange("draggingVolume", "volume");
+    lockVolume(volume.value);
     setRangeFill(volume, volume.value, 100);
-    setVolumeRatio(Number(volume.value) / 100);
+    window.clearTimeout(volumeFlush);
+    volumeFlush = window.setTimeout(flushVolume, 60);
   });
   volume.addEventListener("change", () => {
-    releaseRange("draggingVolume", () => setVolumeRatio(Number(volume.value) / 100));
+    flushVolume();
+    releaseRange("draggingVolume");
   });
   volume.addEventListener("pointerup", () => {
     if (state.draggingVolume) {
-      releaseRange("draggingVolume", () => setVolumeRatio(Number(volume.value) / 100));
+      flushVolume();
+      releaseRange("draggingVolume");
     }
   });
   volume.addEventListener("pointercancel", () => {
@@ -2039,7 +2077,8 @@ function bindShell(root) {
   });
   window.addEventListener("pointerup", () => {
     if (state.draggingVolume) {
-      releaseRange("draggingVolume", () => setVolumeRatio(Number(volume.value) / 100));
+      flushVolume();
+      releaseRange("draggingVolume");
     }
     if (state.draggingSeek) {
       flushSeek();

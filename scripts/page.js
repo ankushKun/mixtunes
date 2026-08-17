@@ -325,7 +325,7 @@ function applyVolume(payload) {
       /* media volume may be locked */
     }
   }
-  ok = setPaperSlider(findBarSlider("volume"), volume / 100) || ok;
+  if (!ok) ok = setPaperSlider(findBarSlider("volume"), volume / 100);
   return ok;
 }
 
