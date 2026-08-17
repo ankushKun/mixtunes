@@ -33,8 +33,17 @@ const SELECTORS = {
     ".thumbnail-image-wrapper img",
   ],
   time: [".time-info", "#left-controls .time-info"],
-  progress: ["#progress-bar", "tp-yt-paper-slider#progress-bar"],
-  volume: ["#volume-slider", "tp-yt-paper-slider#volume-slider"],
+  progress: [
+    "#progress-bar",
+    "tp-yt-paper-slider#progress-bar",
+    "#progress-bar-slider",
+  ],
+  volume: [
+    "#volume-slider",
+    "#expand-volume-slider",
+    "tp-yt-paper-slider#volume-slider",
+    "tp-yt-paper-slider#expand-volume-slider",
+  ],
 };
 
 let playerSnap = null;
@@ -61,10 +70,41 @@ function splitByline(text) {
     .filter(Boolean);
 }
 
+function queryDeep(root, selector) {
+  if (!root || !selector) return null;
+  const seen = new Set();
+  const walk = (node) => {
+    if (!node || seen.has(node)) return null;
+    seen.add(node);
+    try {
+      const hit = node.querySelector?.(selector);
+      if (hit) return hit;
+    } catch {
+      /* invalid selector for this root */
+    }
+    const kids = node.querySelectorAll?.("*") || [];
+    for (const kid of kids) {
+      if (kid.shadowRoot) {
+        const hit = walk(kid.shadowRoot);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  if (root.shadowRoot) {
+    const hit = walk(root.shadowRoot);
+    if (hit) return hit;
+  }
+  return walk(root);
+}
+
 function firstMatch(root, selectors) {
   if (!root || !selectors) return null;
   for (const selector of selectors) {
-    const node = root.querySelector(selector);
+    const node =
+      root.querySelector(selector) ||
+      root.shadowRoot?.querySelector(selector) ||
+      queryDeep(root, selector);
     if (node) return node;
   }
   return null;
@@ -465,13 +505,24 @@ function clickControl(action) {
 function setSlider(selectors, ratio) {
   const slider = firstMatch(playerBar(), selectors);
   if (!slider) return false;
-  const max = Number(slider.max ?? slider.getAttribute("max") ?? 100);
+  const max = Number(
+    slider.max ?? slider.getAttribute("max") ?? slider.getAttribute("aria-valuemax") ?? 100
+  );
   if (!Number.isFinite(max) || max <= 0) return false;
   const value = Math.max(0, Math.min(max, ratio * max));
-  slider.value = value;
+  try {
+    slider.value = value;
+    slider.immediateValue = value;
+  } catch {
+    /* Polymer sliders may reject isolated-world writes */
+  }
   slider.setAttribute("aria-valuenow", String(value));
-  slider.dispatchEvent(new Event("input", { bubbles: true }));
-  slider.dispatchEvent(new Event("change", { bubbles: true }));
+  slider.setAttribute("value", String(value));
+  const opts = { bubbles: true, composed: true };
+  slider.dispatchEvent(new Event("input", opts));
+  slider.dispatchEvent(new Event("change", opts));
+  slider.dispatchEvent(new CustomEvent("immediate-value-change", { ...opts, detail: value }));
+  slider.dispatchEvent(new CustomEvent("value-change", { ...opts, detail: value }));
   return true;
 }
 
@@ -506,28 +557,29 @@ async function controlPlayback(action) {
 }
 
 async function seekToRatio(ratio) {
-  const duration = playerSnap?.duration || 0;
-  if (duration > 0) {
-    const result = await playerMethod({
-      method: "seek",
-      seconds: Math.max(0, Math.min(1, ratio)) * duration,
-    });
-    if (result?.ok) {
-      await refreshPlayerSnap();
-      return true;
-    }
+  const clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+  const duration =
+    Number(playerSnap?.duration) || Number(probe()?.progress?.duration) || 0;
+  const result = await playerMethod({
+    method: "seek",
+    seconds: duration > 0 ? clamped * duration : undefined,
+    ratio: clamped,
+  });
+  if (result?.ok) {
+    await refreshPlayerSnap();
+    return true;
   }
-  return setSlider(SELECTORS.progress, ratio);
+  return setSlider(SELECTORS.progress, clamped);
 }
 
 async function setVolumeRatio(ratio) {
-  const volume = Math.max(0, Math.min(100, Math.round(ratio * 100)));
+  const volume = Math.max(0, Math.min(100, Math.round(Number(ratio) * 100)));
   const result = await playerMethod({ method: "volume", volume });
   if (result?.ok) {
     await refreshPlayerSnap();
     return true;
   }
-  return setSlider(SELECTORS.volume, ratio);
+  return setSlider(SELECTORS.volume, volume / 100);
 }
 
 function markHostReady() {

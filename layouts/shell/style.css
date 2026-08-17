@@ -259,6 +259,9 @@
   gap: 6px;
   margin-left: 6px;
   min-width: 0;
+  user-select: auto;
+  -webkit-user-select: auto;
+  touch-action: none;
 }
 
 .ytunes-vol-icon {
@@ -387,6 +390,7 @@
   color: rgba(30, 30, 30, 0.55);
   font-variant-numeric: tabular-nums;
   cursor: default;
+  pointer-events: auto;
 }
 
 .ytunes-lcd-tools {
@@ -431,8 +435,20 @@
 .ytunes-range {
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 16px;
   margin: 0;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  touch-action: none;
+  user-select: auto;
+  -webkit-user-select: auto;
+  pointer-events: auto;
+  vertical-align: middle;
+}
+
+.ytunes-range::-webkit-slider-runnable-track {
+  height: 4px;
   border-radius: 999px;
   background: linear-gradient(
     90deg,
@@ -440,14 +456,6 @@
     #8a9098 var(--yt-fill, 0%),
     rgba(0, 0, 0, 0.18) var(--yt-fill, 0%)
   );
-  outline: none;
-  cursor: pointer;
-}
-
-.ytunes-range::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: transparent;
 }
 
 .ytunes-range::-webkit-slider-thumb {
@@ -462,7 +470,29 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-.ytunes-lcd .ytunes-range {
+.ytunes-range::-moz-range-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #8a9098 0%,
+    #8a9098 var(--yt-fill, 0%),
+    rgba(0, 0, 0, 0.18) var(--yt-fill, 0%)
+  );
+}
+
+.ytunes-range::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #f4f4f6;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.ytunes-lcd .ytunes-range::-webkit-slider-runnable-track,
+.ytunes-lcd .ytunes-range::-moz-range-track {
   background: linear-gradient(
     90deg,
     #4a5550 0%,
@@ -780,20 +810,24 @@
   isolation: isolate;
 }
 
+.ytunes-stage {
+  position: relative;
+  flex: 0 0 var(--yt-split, 34%);
+  min-height: 80px;
+  overflow: hidden;
+}
+
 .ytunes-coverflow {
   --yt-cf-ms: 400ms;
   --yt-cf-ease: cubic-bezier(0.22, 0.7, 0.25, 1);
   --yt-cf-size: 150px;
-  flex: 0 1 var(--yt-split, 34%);
-  min-height: 160px;
-  max-height: 46%;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  position: relative;
   isolation: isolate;
   outline: none;
   background:
     radial-gradient(ellipse 90% 50% at 50% 36%, #242424 0%, #0a0a0a 70%, #000 100%);
-  border-bottom: 1px solid #000;
 }
 
 .ytunes-coverflow.is-empty #ytunes-cover-empty {
@@ -1041,16 +1075,14 @@
 
 .ytunes-artwell {
   display: none;
-  flex: 0 0 var(--yt-split, 34%);
-  min-height: 160px;
-  max-height: 46%;
+  position: absolute;
+  inset: 0;
   align-items: center;
   justify-content: center;
   gap: 24px;
   padding: 16px 28px;
   background: #111;
   color: #eee;
-  border-bottom: 1px solid #000;
 }
 
 .ytunes-artwell img {
@@ -1078,16 +1110,14 @@
 
 .ytunes-grid {
   display: none;
-  flex: 0 1 var(--yt-split, 34%);
-  min-height: 160px;
-  max-height: 46%;
+  position: absolute;
+  inset: 0;
   overflow: auto;
   padding: 12px;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   align-content: start;
   background: #e8e8e8;
-  border-bottom: 1px solid #b4b4b4;
 }
 
 .ytunes-tile {
@@ -1128,9 +1158,7 @@
 
 .ytunes-lyrics {
   position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: var(--yt-split, 34%);
+  inset: 0;
   z-index: 30;
   overflow: auto;
   padding: 28px 20px 16px;
@@ -1158,8 +1186,8 @@
 }
 
 .ytunes-table-wrap {
-  flex: 1 1 66%;
-  min-height: 38%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   background: var(--yt-row-odd);
   outline: none;
@@ -1722,12 +1750,30 @@
 }
 
 .ytunes-splitter {
+  position: relative;
+  z-index: 40;
   flex: none;
   height: 5px;
   cursor: ns-resize;
+  touch-action: none;
   background: linear-gradient(#ececec, #c8c8c8);
   border-top: 1px solid #b4b4b4;
   border-bottom: 1px solid #9a9a9a;
+}
+
+.ytunes-splitter::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  bottom: -4px;
+}
+
+.ytunes-main.is-resizing,
+.ytunes-main.is-resizing * {
+  cursor: ns-resize !important;
+  user-select: none !important;
 }
 
 .ytunes-sidebar-well {

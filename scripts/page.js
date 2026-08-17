@@ -91,8 +91,175 @@ async function innertube(endpoint, payload) {
   return json;
 }
 
+function queryDeep(root, selector) {
+  if (!root || !selector) return null;
+  const seen = new Set();
+  const walk = (node) => {
+    if (!node || seen.has(node)) return null;
+    seen.add(node);
+    try {
+      const hit = node.querySelector?.(selector);
+      if (hit) return hit;
+    } catch {
+      /* invalid selector for this root */
+    }
+    const kids = node.querySelectorAll?.("*") || [];
+    for (const kid of kids) {
+      if (kid.shadowRoot) {
+        const hit = walk(kid.shadowRoot);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  if (root.shadowRoot) {
+    const hit = walk(root.shadowRoot);
+    if (hit) return hit;
+  }
+  return walk(root);
+}
+
+function playerApiFrom(node) {
+  if (!node) return null;
+  const keys = ["playerApi", "playerApi_", "player", "player_"];
+  for (const key of keys) {
+    try {
+      const value = typeof node[key] === "function" ? node[key]() : node[key];
+      if (
+        value &&
+        (typeof value.seekTo === "function" ||
+          typeof value.setVolume === "function" ||
+          typeof value.getPlayerState === "function")
+      ) {
+        return value;
+      }
+    } catch {
+      /* property may be a broken getter */
+    }
+  }
+  return null;
+}
+
+let cachedMoviePlayer = null;
+
 function moviePlayer() {
-  return document.querySelector("#movie_player");
+  const cached = cachedMoviePlayer;
+  if (
+    cached &&
+    cached.isConnected !== false &&
+    (typeof cached.seekTo === "function" ||
+      typeof cached.setVolume === "function" ||
+      typeof cached.getPlayerState === "function" ||
+      cached.id === "movie_player")
+  ) {
+    return cached;
+  }
+  const direct = document.querySelector("#movie_player");
+  if (direct) {
+    cachedMoviePlayer = direct;
+    return direct;
+  }
+  const hosts = [
+    document.querySelector("ytmusic-player"),
+    document.querySelector("ytmusic-player-page"),
+    document.querySelector("ytmusic-player-bar"),
+    document.querySelector("ytmusic-app"),
+  ];
+  for (const host of hosts) {
+    if (!host) continue;
+    const api = playerApiFrom(host);
+    if (api) {
+      cachedMoviePlayer = api;
+      return api;
+    }
+    const inner =
+      host.shadowRoot?.querySelector("#movie_player") ||
+      host.querySelector("#movie_player") ||
+      queryDeep(host, "#movie_player");
+    if (inner) {
+      cachedMoviePlayer = inner;
+      return inner;
+    }
+  }
+  cachedMoviePlayer = null;
+  return null;
+}
+
+function mediaElement() {
+  const player = moviePlayer();
+  const fromPlayer =
+    player?.querySelector?.("video, audio") ||
+    (player?.shadowRoot && queryDeep(player, "video, audio"));
+  if (fromPlayer) return fromPlayer;
+  const hosts = [
+    document.querySelector("ytmusic-player"),
+    document.querySelector("ytmusic-player-page"),
+    document.querySelector("ytmusic-app"),
+  ];
+  for (const host of hosts) {
+    if (!host) continue;
+    const media =
+      host.querySelector("video.html5-main-video, video, audio") ||
+      host.shadowRoot?.querySelector("video.html5-main-video, video, audio") ||
+      queryDeep(host, "video.html5-main-video") ||
+      queryDeep(host, "video");
+    if (media) return media;
+  }
+  return null;
+}
+
+function findBarSlider(kind) {
+  const bar = document.querySelector("ytmusic-player-bar");
+  if (!bar) return null;
+  const selectors =
+    kind === "volume"
+      ? [
+          "#volume-slider",
+          "#expand-volume-slider",
+          "tp-yt-paper-slider#volume-slider",
+          "tp-yt-paper-slider#expand-volume-slider",
+        ]
+      : [
+          "#progress-bar",
+          "tp-yt-paper-slider#progress-bar",
+          "#progress-bar-slider",
+        ];
+  for (const selector of selectors) {
+    const node =
+      bar.querySelector(selector) ||
+      bar.shadowRoot?.querySelector(selector) ||
+      queryDeep(bar, selector);
+    if (node) return node;
+  }
+  return null;
+}
+
+function setPaperSlider(slider, ratio) {
+  if (!slider) return false;
+  const max = Number(
+    slider.max ?? slider.getAttribute("max") ?? slider.getAttribute("aria-valuemax") ?? 100
+  );
+  if (!Number.isFinite(max) || max <= 0) return false;
+  const value = Math.max(0, Math.min(max, Number(ratio) * max));
+  try {
+    if (typeof slider.set === "function") slider.set("value", value);
+  } catch {
+    /* Polymer set() may reject */
+  }
+  try {
+    slider.value = value;
+    slider.immediateValue = value;
+  } catch {
+    /* some sliders are read-only from this realm */
+  }
+  slider.setAttribute("aria-valuenow", String(value));
+  slider.setAttribute("value", String(value));
+  const opts = { bubbles: true, composed: true };
+  slider.dispatchEvent(new Event("input", opts));
+  slider.dispatchEvent(new Event("change", opts));
+  slider.dispatchEvent(new CustomEvent("immediate-value-change", { ...opts, detail: value }));
+  slider.dispatchEvent(new CustomEvent("value-change", { ...opts, detail: value }));
+  return true;
 }
 
 function callPlayer(name, ...args) {
@@ -103,6 +270,63 @@ function callPlayer(name, ...args) {
   } catch {
     return undefined;
   }
+}
+
+function ran(name, ...args) {
+  const player = moviePlayer();
+  if (!player || typeof player[name] !== "function") return false;
+  try {
+    player[name](...args);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function applySeek(payload) {
+  const media = mediaElement();
+  const duration =
+    Number(callPlayer("getDuration")) ||
+    Number(media?.duration) ||
+    0;
+  let seconds = Number(payload?.seconds);
+  if (!Number.isFinite(seconds) && Number.isFinite(Number(payload?.ratio)) && duration > 0) {
+    seconds = Number(payload.ratio) * duration;
+  }
+  if (!Number.isFinite(seconds)) return false;
+  if (duration > 0) seconds = Math.max(0, Math.min(duration, seconds));
+  else seconds = Math.max(0, seconds);
+  let ok = ran("seekTo", seconds, true) || ran("seekTo", seconds);
+  if (media && Number.isFinite(media.duration)) {
+    try {
+      media.currentTime = seconds;
+      ok = true;
+    } catch {
+      /* media may reject seeks while loading */
+    }
+  }
+  if (duration > 0) ok = setPaperSlider(findBarSlider("progress"), seconds / duration) || ok;
+  return ok;
+}
+
+function applyVolume(payload) {
+  const volume = Math.max(0, Math.min(100, Math.round(Number(payload?.volume))));
+  if (!Number.isFinite(volume)) return false;
+  if (volume > 0) ran("unMute");
+  else ran("mute");
+  let ok = ran("setVolume", volume);
+  const media = mediaElement();
+  if (media) {
+    try {
+      media.muted = volume === 0;
+      media.volume = volume / 100;
+      ok = true;
+    } catch {
+      /* media volume may be locked */
+    }
+  }
+  ok = setPaperSlider(findBarSlider("volume"), volume / 100) || ok;
+  return ok;
 }
 
 function playerThumbnail() {
@@ -119,21 +343,27 @@ function playerThumbnail() {
 function playerSnapshot() {
   const data = callPlayer("getVideoData") || {};
   const state = callPlayer("getPlayerState");
-  const current = Number(callPlayer("getCurrentTime"));
-  const duration = Number(callPlayer("getDuration"));
-  const volume = Number(callPlayer("getVolume"));
+  const media = mediaElement();
+  const current = Number(callPlayer("getCurrentTime") ?? media?.currentTime);
+  const duration = Number(callPlayer("getDuration") ?? media?.duration);
+  const rawVolume = callPlayer("getVolume");
+  const volume = Number(
+    rawVolume ?? (media ? (media.muted ? 0 : media.volume * 100) : NaN)
+  );
   const videoId = data.video_id || data.videoId || "";
   const playlist = callPlayer("getPlaylist");
+  const playing =
+    state === 1 || (state == null && media ? !media.paused && !media.ended : false);
   return {
-    hasPlayer: Boolean(moviePlayer()),
+    hasPlayer: Boolean(moviePlayer() || media),
     videoId,
     title: data.title || "",
     author: data.author || "",
-    playing: state === 1,
+    playing,
     current: Number.isFinite(current) ? current : 0,
     duration: Number.isFinite(duration) ? duration : 0,
     volume: Number.isFinite(volume) ? volume : null,
-    muted: Boolean(callPlayer("isMuted")),
+    muted: Boolean(callPlayer("isMuted") ?? media?.muted),
     thumbnail: playerThumbnail(),
     playlistId: data.list || callPlayer("getPlaylistId") || "",
     playlistIds: Array.isArray(playlist) ? playlist.filter(Boolean) : [],
@@ -476,14 +706,13 @@ function playerControl(payload) {
   const method = payload?.method || "get";
   if (method === "get") return playerSnapshot();
 
-  const ran = (name, ...args) => callPlayer(name, ...args) !== undefined;
-
   if (
     method === "play" ||
     method === "playPause" ||
     method === "next" ||
     method === "previous" ||
-    method === "seek"
+    method === "seek" ||
+    method === "volume"
   ) {
     allowUserPlayback();
   }
@@ -496,17 +725,8 @@ function playerControl(payload) {
     if (snap.videoId) return { ok: ran("playVideo") };
     return { ok: cueLcdWatch() };
   }
-  if (method === "seek") {
-    const seconds = Number(payload.seconds);
-    if (!Number.isFinite(seconds)) return { ok: false };
-    return { ok: ran("seekTo", seconds, true) };
-  }
-  if (method === "volume") {
-    const volume = Math.max(0, Math.min(100, Math.round(Number(payload.volume))));
-    if (!Number.isFinite(volume)) return { ok: false };
-    if (volume > 0) callPlayer("unMute");
-    return { ok: ran("setVolume", volume) };
-  }
+  if (method === "seek") return { ok: applySeek(payload) };
+  if (method === "volume") return { ok: applyVolume(payload) };
   if (method === "next" || method === "previous") {
     return skipPlayback(method);
   }
@@ -588,7 +808,6 @@ function skipPlayback(kind, options = {}) {
   if (now - skipAt < 280) return { ok: true };
   skipAt = now;
 
-  const ran = (name, ...args) => callPlayer(name, ...args) !== undefined;
   const snap = playerSnapshot();
   const repeat = overlayRepeat();
 
@@ -630,7 +849,7 @@ function skipPlayback(kind, options = {}) {
     if (auto) {
       window.setTimeout(() => {
         callPlayer("playVideo");
-        document.querySelector("#movie_player video")?.play?.().catch(() => {});
+        mediaElement()?.play?.().catch(() => {});
       }, 120);
     }
     return { ok: Boolean(ok) };

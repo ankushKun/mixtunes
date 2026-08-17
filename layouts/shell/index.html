@@ -149,32 +149,34 @@
     </aside>
 
     <section class="ytunes-main" data-view="coverflow" style="--yt-split: 34%">
-      <div class="ytunes-coverflow" id="ytunes-coverflow" tabindex="0" role="listbox" aria-label="Cover Flow">
-        <div id="ytunes-covers" class="ytunes-coverflow-stage"></div>
-        <div class="ytunes-coverflow-floor" aria-hidden="true"></div>
-        <div class="ytunes-coverflow-caption">
-          <div id="ytunes-cover-title"></div>
-          <div id="ytunes-cover-artist"></div>
+      <div class="ytunes-stage">
+        <div class="ytunes-coverflow" id="ytunes-coverflow" tabindex="0" role="listbox" aria-label="Cover Flow">
+          <div id="ytunes-covers" class="ytunes-coverflow-stage"></div>
+          <div class="ytunes-coverflow-floor" aria-hidden="true"></div>
+          <div class="ytunes-coverflow-caption">
+            <div id="ytunes-cover-title"></div>
+            <div id="ytunes-cover-artist"></div>
+          </div>
+          <p id="ytunes-cover-empty">Loading library…</p>
         </div>
-        <p id="ytunes-cover-empty">Loading library…</p>
-      </div>
 
-      <div class="ytunes-artwell" id="ytunes-artwell">
-        <img id="ytunes-artwell-img" alt="" />
-        <div class="ytunes-artwell-meta">
-          <div id="ytunes-artwell-title"></div>
-          <div id="ytunes-artwell-sub"></div>
+        <div class="ytunes-artwell" id="ytunes-artwell">
+          <img id="ytunes-artwell-img" alt="" />
+          <div class="ytunes-artwell-meta">
+            <div id="ytunes-artwell-title"></div>
+            <div id="ytunes-artwell-sub"></div>
+          </div>
+        </div>
+
+        <div class="ytunes-grid" id="ytunes-grid"></div>
+
+        <div class="ytunes-lyrics" id="ytunes-lyrics" hidden>
+          <button type="button" class="ytunes-lyrics-close" data-action="lyrics-close" aria-label="Close lyrics">×</button>
+          <pre id="ytunes-lyrics-text"></pre>
         </div>
       </div>
 
-      <div class="ytunes-grid" id="ytunes-grid"></div>
-
-      <div class="ytunes-lyrics" id="ytunes-lyrics" hidden>
-        <button type="button" class="ytunes-lyrics-close" data-action="lyrics-close" aria-label="Close lyrics">×</button>
-        <pre id="ytunes-lyrics-text"></pre>
-      </div>
-
-      <div class="ytunes-splitter" id="ytunes-splitter" role="separator" aria-orientation="horizontal" aria-label="Resize track list"></div>
+      <div class="ytunes-splitter" id="ytunes-splitter" role="separator" aria-orientation="horizontal" aria-valuemin="22" aria-valuemax="70" aria-valuenow="34" aria-label="Resize track list"></div>
 
       <div class="ytunes-table-wrap" id="ytunes-table-wrap" tabindex="0">
         <table class="ytunes-table">

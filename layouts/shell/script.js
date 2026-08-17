@@ -769,9 +769,11 @@ function applyView(root, view) {
 
 function applySplit(root, ratio) {
   const clamped = Math.min(0.7, Math.max(0.22, Number(ratio) || 0.34));
-  root
-    .querySelector(".ytunes-main")
-    ?.style.setProperty("--yt-split", `${Math.round(clamped * 100)}%`);
+  const main = root.querySelector(".ytunes-main");
+  const percent = Math.round(clamped * 100);
+  main?.style.setProperty("--yt-split", `${percent}%`);
+  const split = root.querySelector("#ytunes-splitter");
+  if (split) split.setAttribute("aria-valuenow", String(percent));
   return clamped;
 }
 
@@ -1854,23 +1856,94 @@ function bindShell(root) {
     }
   });
 
-  volume.addEventListener("pointerdown", () => {
-    state.draggingVolume = true;
-  });
-  seek.addEventListener("pointerdown", () => {
-    state.draggingSeek = true;
-  });
-  window.addEventListener("pointerup", () => {
-    state.draggingVolume = false;
-    state.draggingSeek = false;
+  let volumeHold = 0;
+  let seekHold = 0;
+
+  function holdRange(key, timerName) {
+    state[key] = true;
+    window.clearTimeout(timerName === "volume" ? volumeHold : seekHold);
+  }
+
+  function releaseRange(key, apply) {
+    if (apply) apply();
+    const delay = key === "draggingVolume" ? 280 : 320;
+    if (key === "draggingVolume") {
+      window.clearTimeout(volumeHold);
+      volumeHold = window.setTimeout(() => {
+        state.draggingVolume = false;
+      }, delay);
+    } else {
+      window.clearTimeout(seekHold);
+      seekHold = window.setTimeout(() => {
+        state.draggingSeek = false;
+      }, delay);
+    }
+  }
+
+  volume.addEventListener("pointerdown", (event) => {
+    if (event.button != null && event.button !== 0) return;
+    holdRange("draggingVolume", "volume");
   });
   volume.addEventListener("input", () => {
+    holdRange("draggingVolume", "volume");
     setRangeFill(volume, volume.value, 100);
     setVolumeRatio(Number(volume.value) / 100);
   });
-  seek.addEventListener("input", () => {
-    setRangeFill(seek, seek.value, 1000);
+  volume.addEventListener("change", () => {
+    releaseRange("draggingVolume", () => setVolumeRatio(Number(volume.value) / 100));
+  });
+  volume.addEventListener("pointerup", () => {
+    if (state.draggingVolume) {
+      releaseRange("draggingVolume", () => setVolumeRatio(Number(volume.value) / 100));
+    }
+  });
+  volume.addEventListener("pointercancel", () => {
+    releaseRange("draggingVolume");
+  });
+
+  let seekFlush = 0;
+  function flushSeek() {
+    window.clearTimeout(seekFlush);
+    seekFlush = 0;
     seekToRatio(Number(seek.value) / 1000);
+  }
+
+  seek.addEventListener("pointerdown", (event) => {
+    if (event.button != null && event.button !== 0) return;
+    holdRange("draggingSeek", "seek");
+  });
+  seek.addEventListener("input", () => {
+    holdRange("draggingSeek", "seek");
+    const ratio = Number(seek.value) / 1000;
+    setRangeFill(seek, seek.value, 1000);
+    const total = Number(probe()?.progress?.duration) || 0;
+    const currentLabel = root.querySelector("#ytunes-time-current");
+    if (total && currentLabel) currentLabel.textContent = formatClock(ratio * total);
+    window.clearTimeout(seekFlush);
+    seekFlush = window.setTimeout(flushSeek, 140);
+  });
+  seek.addEventListener("change", () => {
+    flushSeek();
+    releaseRange("draggingSeek");
+  });
+  seek.addEventListener("pointerup", () => {
+    if (state.draggingSeek) {
+      flushSeek();
+      releaseRange("draggingSeek");
+    }
+  });
+  seek.addEventListener("pointercancel", () => {
+    window.clearTimeout(seekFlush);
+    releaseRange("draggingSeek");
+  });
+  window.addEventListener("pointerup", () => {
+    if (state.draggingVolume) {
+      releaseRange("draggingVolume", () => setVolumeRatio(Number(volume.value) / 100));
+    }
+    if (state.draggingSeek) {
+      flushSeek();
+      releaseRange("draggingSeek");
+    }
   });
 
   root.querySelector(".ytunes-views").addEventListener("click", (event) => {
@@ -1959,7 +2032,7 @@ function bindShell(root) {
     openTrackMenu(track, { anchor: more }, { includePlay: false, includeLike: false });
   });
   root.querySelector("#ytunes-lcd")?.addEventListener("click", (event) => {
-    if (event.target.closest(".ytunes-lcd-tool, .ytunes-range, input")) return;
+    if (event.target.closest(".ytunes-lcd-tool, .ytunes-range, .ytunes-lcd-progress, input")) return;
     openNowPlaying();
   });
 
@@ -2856,22 +2929,29 @@ function bindShell(root) {
     const main = root.querySelector(".ytunes-main");
     if (!split || !main) return;
     let dragSplit = null;
+    const stopDrag = (persist) => {
+      if (!dragSplit) return;
+      dragSplit = null;
+      main.classList.remove("is-resizing");
+      if (persist) persistChrome();
+    };
     split.addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
+      event.preventDefault();
       split.setPointerCapture(event.pointerId);
+      main.classList.add("is-resizing");
       dragSplit = { y: event.clientY, start: state.prefs.splitRatio || 0.34 };
     });
     split.addEventListener("pointermove", (event) => {
       if (!dragSplit) return;
       const rect = main.getBoundingClientRect();
+      if (!rect.height) return;
       const next = dragSplit.start + (event.clientY - dragSplit.y) / rect.height;
       state.prefs.splitRatio = applySplit(root, next);
     });
-    split.addEventListener("pointerup", () => {
-      if (!dragSplit) return;
-      dragSplit = null;
-      persistChrome();
-    });
+    split.addEventListener("pointerup", () => stopDrag(true));
+    split.addEventListener("pointercancel", () => stopDrag(true));
+    split.addEventListener("lostpointercapture", () => stopDrag(true));
   }
 
   function bindSystemTheme() {
