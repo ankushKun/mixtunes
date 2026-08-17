@@ -234,7 +234,7 @@ async function collectSongsFromParsed(parsed, cover, stillCurrent) {
   const rest = collections.filter(
     (item) => !isSongShelfCollection(item) && item.kind !== "artist"
   );
-  const queue = [...preferred, ...rest].slice(0, 10);
+  const queue = [...preferred, ...rest].slice(0, 3);
   for (const item of queue) {
     if (stillCurrent && !stillCurrent()) return tracks;
     const body = collectionBrowseBody(item);
@@ -303,7 +303,7 @@ function storefrontCovers(parsed) {
     subtitle: cover.tracks?.[0]?.artist || cover.subtitle,
     videoId: cover.tracks?.[0]?.videoId || "",
   }));
-  return [...collections, ...songCovers];
+  return { collections, songCovers };
 }
 
 function albumBrowseOf(track) {
@@ -1477,12 +1477,18 @@ function applyParsed(root, state, parsed, emptyMessage) {
     state.source === "playlist"
       ? playlistOwned.concat(splitPlaylistRows(parsed.tracks).suggested)
       : parsed.tracks;
+  const collectionCovers = (parsed.collections || []).filter((item) => !isSongCover(item));
   const covers =
     state.source === "search"
       ? searchCovers
-      : parsed.collections.length
-        ? parsed.collections
-        : coversFromTracks(playlistOwned);
+      : isMixedStorefront(state)
+        ? collectionCovers.length
+          ? collectionCovers
+          : coversFromTracks(playlistOwned)
+        : parsed.collections.length &&
+            (COVER_BROWSER_SOURCES.has(state.source) || state.source === "search")
+          ? parsed.collections
+          : coversFromTracks(playlistOwned);
   const pendingId = state.pendingSelectVideoId || "";
   state.pendingSelectVideoId = "";
   const pendingIndex = indexOfVideo(visible, pendingId);
@@ -3115,7 +3121,7 @@ function bindShell(root) {
 async function fetchCollectionTracks(cover, stillCurrent) {
   const body = collectionBrowseBody(cover);
   if (!body) return cover.tracks || [];
-  let parsed = await YTM.browseParsed(body, 8);
+  let parsed = await YTM.browseParsed(body, 2);
   if (stillCurrent && !stillCurrent()) return [];
   let tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
   const playlistId = collectionPlaylistId(cover);
@@ -3125,7 +3131,7 @@ async function fetchCollectionTracks(cover, stillCurrent) {
       : `VL${playlistId}`
     : "";
   if (!tracks.length && vl && vl !== body.browseId) {
-    parsed = await YTM.browseParsed({ browseId: vl }, 8);
+    parsed = await YTM.browseParsed({ browseId: vl }, 2);
     if (stillCurrent && !stillCurrent()) return [];
     tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
   }
@@ -3148,7 +3154,7 @@ async function previewCoverTracks(root, state, cover, seq) {
     );
   };
 
-  if (isSongCover(cover) || isMixedStorefront(state)) {
+  if (isSongCover(cover)) {
     if (!stillCurrent()) return;
     const tracks = topLevelSongsFromCovers(state.covers);
     state.tracks = tracks;
@@ -3159,7 +3165,7 @@ async function previewCoverTracks(root, state, cover, seq) {
       tracks,
       tracks.length ? "No tracks yet." : "No songs in this view."
     );
-    if (isSongCover(cover)) highlightCoverRows(root, state, cover);
+    highlightCoverRows(root, state, cover);
     return;
   }
 
@@ -3207,7 +3213,7 @@ async function openCollection(root, state, collection, options = {}) {
     const body = collectionBrowseBody(collection) || {
       browseId: collection.browseId || `VL${collection.playlistId}`,
     };
-    const parsed = await YTM.browseParsed(body, 8);
+    const parsed = await YTM.browseParsed(body, 2);
     if (seq !== state.loadSeq) return;
     const tracks = parsed.tracks;
     state.playlistId = collection.playlistId || tracks[0]?.playlistId || "";
@@ -3291,7 +3297,7 @@ async function loadPlaylists(root, state) {
   try {
     const parsed = await YTM.browseParsed(
       { browseId: "FEmusic_liked_playlists" },
-      8
+      2
     );
     const playlists = parsed.collections.filter(
       (item) => item.playlistId || item.browseId.startsWith("VL")
@@ -3319,8 +3325,8 @@ async function loadPlaylists(root, state) {
 }
 
 function applyStorefront(root, state, parsed, emptyMessage) {
-  const collections = storefrontCovers(parsed);
-  const tracks = topLevelSongsFromCovers(collections);
+  const { collections, songCovers } = storefrontCovers(parsed);
+  const tracks = topLevelSongsFromCovers(songCovers);
   applyParsed(
     root,
     state,
@@ -3341,7 +3347,7 @@ async function cachedHome(state) {
   if (state.homeCache && Date.now() - (state.homeCacheAt || 0) < 120000) {
     return state.homeCache;
   }
-  const parsed = await YTM.browseParsed({ browseId: BROWSE_IDS.home }, 6);
+  const parsed = await YTM.browseParsed({ browseId: BROWSE_IDS.home }, 2);
   state.homeCache = parsed;
   state.homeCacheAt = Date.now();
   return parsed;
@@ -3564,7 +3570,7 @@ async function loadSource(root, state, source, options = {}) {
     }
 
     if (type === "videos") {
-      const library = await YTM.browseParsed({ browseId: BROWSE_IDS.songs }, 12);
+      const library = await YTM.browseParsed({ browseId: BROWSE_IDS.songs }, 2);
       if (seq !== state.loadSeq) return;
       const tracks = (library.tracks || []).filter(isVideoish);
       const collections = (library.collections || []).filter(isVideoish);
@@ -3641,10 +3647,7 @@ async function loadSource(root, state, source, options = {}) {
     }
     const body = { browseId };
     if (source.params) body.params = source.params;
-    const parsed = await YTM.browseParsed(
-      body,
-      ["playlist", "songs", "liked", "recents"].includes(type) ? 24 : 8
-    );
+    const parsed = await YTM.browseParsed(body, 2);
     if (seq !== state.loadSeq) return;
     if (type === "home") {
       state.homeCache = parsed;

@@ -537,7 +537,7 @@ function parseBrowse(response) {
     const track = acc.tracks[index];
     const key = track.setVideoId
       ? `set:${track.setVideoId}`
-      : `t:${track.videoId || track.id}:${track.shelf || ""}:${index}`;
+      : `t:${track.videoId || track.id}`;
     if (seen.has(key)) acc.tracks.splice(index, 1);
     else seen.add(key);
   };
@@ -816,7 +816,7 @@ function mergeParsed(parts) {
     for (const track of part.tracks || []) {
       const key = track.setVideoId
         ? `set:${track.setVideoId}`
-        : `t:${track.videoId || track.id || track.title}:${tracks.length}`;
+        : `t:${track.videoId || track.id || track.title}`;
       if (seen.has(key)) continue;
       seen.add(key);
       tracks.push(track);
@@ -947,7 +947,7 @@ const YTM = {
   player(payload) {
     return pageRequest("player", payload, 4000);
   },
-  browseParsed(body, pages = 8) {
+  browseParsed(body, pages = 2) {
     return followPages(YTM.browse, body, pages);
   },
   async searchParsed(query) {
