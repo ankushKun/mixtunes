@@ -890,6 +890,16 @@
   pointer-events: auto;
 }
 
+.ytunes-cf-cover.is-enter {
+  transition: none !important;
+}
+
+.ytunes-cf-cover.is-idle {
+  visibility: hidden;
+  pointer-events: none;
+  will-change: auto;
+}
+
 .ytunes-coverflow.is-reduced .ytunes-cf-cover {
   height: var(--yt-cf-size);
 }
@@ -917,7 +927,6 @@
   background: rgba(0, 0, 0, 0.32);
   opacity: 1;
   pointer-events: none;
-  transition: opacity calc(var(--yt-cf-ms) * 0.7) ease;
 }
 
 .ytunes-cf-cover.is-center .ytunes-cf-face::after {
@@ -945,7 +954,6 @@
   pointer-events: none;
   opacity: 0.68;
   z-index: 1;
-  transition: opacity calc(var(--yt-cf-ms) * 0.7) ease;
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0.92) 0%,
@@ -985,7 +993,6 @@
   margin: 0;
   object-fit: cover;
   object-position: center;
-  filter: brightness(1.35) saturate(0.94);
 }
 
 .ytunes-coverflow.is-reduced .ytunes-cf-reflect {

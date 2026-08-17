@@ -18,7 +18,7 @@ const CF_MS = 400;
 const CF_WHEEL_STEP = 48;
 const CF_DECEL = 0.998;
 const CF_REFLECT = 0.52;
-const CF_BROWSE_MS = 160;
+const CF_BROWSE_MS = 420;
 
 function faceOriginY(reducedMotion) {
   if (reducedMotion) return "50%";
@@ -145,17 +145,21 @@ function CoverFlow(root, handlers) {
   let captionTimer = null;
   let captionIndex = -1;
   let wheelAcc = 0;
+  let wheelSteps = 0;
   let drag = null;
   let skipClick = false;
   let fitted = 0;
   let geo = null;
   let raf = 0;
+  let wheelRaf = 0;
   let resizeRaf = 0;
   let resizing = false;
   let resizeStart = 0;
   let browseTimer = 0;
+  let movingUntil = 0;
   const pool = [];
   const byId = new Map();
+  const cap = flow.querySelector(".ytunes-coverflow-caption");
 
   if (reduced) flow.classList.add("is-reduced");
   flow.style.setProperty("--yt-cf-ms", `${CF_MS}ms`);
@@ -235,21 +239,46 @@ function CoverFlow(root, handlers) {
     cover.style.zIndex = String(200 - Math.round(abs * 2));
   }
 
-  function setCaption(title, artist) {
+  function markMoving() {
+    movingUntil = Date.now() + CF_MS + 80;
+  }
+
+  function isBusy() {
+    return Boolean(drag || resizing || Date.now() < movingUntil);
+  }
+
+  function setCaption(title, artist, instant) {
     const nextTitle = title || "";
     const nextArtist = artist || "";
-    const paint = () => {
-      setMarqueeText(titleEl, nextTitle);
-      setMarqueeText(artistEl, nextArtist);
-    };
     if (
       titleEl.dataset.marqueeText === nextTitle &&
       artistEl.dataset.marqueeText === nextArtist
     ) {
       return;
     }
-    const cap = flow.querySelector(".ytunes-coverflow-caption");
-    if (!cap || reduced) {
+    const paint = () => {
+      if (instant || isBusy()) {
+        titleEl.dataset.marqueeText = nextTitle;
+        artistEl.dataset.marqueeText = nextArtist;
+        const titleItem = titleEl.querySelector(".ytunes-marquee-item");
+        const artistItem = artistEl.querySelector(".ytunes-marquee-item");
+        if (titleItem) titleItem.textContent = nextTitle;
+        else titleEl.textContent = nextTitle;
+        if (artistItem) artistItem.textContent = nextArtist;
+        else artistEl.textContent = nextArtist;
+        titleEl.classList.remove("is-overflow");
+        artistEl.classList.remove("is-overflow");
+        return;
+      }
+      setMarqueeText(titleEl, nextTitle);
+      setMarqueeText(artistEl, nextArtist);
+    };
+    if (!cap || reduced || instant || isBusy()) {
+      if (captionTimer) {
+        clearTimeout(captionTimer);
+        captionTimer = null;
+      }
+      cap?.classList.remove("is-swap");
       paint();
       return;
     }
@@ -259,7 +288,7 @@ function CoverFlow(root, handlers) {
       captionTimer = null;
       paint();
       cap.classList.remove("is-swap");
-    }, 140);
+    }, 120);
   }
 
   function applyCaption(item, index) {
@@ -270,7 +299,11 @@ function CoverFlow(root, handlers) {
       return;
     }
     const parts = coverCaptionParts(item, captionTrack);
-    setCaption(parts.title, parts.sub);
+    setCaption(parts.title, parts.sub, optsInstant());
+  }
+
+  function optsInstant() {
+    return isBusy();
   }
 
   function setCaptionTrack(track) {
@@ -284,7 +317,7 @@ function CoverFlow(root, handlers) {
     cover.className = "ytunes-cf-cover";
     cover.setAttribute("role", "option");
     cover.tabIndex = -1;
-    cover.hidden = true;
+    cover.classList.add("is-idle");
     const face = document.createElement("div");
     face.className = "ytunes-cf-face";
     const img = document.createElement("img");
@@ -384,6 +417,8 @@ function CoverFlow(root, handlers) {
   function scheduleBrowse() {
     window.clearTimeout(browseTimer);
     browseTimer = window.setTimeout(() => {
+      captionIndex = -1;
+      applyCaption(current(), center);
       handlers?.onBrowse?.(current());
     }, CF_BROWSE_MS);
   }
@@ -401,21 +436,20 @@ function CoverFlow(root, handlers) {
   }
 
   function paint(centerFloat, opts = {}) {
-    fitCoverSize();
     if (!covers.length) {
       flow.classList.add("is-empty");
       empty.hidden = false;
       pool.forEach((node) => {
-        node.hidden = true;
+        node.classList.add("is-idle");
       });
       captionTrack = null;
       captionIndex = -1;
-      setCaption("", "");
+      setCaption("", "", true);
       return;
     }
     flow.classList.remove("is-empty");
     empty.hidden = true;
-    const metrics = layout();
+    const metrics = geo || layout();
     const { start, end } = windowFor(centerFloat);
     ensurePool(Math.max(CF_WINDOW * 2 + 1, end - start));
     const used = new Set();
@@ -432,22 +466,18 @@ function CoverFlow(root, handlers) {
         byId.set(item.id, cover);
       }
       used.add(cover);
-      cover.hidden = false;
-      if (fresh) cover.style.transition = "none";
+      cover.classList.remove("is-idle");
+      if (fresh) cover.classList.add("is-enter");
       poseCover(cover, i - centerFloat, metrics);
-      if (fresh) {
-        void cover.offsetWidth;
-        cover.style.transition = "";
-      }
+      if (fresh) cover.classList.remove("is-enter");
     }
     pool.forEach((node) => {
       if (used.has(node)) return;
-      node.hidden = true;
+      node.classList.add("is-idle");
       node._offset = NaN;
     });
     const nearest = clamp(Math.round(centerFloat), 0, covers.length - 1);
     if (!opts.skipCaption) applyCaption(covers[nearest], nearest);
-    if (!opts.skipIndex) handlers?.onIndex?.(nearest, covers.length);
   }
 
   function render(opts = {}) {
@@ -499,6 +529,7 @@ function CoverFlow(root, handlers) {
     const next = clamp(center + delta, 0, covers.length - 1);
     if (next === center) return;
     center = next;
+    markMoving();
     render();
     scheduleBrowse();
   }
@@ -574,12 +605,17 @@ function CoverFlow(root, handlers) {
         ? event.deltaX
         : event.deltaY;
     wheelAcc += delta;
-    let steps = 0;
     while (Math.abs(wheelAcc) >= CF_WHEEL_STEP) {
-      steps += wheelAcc > 0 ? 1 : -1;
+      wheelSteps += wheelAcc > 0 ? 1 : -1;
       wheelAcc -= Math.sign(wheelAcc) * CF_WHEEL_STEP;
     }
-    if (steps) move(steps);
+    if (wheelRaf) return;
+    wheelRaf = requestAnimationFrame(() => {
+      wheelRaf = 0;
+      const steps = wheelSteps;
+      wheelSteps = 0;
+      if (steps) move(steps);
+    });
   }
 
   function stepWidth() {
@@ -599,6 +635,7 @@ function CoverFlow(root, handlers) {
       samples: [{ x: event.clientX, t: Date.now() }],
     };
     flow.classList.add("is-dragging");
+    markMoving();
   }
 
   function onPointerMove(event) {
@@ -719,6 +756,7 @@ function CoverFlow(root, handlers) {
     beginResize,
     endResize,
     isDragging: () => Boolean(drag),
+    isBusy,
     focus: () => flow.focus({ preventScroll: true }),
   };
 }

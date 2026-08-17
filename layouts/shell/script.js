@@ -543,7 +543,7 @@ function revealTrackRow(root, state, index) {
 function followPlayingTrack(root, state, status) {
   const videoId = status?.videoId || "";
   if (!videoId) return;
-  if (state.coverFlow?.isDragging?.()) return;
+  if (state.coverFlow?.isBusy?.() || state.coverFlow?.isDragging?.()) return;
   const index = indexOfVideo(state.visibleTracks, videoId);
   if (index < 0) {
     state.playedVideoId = videoId;
@@ -1402,7 +1402,7 @@ function showCovers(state, covers, selectedId) {
   state.coverFlow.setList(covers, state.selectedCoverId);
 }
 
-function highlightCoverRows(root, state, cover) {
+function highlightCoverRows(root, state, cover, opts = {}) {
   const album = cover?.title || "";
   const art = cover?.artwork || "";
   const coverTracks = cover?.tracks || [];
@@ -1433,9 +1433,11 @@ function highlightCoverRows(root, state, cover) {
   root.querySelectorAll("#ytunes-tracks tr[data-index]").forEach((row) => {
     row.classList.toggle("is-selected", Number(row.dataset.index) === first);
   });
-  root
-    .querySelector(`#ytunes-tracks tr[data-index="${first}"]`)
-    ?.scrollIntoView({ block: "nearest" });
+  if (!opts.quiet) {
+    root
+      .querySelector(`#ytunes-tracks tr[data-index="${first}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }
   const songCaption =
     !isCoverBrowser(state) || isSongCover(cover) ? selectedCaptionTrack(state) : null;
   applyCoverCaption(root, state, cover, songCaption);
@@ -1664,14 +1666,14 @@ function bindShell(root) {
         window.clearTimeout(previewTimer);
         state.previewSeq += 1;
         const seq = state.previewSeq;
-        const delay = cover.tracks?.length ? 0 : 80;
+        const delay = cover.tracks?.length ? 40 : 220;
         previewTimer = window.setTimeout(() => {
           if (seq !== state.previewSeq) return;
           previewCoverTracks(root, state, cover, seq);
         }, delay);
         return;
       }
-      highlightCoverRows(root, state, cover);
+      highlightCoverRows(root, state, cover, { quiet: true });
       applyCoverCaption(root, state, cover, selectedCaptionTrack(state));
       return;
     }
