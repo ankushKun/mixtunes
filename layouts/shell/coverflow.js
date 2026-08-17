@@ -3,8 +3,8 @@
  * Geometry: CF_WINDOW 6, angle 56°, depth/gap/spacing scale with cover size, 400ms ease.
  * Cover box is taller than the square so the flipped reflection sits inside the 3D plane.
  */
-const CF_WINDOW = 4;
-const CF_WINDOW_DRAG = 3;
+const CF_WINDOW = 6;
+const CF_WINDOW_DRAG = 4;
 const CF_SIZE = 150;
 const CF_SIZE_NARROW = 108;
 const CF_SIZE_MIN = 72;
@@ -14,7 +14,7 @@ const CF_ANGLE = 56;
 const CF_CENTER_Z = 70;
 const CF_DEPTH = 48;
 const CF_GAP = 52;
-const CF_MS = 220;
+const CF_MS = 400;
 const CF_WHEEL_STEP = 48;
 const CF_DECEL = 0.998;
 const CF_REFLECT = 0.52;
@@ -145,13 +145,11 @@ function CoverFlow(root, handlers) {
   let captionTimer = null;
   let captionIndex = -1;
   let wheelAcc = 0;
-  let wheelSteps = 0;
   let drag = null;
   let skipClick = false;
   let fitted = 0;
   let geo = null;
   let raf = 0;
-  let flickTimer = 0;
   let browseTimer = 0;
   const pool = [];
 
@@ -320,7 +318,7 @@ function CoverFlow(root, handlers) {
   }
 
   function bindCover(cover, item) {
-    if (cover._boundId === item.id) return;
+    if (cover._boundId === item.id) return false;
     cover._boundId = item.id;
     cover.dataset.id = item.id;
     const videoId = item.videoId || item.tracks?.[0]?.videoId || "";
@@ -344,6 +342,7 @@ function CoverFlow(root, handlers) {
       cover._ph.textContent = (item.title || "?").charAt(0).toUpperCase();
       cover._reflect.style.backgroundImage = "";
     }
+    return true;
   }
 
   function current() {
@@ -358,7 +357,7 @@ function CoverFlow(root, handlers) {
   }
 
   function windowFor(centerFloat) {
-    const span = drag || flow.classList.contains("is-flicking") ? CF_WINDOW_DRAG : CF_WINDOW;
+    const span = drag ? CF_WINDOW_DRAG : CF_WINDOW;
     if (reduced) {
       const at = Math.round(centerFloat);
       return { start: at, end: at + 1 };
@@ -392,14 +391,20 @@ function CoverFlow(root, handlers) {
     for (let i = start; i < end; i += 1) {
       const item = covers[i];
       let cover = pool.find((node) => node._boundId === item.id);
+      let fresh = false;
       if (!cover) {
         while (slot < pool.length && used.has(pool[slot])) slot += 1;
         cover = pool[slot] || pool[0];
-        bindCover(cover, item);
+        fresh = bindCover(cover, item);
       }
       used.add(cover);
       cover.hidden = false;
+      if (fresh) cover.style.transition = "none";
       poseCover(cover, i - centerFloat, metrics);
+      if (fresh) {
+        void cover.offsetWidth;
+        cover.style.transition = "";
+      }
     }
     pool.forEach((node) => {
       if (!used.has(node)) node.hidden = true;
@@ -428,16 +433,12 @@ function CoverFlow(root, handlers) {
     requestAnimationFrame(() => flow.classList.remove("is-snap"));
   }
 
-  function move(delta, instant) {
+  function move(delta) {
     if (!covers.length || !delta) return;
     const next = clamp(center + delta, 0, covers.length - 1);
     if (next === center) return;
     center = next;
-    if (instant) flow.classList.add("is-snap");
     render();
-    if (instant) {
-      requestAnimationFrame(() => flow.classList.remove("is-snap"));
-    }
     scheduleBrowse();
   }
 
@@ -512,29 +513,12 @@ function CoverFlow(root, handlers) {
         ? event.deltaX
         : event.deltaY;
     wheelAcc += delta;
+    let steps = 0;
     while (Math.abs(wheelAcc) >= CF_WHEEL_STEP) {
-      wheelSteps += wheelAcc > 0 ? 1 : -1;
+      steps += wheelAcc > 0 ? 1 : -1;
       wheelAcc -= Math.sign(wheelAcc) * CF_WHEEL_STEP;
     }
-    if (!wheelSteps) return;
-    flow.classList.add("is-flicking");
-    window.clearTimeout(flickTimer);
-    if (!raf) {
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        if (!wheelSteps) return;
-        const next = clamp(center + wheelSteps, 0, covers.length - 1);
-        wheelSteps = 0;
-        if (next === center) return;
-        center = next;
-        render({ skipCaption: false });
-        scheduleBrowse();
-      });
-    }
-    flickTimer = window.setTimeout(() => {
-      flow.classList.remove("is-flicking");
-      render();
-    }, 90);
+    if (steps) move(steps);
   }
 
   function stepWidth() {
@@ -614,7 +598,7 @@ function CoverFlow(root, handlers) {
     if (document.activeElement !== flow) return;
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
-      move(event.key === "ArrowLeft" ? -1 : 1, true);
+      move(event.key === "ArrowLeft" ? -1 : 1);
     } else if (event.key === "Enter") {
       event.preventDefault();
       handlers?.onPlay?.(current());

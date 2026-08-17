@@ -818,8 +818,8 @@
 }
 
 .ytunes-coverflow {
-  --yt-cf-ms: 220ms;
-  --yt-cf-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --yt-cf-ms: 400ms;
+  --yt-cf-ease: cubic-bezier(0.22, 0.7, 0.25, 1);
   --yt-cf-size: 150px;
   position: absolute;
   inset: 0;
@@ -837,14 +837,11 @@
 .ytunes-coverflow.is-snap .ytunes-cf-cover,
 .ytunes-coverflow.is-snap .ytunes-coverflow-caption,
 .ytunes-coverflow.is-dragging .ytunes-cf-cover,
-.ytunes-coverflow.is-dragging .ytunes-coverflow-caption,
-.ytunes-coverflow.is-flicking .ytunes-cf-cover,
-.ytunes-coverflow.is-flicking .ytunes-coverflow-caption {
+.ytunes-coverflow.is-dragging .ytunes-coverflow-caption {
   transition: none !important;
 }
 
-.ytunes-coverflow.is-dragging .ytunes-cf-reflect,
-.ytunes-coverflow.is-flicking .ytunes-cf-reflect {
+.ytunes-coverflow.is-dragging .ytunes-cf-reflect {
   visibility: hidden;
 }
 

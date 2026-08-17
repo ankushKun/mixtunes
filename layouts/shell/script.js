@@ -2757,7 +2757,7 @@ function bindShell(root) {
       if (view === "coverflow" && !tableFocus) {
         event.preventDefault();
         event.stopPropagation();
-        state.coverFlow.move(event.key === "ArrowLeft" ? -1 : 1, true);
+        state.coverFlow.move(event.key === "ArrowLeft" ? -1 : 1);
       }
     }
   }
