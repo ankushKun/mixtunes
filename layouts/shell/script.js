@@ -977,11 +977,108 @@ function nowPlayingSeed(status, prefs) {
   return trackFromNowPlaying(sanitizeNowPlaying(prefs?.nowPlaying));
 }
 
+function fillSpinner(el) {
+  if (!el || el.querySelector("i")) return el;
+  for (let i = 0; i < 12; i++) {
+    const spoke = document.createElement("i");
+    spoke.style.setProperty("--i", String(i));
+    el.appendChild(spoke);
+  }
+  return el;
+}
+
+function fillSpinners(root) {
+  if (!root) return;
+  if (root.classList?.contains("ytunes-spinner")) fillSpinner(root);
+  root.querySelectorAll?.(".ytunes-spinner").forEach(fillSpinner);
+}
+
 function setCoverEmptyMessage(root, message) {
   const empty = root.querySelector("#ytunes-cover-empty");
   if (!empty) return;
   empty.hidden = false;
-  empty.textContent = message;
+  const text = empty.querySelector("#ytunes-cover-empty-text");
+  if (text) text.textContent = message;
+  else empty.textContent = message;
+}
+
+function busySlots(state) {
+  return state.busySlots || (state.busySlots = {});
+}
+
+function busyLabel(state) {
+  const slots = busySlots(state);
+  for (const key of ["search", "preview", "lyrics", "source"]) {
+    if (slots[key]?.shown) return slots[key].label;
+  }
+  return "";
+}
+
+function anyBusyShown(state) {
+  return Object.values(busySlots(state)).some((slot) => slot?.shown);
+}
+
+function paintBusy(root, state) {
+  const shown = anyBusyShown(state);
+  const slots = busySlots(state);
+  const main = root.querySelector(".ytunes-main");
+  if (main) main.setAttribute("aria-busy", shown ? "true" : "false");
+
+  root.querySelectorAll(".ytunes-source-list button").forEach((node) => {
+    const on = Boolean(slots.source?.shown) && node.classList.contains("is-selected");
+    node.classList.toggle("is-busy", on);
+    let spin = node.querySelector(":scope > .ytunes-spinner");
+    if (on && !spin) {
+      spin = document.createElement("span");
+      spin.className = "ytunes-spinner";
+      spin.setAttribute("aria-hidden", "true");
+      node.appendChild(fillSpinner(spin));
+    } else if (!on && spin) {
+      spin.remove();
+    }
+  });
+  root.querySelector(".ytunes-search-field")?.classList.toggle("is-busy", Boolean(slots.search?.shown));
+  root.querySelector("#ytunes-lyrics")?.classList.toggle("is-busy", Boolean(slots.lyrics?.shown));
+
+  const statusSpin = root.querySelector("#ytunes-status-spin");
+  if (statusSpin) {
+    statusSpin.hidden = !shown;
+    if (shown) fillSpinner(statusSpin);
+  }
+  fillSpinners(root);
+  const status = root.querySelector("#ytunes-status-center");
+  if (shown && status) {
+    setMarqueeText(status, busyLabel(state));
+  } else if (status) {
+    renderStatusMeta(root, state, state.visibleTracks);
+  }
+}
+
+function beginBusy(root, state, { seq, label, slot }) {
+  const slots = busySlots(state);
+  const prev = slots[slot];
+  if (prev) window.clearTimeout(prev.timer);
+  const token = { seq, label, slot, shown: Boolean(prev?.shown), timer: 0 };
+  slots[slot] = token;
+  if (token.shown) {
+    paintBusy(root, state);
+    return;
+  }
+  token.timer = window.setTimeout(() => {
+    if (slots[slot] !== token) return;
+    token.shown = true;
+    paintBusy(root, state);
+  }, 120);
+}
+
+function endBusy(root, state, { seq, slot }) {
+  const slots = busySlots(state);
+  const cur = slots[slot];
+  if (!cur) return;
+  if (seq != null && cur.seq !== seq) return;
+  window.clearTimeout(cur.timer);
+  delete slots[slot];
+  paintBusy(root, state);
 }
 
 async function waitForNowPlayingStatus(seq, state, maxMs = 1200) {
@@ -1227,6 +1324,7 @@ function renderPlayer(root, status, state) {
 function renderStatusMeta(root, state, tracks) {
   const el = root.querySelector("#ytunes-status-center");
   if (!el) return;
+  if (anyBusyShown(state)) return;
   const playlist = state.source === "playlist";
   const { owned, suggested } = playlist
     ? splitPlaylistRows(tracks)
@@ -1304,9 +1402,10 @@ function renderTracks(root, state, tracks, emptyMessage) {
   const visible = playlist ? owned.concat(suggested) : tracks || [];
   state.visibleTracks = visible;
   if (!visible.length) {
-    body.innerHTML = `<tr class="is-empty"><td colspan="8">${escapeHtml(
+    body.innerHTML = `<tr class="is-empty"><td colspan="8"><span class="ytunes-spinner" aria-hidden="true"></span>${escapeHtml(
       emptyMessage || "No tracks yet."
     )}</td></tr>`;
+    fillSpinners(body);
     renderStatusMeta(root, state, []);
     return;
   }
@@ -1314,7 +1413,7 @@ function renderTracks(root, state, tracks, emptyMessage) {
   const parts = [];
   if (playlist && !owned.length) {
     parts.push(
-      `<tr class="is-empty"><td colspan="8">${escapeHtml(
+      `<tr class="is-empty"><td colspan="8"><span class="ytunes-spinner" aria-hidden="true"></span>${escapeHtml(
         emptyMessage || "This playlist is empty."
       )}</td></tr>`
     );
@@ -1331,6 +1430,7 @@ function renderTracks(root, state, tracks, emptyMessage) {
     });
   }
   body.innerHTML = parts.join("");
+  fillSpinners(body);
   renderStatusMeta(root, state, visible);
   markPlayingRows(root, probe()?.videoId || "");
   refreshMarquees(root);
@@ -1551,16 +1651,16 @@ function applyParsed(root, state, parsed, emptyMessage) {
   const pendingCover =
     pendingIndex >= 0 ? coverForTrack(state, visible[pendingIndex]) : null;
   showCovers(state, covers, pendingCover?.id || covers[0]?.id || "");
-  const empty = root.querySelector("#ytunes-cover-empty");
-  if (empty && !covers.length) {
-    empty.hidden = false;
-    empty.textContent =
+  if (!covers.length) {
+    setCoverEmptyMessage(
+      root,
       state.source === "playlist" && !playlistOwned.length
         ? "This playlist is empty."
         : parsed.tracks.length
           ? "Albums and artists appear here."
           : emptyMessage ||
-            "No items. Sign in on YouTube Music if this library should have music.";
+            "No items. Sign in on YouTube Music if this library should have music."
+    );
   }
   renderTracks(
     root,
@@ -1597,9 +1697,11 @@ function applyParsed(root, state, parsed, emptyMessage) {
 function bindShell(root) {
   retargetSourceIcons(root);
   bindMarquees(root);
+  fillSpinners(root);
   const volume = root.querySelector("#ytunes-volume");
   const seek = root.querySelector("#ytunes-seek");
   const search = root.querySelector("#ytunes-search");
+  const searchClear = root.querySelector("#ytunes-search-clear");
   const suggest = root.querySelector("#ytunes-suggest");
   const menu = root.querySelector("#ytunes-menu");
   const toast = bindToast(root);
@@ -1619,6 +1721,7 @@ function bindShell(root) {
     lastSource: { type: "songs" },
     loadSeq: 0,
     suggestSeq: 0,
+    busySlots: {},
     history: [{ type: "songs" }],
     historyIndex: 0,
     sortKey: "",
@@ -2180,21 +2283,51 @@ function bindShell(root) {
 
   let searchTimer = 0;
   let suggestTimer = 0;
+  let suggestBlurTimer = 0;
+
+  function syncSearchClear() {
+    if (searchClear) searchClear.hidden = !search.value;
+  }
 
   function hideSuggest() {
+    window.clearTimeout(suggestBlurTimer);
     suggest.hidden = true;
     suggest.innerHTML = "";
+    search?.setAttribute("aria-expanded", "false");
+  }
+
+  function showSuggest(items) {
+    const query = search.value.trim();
+    if (!items.length || !query || document.activeElement !== search) {
+      hideSuggest();
+      return;
+    }
+    const prev = suggest.querySelector("button.is-active")?.dataset.query || "";
+    suggest.innerHTML = items
+      .slice(0, 8)
+      .map(
+        (item, index) =>
+          `<li><button type="button" role="option" id="ytunes-suggest-${index}" data-query="${escapeHtml(
+            item
+          )}" class="${item === prev ? "is-active" : ""}">${escapeHtml(item)}</button></li>`
+      )
+      .join("");
+    suggest.hidden = false;
+    search.setAttribute("aria-expanded", "true");
+  }
+
+  function focusSearch() {
+    search.focus();
+    search.select();
   }
 
   async function runSearch(query) {
     const seq = (state.loadSeq += 1);
-    hideSuggest();
     state.source = "search";
     setSidebarSelection(root, { type: "search" });
-    const empty = root.querySelector("#ytunes-cover-empty");
-    if (empty && !state.visibleTracks.length) {
-      empty.hidden = false;
-      empty.textContent = "Searching…";
+    beginBusy(root, state, { seq, slot: "search", label: "Searching…" });
+    if (!state.visibleTracks.length && !state.covers.length) {
+      setCoverEmptyMessage(root, "Searching…");
     }
     try {
       const parsed = await YTM.searchParsed(query);
@@ -2206,17 +2339,21 @@ function bindShell(root) {
     } catch (error) {
       if (seq !== state.loadSeq) return;
       renderTracks(root, state, [], error.message || "Could not search.");
+    } finally {
+      endBusy(root, state, { seq, slot: "search" });
     }
   }
 
   function restoreLibrary() {
     hideSuggest();
+    syncSearchClear();
     loadSource(root, state, state.lastSource || { type: "songs" }, { history: false });
   }
 
   search.addEventListener("input", () => {
     clearTimeout(searchTimer);
     clearTimeout(suggestTimer);
+    syncSearchClear();
     const query = search.value.trim();
     if (!query) {
       restoreLibrary();
@@ -2226,23 +2363,11 @@ function bindShell(root) {
       const seq = (state.suggestSeq += 1);
       const items = await YTM.suggest(query);
       if (seq !== state.suggestSeq) return;
-      if (!items.length) {
-        hideSuggest();
-        return;
-      }
-      suggest.innerHTML = items
-        .slice(0, 8)
-        .map(
-          (item) =>
-            `<li><button type="button" data-query="${escapeHtml(item)}">${escapeHtml(
-              item
-            )}</button></li>`
-        )
-        .join("");
-      suggest.hidden = false;
+      if (search.value.trim() !== query) return;
+      showSuggest(items);
     }, 160);
     if (query.length < 2) return;
-    searchTimer = window.setTimeout(() => runSearch(query), 400);
+    searchTimer = window.setTimeout(() => runSearch(query), 500);
   });
 
   search.addEventListener("keydown", (event) => {
@@ -2268,6 +2393,7 @@ function bindShell(root) {
       const chosen = suggest.querySelector("button.is-active")?.dataset.query;
       const query = chosen || search.value.trim();
       if (chosen) search.value = chosen;
+      syncSearchClear();
       hideSuggest();
       if (query) runSearch(query);
     } else if (event.key === "Escape") {
@@ -2287,12 +2413,30 @@ function bindShell(root) {
     if (!button) return;
     event.preventDefault();
     search.value = button.dataset.query;
+    syncSearchClear();
     hideSuggest();
     runSearch(button.dataset.query);
   });
 
   search.addEventListener("blur", () => {
-    window.setTimeout(hideSuggest, 120);
+    window.clearTimeout(suggestBlurTimer);
+    suggestBlurTimer = window.setTimeout(() => {
+      if (root.querySelector(".ytunes-search")?.contains(document.activeElement)) return;
+      hideSuggest();
+    }, 120);
+  });
+
+  searchClear?.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+    search.value = "";
+    restoreLibrary();
+    search.focus();
+  });
+
+  root.addEventListener("pointerdown", (event) => {
+    if (suggest.hidden) return;
+    if (event.target.closest(".ytunes-search")) return;
+    hideSuggest();
   });
 
   root.addEventListener(
@@ -2422,6 +2566,7 @@ function bindShell(root) {
     if (!button) return;
     search.value = "";
     hideSuggest();
+    syncSearchClear();
     clearTimeout(searchTimer);
     if (button.dataset.playlist) {
       loadSource(
@@ -2722,7 +2867,16 @@ function bindShell(root) {
       controlPlayback(media).then(() => refreshUi());
       return;
     }
-    // Hotkey priority: dialog > menu/suggest > lyrics > nav
+    // Hotkey priority: prefs/search chords > dialog > menu/suggest > lyrics > nav
+    const key = String(event.key || "");
+    const chord = event.metaKey || event.ctrlKey;
+    if (chord && key === ",") {
+      event.preventDefault();
+      event.stopPropagation();
+      dialogs.closeJump();
+      dialogs.openPrefs();
+      return;
+    }
     if (dialogs.onGlobalKey(event)) return;
     if (!menu.hidden) {
       if (event.key === "Escape") {
@@ -2732,17 +2886,22 @@ function bindShell(root) {
       return;
     }
     const typing = event.target?.closest?.("input, textarea, [contenteditable]");
-    if ((event.metaKey || event.ctrlKey) && String(event.key || "").toLowerCase() === "f") {
+    if (chord && key.toLowerCase() === "f") {
       event.preventDefault();
       event.stopPropagation();
-      search.focus();
-      search.select();
+      focusSearch();
       return;
     }
-    if ((event.metaKey || event.ctrlKey) && String(event.key || "").toLowerCase() === "k") {
+    if (chord && key.toLowerCase() === "k") {
       event.preventDefault();
       event.stopPropagation();
       dialogs.openJump();
+      return;
+    }
+    if (key === "/" && !chord && !event.altKey && !typing) {
+      event.preventDefault();
+      event.stopPropagation();
+      focusSearch();
       return;
     }
     if (typing) return;
@@ -2997,6 +3156,7 @@ function bindShell(root) {
     const lyricsBtn = root.querySelector('[data-action="lyrics"]');
     if (lyricsBtn) lyricsBtn.title = on ? "Hide lyrics" : "Lyrics";
     if (!on) {
+      endBusy(root, state, { slot: "lyrics" });
       panel.classList.add("is-leave");
       window.setTimeout(() => {
         panel.hidden = true;
@@ -3008,6 +3168,8 @@ function bindShell(root) {
     panel.hidden = false;
     panel.classList.remove("is-leave");
     text.textContent = "Loading lyrics…";
+    const lyricsSeq = (state.lyricsSeq = (state.lyricsSeq || 0) + 1);
+    beginBusy(root, state, { seq: lyricsSeq, slot: "lyrics", label: "Loading lyrics…" });
     try {
       const status = probe();
       state.lyricsVideoId = status.videoId || "";
@@ -3036,6 +3198,8 @@ function bindShell(root) {
     } catch {
       text.textContent = "Could not load lyrics.";
       state.lyricsLines = [];
+    } finally {
+      endBusy(root, state, { seq: lyricsSeq, slot: "lyrics" });
     }
   }
 
@@ -3260,7 +3424,7 @@ async function previewCoverTracks(root, state, cover, seq) {
     return;
   }
 
-  renderTracks(root, state, [], "Loading songs…");
+  beginBusy(root, state, { seq: token, slot: "preview", label: "Loading songs…" });
   try {
     const tracks = await fetchCollectionTracks(cover, stillCurrent);
     if (!stillCurrent()) return;
@@ -3276,11 +3440,14 @@ async function previewCoverTracks(root, state, cover, seq) {
   } catch (error) {
     if (!stillCurrent()) return;
     renderTracks(root, state, [], error.message || "Could not load songs.");
+  } finally {
+    endBusy(root, state, { seq: token, slot: "preview" });
   }
 }
 
 async function openCollection(root, state, collection, options = {}) {
   const seq = (state.loadSeq += 1);
+  beginBusy(root, state, { seq, slot: "source", label: "Loading library…" });
   try {
     const body = collectionBrowseBody(collection) || {
       browseId: collection.browseId || `VL${collection.playlistId}`,
@@ -3334,6 +3501,8 @@ async function openCollection(root, state, collection, options = {}) {
   } catch (error) {
     if (seq !== state.loadSeq) return;
     renderTracks(root, state, [], error.message || "Could not load album.");
+  } finally {
+    endBusy(root, state, { seq, slot: "source" });
   }
 }
 
@@ -3516,10 +3685,8 @@ async function loadMoodStation(source) {
 async function loadSource(root, state, source, options = {}) {
   const seq = (state.loadSeq += 1);
   const type = source.type || "songs";
-  const empty = root.querySelector("#ytunes-cover-empty");
-  if (empty && !state.visibleTracks.length && !state.covers.length && type !== "now") {
-    empty.hidden = false;
-    empty.textContent = "Loading library…";
+  if (!state.visibleTracks.length && !state.covers.length && type !== "now") {
+    setCoverEmptyMessage(root, "Loading library…");
   }
 
   state.source = type;
@@ -3538,12 +3705,20 @@ async function loadSource(root, state, source, options = {}) {
   if (options.history) pushHistoryFor(root, state, state.lastSource);
   setSidebarSelection(root, type === "search" ? { type: "search" } : state.lastSource);
   syncNavButtons(root, state);
+  beginBusy(root, state, {
+    seq,
+    slot: "source",
+    label:
+      type === "search" ? "Searching…" : type === "now" ? "Loading queue…" : "Loading library…",
+  });
 
   try {
     if (type === "search") {
       const query = source.query || source.title || "";
       const searchInput = root.querySelector("#ytunes-search");
       if (searchInput && query) searchInput.value = query;
+      const clear = root.querySelector("#ytunes-search-clear");
+      if (clear) clear.hidden = !searchInput?.value;
       if (!query) {
         renderTracks(root, state, [], "No results.");
         return;
@@ -3768,8 +3943,10 @@ async function loadSource(root, state, source, options = {}) {
     }
   } catch (error) {
     if (seq !== state.loadSeq) return;
-    if (empty) empty.textContent = "Could not load library.";
+    setCoverEmptyMessage(root, "Could not load library.");
     renderTracks(root, state, [], error.message || "Could not load library.");
+  } finally {
+    endBusy(root, state, { seq, slot: "source" });
   }
 }
 

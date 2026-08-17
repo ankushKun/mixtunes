@@ -69,9 +69,21 @@
       <div class="ytunes-search">
         <label class="ytunes-search-field">
           <span class="ytunes-search-icon" aria-hidden="true"></span>
-          <input id="ytunes-search" type="search" placeholder="Search Music" autocomplete="off" spellcheck="false" enterkeyhint="search" />
+          <span class="ytunes-search-spin ytunes-spinner" aria-hidden="true"></span>
+          <input
+            id="ytunes-search"
+            type="search"
+            placeholder="Search Music"
+            autocomplete="off"
+            spellcheck="false"
+            enterkeyhint="search"
+            aria-autocomplete="list"
+            aria-controls="ytunes-suggest"
+            aria-expanded="false"
+          />
+          <button type="button" class="ytunes-search-clear" id="ytunes-search-clear" hidden aria-label="Clear search"></button>
         </label>
-        <ul id="ytunes-suggest" class="ytunes-suggest" hidden></ul>
+        <ul id="ytunes-suggest" class="ytunes-suggest" role="listbox" hidden></ul>
       </div>
     </div>
   </header>
@@ -157,7 +169,10 @@
             <div id="ytunes-cover-title"></div>
             <div id="ytunes-cover-artist"></div>
           </div>
-          <p id="ytunes-cover-empty">Loading library…</p>
+          <p id="ytunes-cover-empty">
+            <span class="ytunes-spinner is-lg" aria-hidden="true"></span>
+            <span id="ytunes-cover-empty-text">Loading library…</span>
+          </p>
         </div>
 
         <div class="ytunes-artwell" id="ytunes-artwell">
@@ -172,6 +187,7 @@
 
         <div class="ytunes-lyrics" id="ytunes-lyrics" hidden>
           <button type="button" class="ytunes-lyrics-close" data-action="lyrics-close" aria-label="Close lyrics">×</button>
+          <span class="ytunes-spinner is-lg ytunes-lyrics-spin" aria-hidden="true"></span>
           <pre id="ytunes-lyrics-text"></pre>
         </div>
       </div>
@@ -209,6 +225,7 @@
       </div>
     </div>
     <div class="ytunes-status-meta">
+      <span id="ytunes-status-spin" class="ytunes-spinner" hidden aria-hidden="true"></span>
       <span id="ytunes-status-center">0 items</span>
       <span id="ytunes-sleep-label" hidden></span>
       <span id="ytunes-toast" hidden></span>
@@ -337,8 +354,12 @@
               <dd>Play / Pause</dd>
             </div>
             <div class="ytunes-hotkey">
-              <dt><kbd>⌘F</kbd></dt>
+              <dt><kbd>/</kbd><kbd>⌘F</kbd></dt>
               <dd>Search Music</dd>
+            </div>
+            <div class="ytunes-hotkey">
+              <dt><kbd>⌘,</kbd></dt>
+              <dd>Preferences</dd>
             </div>
             <div class="ytunes-hotkey">
               <dt><kbd>⌘K</kbd></dt>
