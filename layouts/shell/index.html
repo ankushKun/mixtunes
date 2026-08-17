@@ -267,39 +267,106 @@
   </div>
 
   <div class="ytunes-dialog ytunes-prefs" id="ytunes-prefs" hidden>
-    <div class="ytunes-prefs-sheet" role="dialog" aria-labelledby="ytunes-prefs-title">
-      <h3 id="ytunes-prefs-title">Preferences</h3>
-      <label class="ytunes-prefs-row">
-        <input type="checkbox" id="ytunes-pref-overlay" />
-        Show yTunes overlay
-      </label>
-      <p class="ytunes-prefs-hint">Turning the overlay off reloads YouTube Music.</p>
-      <h4>Appearance</h4>
-      <label class="ytunes-prefs-row">
-        <input type="radio" name="ytunes-pref-theme" value="auto" />
-        Auto (match computer)
-      </label>
-      <label class="ytunes-prefs-row">
-        <input type="radio" name="ytunes-pref-theme" value="light" />
-        Metal
-      </label>
-      <label class="ytunes-prefs-row">
-        <input type="radio" name="ytunes-pref-theme" value="graphite" />
-        Graphite
-      </label>
-      <h4>Keyboard</h4>
-      <ul class="ytunes-hotkeys">
-        <li><kbd>Space</kbd> Play / Pause</li>
-        <li><kbd>⌘F</kbd> Search Music</li>
-        <li><kbd>⌘K</kbd> Jump to</li>
-        <li><kbd>L</kbd> Lyrics</li>
-        <li><kbd>↑</kbd> <kbd>↓</kbd> Select track</li>
-        <li><kbd>←</kbd> <kbd>→</kbd> Cover Flow</li>
-        <li><kbd>[</kbd> <kbd>]</kbd> Back / Forward</li>
-      </ul>
-      <div class="ytunes-dialog-actions">
-        <button type="button" id="ytunes-prefs-original">Original YouTube Music</button>
-        <button type="button" id="ytunes-prefs-close">Done</button>
+    <div class="ytunes-prefs-sheet" role="dialog" aria-modal="true" aria-labelledby="ytunes-prefs-title">
+      <header class="ytunes-prefs-head">
+        <h3 id="ytunes-prefs-title">Preferences</h3>
+      </header>
+
+      <div class="ytunes-prefs-body">
+        <section class="ytunes-prefs-group" aria-labelledby="ytunes-prefs-overlay-label">
+          <h4 id="ytunes-prefs-overlay-label">Overlay</h4>
+          <label class="ytunes-prefs-toggle" for="ytunes-pref-overlay">
+            <input type="checkbox" id="ytunes-pref-overlay" aria-describedby="ytunes-prefs-overlay-hint" />
+            <span class="ytunes-prefs-toggle-copy">
+              <span class="ytunes-prefs-toggle-title">Show yTunes overlay</span>
+              <span class="ytunes-prefs-hint" id="ytunes-prefs-overlay-hint">Turning the overlay off reloads YouTube Music.</span>
+            </span>
+          </label>
+        </section>
+
+        <section class="ytunes-prefs-group" aria-labelledby="ytunes-prefs-theme-label">
+          <h4 id="ytunes-prefs-theme-label">Appearance</h4>
+          <div class="ytunes-prefs-themes" role="radiogroup" aria-labelledby="ytunes-prefs-theme-label">
+            <label class="ytunes-prefs-theme">
+              <input type="radio" name="ytunes-pref-theme" value="auto" />
+              <span class="ytunes-prefs-swatch ytunes-prefs-swatch-auto" aria-hidden="true">
+                <span class="ytunes-prefs-swatch-half is-metal">
+                  <span class="ytunes-prefs-swatch-bar"></span>
+                  <span class="ytunes-prefs-swatch-pane"><span class="ytunes-prefs-swatch-side"></span><span class="ytunes-prefs-swatch-main"></span></span>
+                </span>
+                <span class="ytunes-prefs-swatch-half is-graphite">
+                  <span class="ytunes-prefs-swatch-bar"></span>
+                  <span class="ytunes-prefs-swatch-pane"><span class="ytunes-prefs-swatch-side"></span><span class="ytunes-prefs-swatch-main"></span></span>
+                </span>
+              </span>
+              <span class="ytunes-prefs-theme-copy">
+                <span class="ytunes-prefs-theme-name">Auto</span>
+                <span class="ytunes-prefs-theme-desc">Match computer</span>
+              </span>
+            </label>
+            <label class="ytunes-prefs-theme">
+              <input type="radio" name="ytunes-pref-theme" value="light" />
+              <span class="ytunes-prefs-swatch ytunes-prefs-swatch-metal" aria-hidden="true">
+                <span class="ytunes-prefs-swatch-bar"></span>
+                <span class="ytunes-prefs-swatch-pane"><span class="ytunes-prefs-swatch-side"></span><span class="ytunes-prefs-swatch-main"></span></span>
+              </span>
+              <span class="ytunes-prefs-theme-copy">
+                <span class="ytunes-prefs-theme-name">Metal</span>
+                <span class="ytunes-prefs-theme-desc">Light</span>
+              </span>
+            </label>
+            <label class="ytunes-prefs-theme">
+              <input type="radio" name="ytunes-pref-theme" value="graphite" />
+              <span class="ytunes-prefs-swatch ytunes-prefs-swatch-graphite" aria-hidden="true">
+                <span class="ytunes-prefs-swatch-bar"></span>
+                <span class="ytunes-prefs-swatch-pane"><span class="ytunes-prefs-swatch-side"></span><span class="ytunes-prefs-swatch-main"></span></span>
+              </span>
+              <span class="ytunes-prefs-theme-copy">
+                <span class="ytunes-prefs-theme-name">Graphite</span>
+                <span class="ytunes-prefs-theme-desc">Dark</span>
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section class="ytunes-prefs-group" aria-labelledby="ytunes-prefs-keys-label">
+          <h4 id="ytunes-prefs-keys-label">Keyboard</h4>
+          <dl class="ytunes-hotkeys">
+            <div class="ytunes-hotkey">
+              <dt><kbd>Space</kbd></dt>
+              <dd>Play / Pause</dd>
+            </div>
+            <div class="ytunes-hotkey">
+              <dt><kbd>⌘F</kbd></dt>
+              <dd>Search Music</dd>
+            </div>
+            <div class="ytunes-hotkey">
+              <dt><kbd>⌘K</kbd></dt>
+              <dd>Jump to</dd>
+            </div>
+            <div class="ytunes-hotkey">
+              <dt><kbd>L</kbd></dt>
+              <dd>Lyrics</dd>
+            </div>
+            <div class="ytunes-hotkey">
+              <dt><kbd>↑</kbd><kbd>↓</kbd></dt>
+              <dd>Select track</dd>
+            </div>
+            <div class="ytunes-hotkey">
+              <dt><kbd>←</kbd><kbd>→</kbd></dt>
+              <dd>Cover Flow</dd>
+            </div>
+            <div class="ytunes-hotkey">
+              <dt><kbd>[</kbd><kbd>]</kbd></dt>
+              <dd>Back / Forward</dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+
+      <div class="ytunes-dialog-actions ytunes-prefs-actions">
+        <button type="button" id="ytunes-prefs-original" title="Hide the yTunes overlay and reload YouTube Music">Original YouTube Music</button>
+        <button type="button" id="ytunes-prefs-close" class="is-default">Done</button>
       </div>
     </div>
   </div>

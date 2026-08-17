@@ -1639,7 +1639,8 @@
   font-size: 13px;
 }
 
-.ytunes-dialog input {
+.ytunes-dialog form input[type="text"],
+#ytunes-dialog-input {
   width: 100%;
   height: 24px;
   border: 1px solid #7a7a7a;
@@ -1661,6 +1662,23 @@
   border-radius: 4px;
   background: linear-gradient(#fff, #d4d4d4);
   cursor: pointer;
+  transition: transform 100ms var(--yt-ease-out), background 120ms ease, border-color 120ms ease;
+}
+
+.ytunes-dialog-actions button:active {
+  transform: scale(0.97);
+}
+
+.ytunes-dialog-actions button.is-default {
+  min-width: 80px;
+  color: #fff;
+  font-weight: 700;
+  border-color: #245ea6;
+  background: linear-gradient(#6eb0ee, #2f74c8);
+}
+
+.ytunes-dialog-actions button.is-default:active {
+  background: linear-gradient(#3a7ec8, #245ea6);
 }
 
 .ytunes-dialog form,
@@ -1949,44 +1967,318 @@
 }
 
 .ytunes-prefs-sheet {
-  width: min(380px, calc(100% - 32px));
-  padding: 14px 16px 12px;
-  background: linear-gradient(#f6f6f6, #dcdcdc);
+  display: flex;
+  flex-direction: column;
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 0;
+  overflow: hidden;
+  background: #e6e6e6;
   border: 1px solid #8a8a8a;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
 }
 
-.ytunes-prefs-sheet h4 {
-  margin: 12px 0 6px;
-  font-size: 12px;
+.ytunes-prefs-head {
+  flex: none;
+  padding: 9px 16px 8px;
+  border-bottom: 1px solid #b0b0b0;
+  background: linear-gradient(#f7f7f7, #dcdcdc);
+  box-shadow: inset 0 1px 0 #fff;
 }
 
-.ytunes-prefs-row {
+.ytunes-prefs-sheet h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.ytunes-prefs-body {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 14px 14px 12px;
+  overflow: auto;
+}
+
+.ytunes-prefs-group {
+  margin: 0;
+  padding: 10px 10px 9px;
+  overflow: hidden;
+  border: 1px solid #b4b4b4;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.ytunes-prefs-group h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ytunes-prefs-toggle {
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
-  margin: 8px 0;
+  width: 100%;
+  margin: 0;
   cursor: pointer;
 }
 
+#ytunes-root .ytunes-prefs-toggle input[type="checkbox"],
+.ytunes-prefs-toggle input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 13px;
+  height: 13px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+#ytunes-root .ytunes-prefs-toggle input[type="checkbox"]:focus-visible {
+  box-shadow: 0 0 0 2px #3a7ec8;
+}
+
+.ytunes-prefs-toggle-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ytunes-prefs-toggle-title {
+  font-weight: 600;
+}
+
 .ytunes-prefs-hint {
-  margin: 0 0 8px 24px;
+  margin: 0;
   color: #555;
   font-size: 11px;
+  line-height: 1.35;
+}
+
+.ytunes-prefs-themes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ytunes-prefs-theme {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 140ms ease, border-color 140ms ease, transform 100ms var(--yt-ease-out);
+}
+
+.ytunes-prefs-theme input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+.ytunes-prefs-swatch {
+  display: flex;
+  width: 78px;
+  height: 48px;
+  overflow: hidden;
+  border: 1px solid #8a8a8a;
+  border-radius: 4px;
+  background: #d0d0d0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.ytunes-prefs-swatch-metal,
+.ytunes-prefs-swatch-graphite {
+  flex-direction: column;
+}
+
+.ytunes-prefs-swatch-half,
+.ytunes-prefs-swatch-metal,
+.ytunes-prefs-swatch-graphite {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.ytunes-prefs-swatch-bar {
+  flex: none;
+  height: 10px;
+}
+
+.ytunes-prefs-swatch-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.ytunes-prefs-swatch-side {
+  flex: none;
+  width: 16px;
+}
+
+.ytunes-prefs-swatch-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ytunes-prefs-swatch-metal .ytunes-prefs-swatch-bar,
+.ytunes-prefs-swatch-half.is-metal .ytunes-prefs-swatch-bar {
+  background: linear-gradient(#f6f6f6, #c8c8c8);
+  border-bottom: 1px solid #9a9a9a;
+}
+
+.ytunes-prefs-swatch-metal .ytunes-prefs-swatch-side,
+.ytunes-prefs-swatch-half.is-metal .ytunes-prefs-swatch-side {
+  background: #c5ccd4;
+  border-right: 1px solid #a8b0b8;
+}
+
+.ytunes-prefs-swatch-metal .ytunes-prefs-swatch-main,
+.ytunes-prefs-swatch-half.is-metal .ytunes-prefs-swatch-main {
+  background: #f4f4f4;
+}
+
+.ytunes-prefs-swatch-graphite .ytunes-prefs-swatch-bar,
+.ytunes-prefs-swatch-half.is-graphite .ytunes-prefs-swatch-bar {
+  background: linear-gradient(#4e4e4e, #2e2e2e);
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.ytunes-prefs-swatch-graphite .ytunes-prefs-swatch-side,
+.ytunes-prefs-swatch-half.is-graphite .ytunes-prefs-swatch-side {
+  background: #2a2a2a;
+  border-right: 1px solid #1a1a1a;
+}
+
+.ytunes-prefs-swatch-graphite .ytunes-prefs-swatch-main,
+.ytunes-prefs-swatch-half.is-graphite .ytunes-prefs-swatch-main {
+  background: #1c1c1c;
+}
+
+.ytunes-prefs-swatch-auto .ytunes-prefs-swatch-half.is-metal {
+  border-right: 1px solid #6a6a6a;
+}
+
+.ytunes-prefs-theme-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ytunes-prefs-theme-name {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ytunes-prefs-theme-desc {
+  color: #555;
+  font-size: 10px;
+}
+
+.ytunes-prefs-theme:has(input:checked) {
+  border-color: #3a7ec8;
+  background: rgba(58, 126, 200, 0.12);
+}
+
+.ytunes-prefs-theme:has(input:checked) .ytunes-prefs-swatch {
+  box-shadow: 0 0 0 2px #3a7ec8, 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.ytunes-prefs-theme:focus-within {
+  box-shadow: inset 0 0 0 2px #3a7ec8;
+}
+
+.ytunes-prefs-theme:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ytunes-prefs-theme:hover {
+    background: rgba(255, 255, 255, 0.42);
+  }
+
+  .ytunes-prefs-theme:has(input:checked):hover {
+    background: rgba(58, 126, 200, 0.16);
+  }
+}
+
+.ytunes-prefs-actions {
+  flex: none;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0;
+  padding: 10px 12px 11px;
+  border-top: 1px solid #b0b0b0;
+  background: linear-gradient(#efefef, #d8d8d8);
+  box-shadow: inset 0 1px 0 #f7f7f7;
+}
+
+#ytunes-prefs-original {
+  min-width: 0;
+  padding: 0 10px;
 }
 
 .ytunes-hotkeys {
+  display: grid;
+  gap: 4px 0;
   margin: 0;
-  padding-left: 18px;
   color: #333;
 }
 
+.ytunes-hotkey {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 18px;
+}
+
+.ytunes-hotkey dt {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.ytunes-hotkey dd {
+  margin: 0;
+}
+
 .ytunes-hotkeys kbd {
-  font: 11px/1.2 "Lucida Grande", sans-serif;
-  padding: 0 4px;
+  display: inline-block;
+  min-width: 16px;
+  padding: 1px 5px;
   border: 1px solid #aaa;
   border-radius: 3px;
-  background: #f3f3f3;
+  background: linear-gradient(#fff, #ececec);
+  box-shadow: 0 1px 0 #bbb;
+  font: 11px/1.2 "Lucida Grande", sans-serif;
+  text-align: center;
 }
 
 .ytunes-jump {
@@ -2381,6 +2673,10 @@
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
 }
 
+.ytunes-app.is-graphite .ytunes-prefs-sheet {
+  background: #3a3a3a;
+}
+
 .ytunes-app.is-graphite .ytunes-dialog h3,
 .ytunes-app.is-graphite .ytunes-prefs-sheet h3,
 .ytunes-app.is-graphite .ytunes-prefs-sheet h4,
@@ -2388,12 +2684,50 @@
   color: #f2f2f2;
 }
 
-.ytunes-app.is-graphite .ytunes-prefs-row {
-  color: #ececec;
+.ytunes-app.is-graphite .ytunes-prefs-head {
+  background: linear-gradient(#4e4e4e, #383838);
+  border-bottom-color: #1a1a1a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.ytunes-app.is-graphite .ytunes-prefs-hint {
+.ytunes-app.is-graphite .ytunes-prefs-group {
+  border-color: #1f1f1f;
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.ytunes-app.is-graphite .ytunes-prefs-hint,
+.ytunes-app.is-graphite .ytunes-prefs-theme-desc {
   color: #b0b0b0;
+}
+
+.ytunes-app.is-graphite .ytunes-prefs-theme:has(input:checked) {
+  border-color: #6aa8e8;
+  background: rgba(106, 168, 232, 0.16);
+}
+
+.ytunes-app.is-graphite .ytunes-prefs-theme:has(input:checked) .ytunes-prefs-swatch {
+  box-shadow: 0 0 0 2px #6aa8e8, 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.ytunes-app.is-graphite .ytunes-prefs-theme:focus-within {
+  box-shadow: inset 0 0 0 2px #6aa8e8;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ytunes-app.is-graphite .ytunes-prefs-theme:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .ytunes-app.is-graphite .ytunes-prefs-theme:has(input:checked):hover {
+    background: rgba(106, 168, 232, 0.2);
+  }
+}
+
+.ytunes-app.is-graphite .ytunes-prefs-actions {
+  border-top-color: #1a1a1a;
+  background: linear-gradient(#404040, #323232);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .ytunes-app.is-graphite .ytunes-hotkeys {
@@ -2402,11 +2736,13 @@
 
 .ytunes-app.is-graphite .ytunes-hotkeys kbd {
   color: #ececec;
-  background: #2a2a2a;
+  background: linear-gradient(#3a3a3a, #2a2a2a);
   border-color: #111;
+  box-shadow: 0 1px 0 #111;
 }
 
-.ytunes-app.is-graphite .ytunes-dialog input,
+.ytunes-app.is-graphite .ytunes-dialog form input[type="text"],
+.ytunes-app.is-graphite #ytunes-dialog-input,
 .ytunes-app.is-graphite #ytunes-jump-input {
   color: #ececec;
   background: #2a2a2a;
@@ -2429,6 +2765,16 @@
 
 .ytunes-app.is-graphite .ytunes-dialog-actions button:active {
   background: linear-gradient(#3a3a3a, #2e2e2e);
+}
+
+.ytunes-app.is-graphite .ytunes-dialog-actions button.is-default {
+  color: #fff;
+  border-color: #245ea6;
+  background: linear-gradient(#6eb0ee, #2f74c8);
+}
+
+.ytunes-app.is-graphite .ytunes-dialog-actions button.is-default:active {
+  background: linear-gradient(#3a7ec8, #245ea6);
 }
 
 .ytunes-app.is-graphite #ytunes-toast {
