@@ -81,8 +81,10 @@ function isVideoish(item) {
 
 function isMixCollection(item) {
   if (isLibraryShelf(item) || isPodcastish(item)) return false;
+  const list = String(item?.playlistId || item?.browseId || "").replace(/^VL/, "");
+  if (list.startsWith("RD") && !list.startsWith("RDAMVM")) return true;
   const hay = `${item?.title || ""} ${item?.subtitle || ""} ${item?.shelf || ""}`.toLowerCase();
-  return /\bmix\b|supermix|\bradio\b|station|replay|discover|archive|new release/.test(hay);
+  return /\b(mix|supermix|radio|station)\b/.test(hay);
 }
 
 const COVER_BROWSER_SOURCES = new Set([
@@ -281,16 +283,8 @@ function pickMoodChips(chips) {
         (name === "Energise" && /^energize$/i.test(chip.title))
     )
   );
-  if (named.length) return named;
-  if (moodish.length && moodish.length <= 16) return moodish;
-  return DEFAULT_MOODS.map((title) => {
-    const found = moodish.find(
-      (chip) =>
-        chip.title.toLowerCase() === title.toLowerCase() ||
-        (title === "Energise" && /^energize$/i.test(chip.title))
-    );
-    return found || { title, browseId: "", params: "" };
-  });
+  if (named.length) return named.filter((chip) => chip.browseId || chip.params);
+  return moodish.filter((chip) => chip.browseId || chip.params);
 }
 
 function storefrontCovers(parsed) {
@@ -367,6 +361,7 @@ function splitPlaylistRows(tracks) {
 
 function coverIdForTrack(track) {
   if (!track) return "";
+  if (track.albumBrowseId) return track.albumBrowseId;
   if (track.album) return `album:${track.album}:${track.artist || ""}`;
   return track.videoId || track.id || `t:${track.title}`;
 }
@@ -504,51 +499,8 @@ function indexOfVideo(tracks, videoId) {
   return (tracks || []).findIndex((item) => item.videoId === videoId);
 }
 
-function followBlocked(root) {
-  const active = document.activeElement;
-  if (active && root.contains(active)) {
-    if (active.matches("input, textarea")) return true;
-    if (active.closest("#ytunes-search, .ytunes-search")) return true;
-  }
-  return Boolean(
-    root.querySelector(
-      ".ytunes-dialog:not([hidden]), .ytunes-jump:not([hidden]), .ytunes-menu:not([hidden]), .ytunes-sleep-menu:not([hidden])"
-    )
-  );
-}
-
 function playlistIdOf(value) {
   return String(value || "").replace(/^VL/, "");
-}
-
-function sourceForPlayingList(state, rawId) {
-  const id = playlistIdOf(rawId);
-  if (!id || id.startsWith("RD")) return { type: "now", playlistId: id || undefined };
-  if (id === "LM") return { type: "liked" };
-  const known = (state.playlists || []).find(
-    (item) => playlistIdOf(item.playlistId) === id
-  );
-  return {
-    type: "playlist",
-    browseId: `VL${id}`,
-    playlistId: id,
-    title: known?.title || "",
-  };
-}
-
-function isShowingPlayingSource(state, source) {
-  if (!source) return false;
-  if (source.type === "now") return state.source === "now";
-  if (source.type === "liked") {
-    return state.source === "liked" || playlistIdOf(state.playlistId) === "LM";
-  }
-  if (source.type === "playlist") {
-    return (
-      state.source === "playlist" &&
-      playlistIdOf(state.playlistId) === playlistIdOf(source.playlistId)
-    );
-  }
-  return state.source === source.type;
 }
 
 function revealTrackRow(root, state, index) {
@@ -570,29 +522,13 @@ function revealTrackRow(root, state, index) {
   root.querySelector("#ytunes-table-wrap")?.focus({ preventScroll: true });
 }
 
-function followPlayingSource(root, state, status, onJump) {
-  if (state.source === "now") return;
-  const videoId = status?.videoId || "";
-  if (!videoId || state.playedVideoId === videoId) return;
-  if (followBlocked(root)) return;
-  const source = sourceForPlayingList(state, status.playlistId);
-  const next = isShowingPlayingSource(state, source)
-    ? { type: "now", playlistId: playlistIdOf(status.playlistId) || undefined }
-    : source;
-  if (next.type === "now" && state.source === "now") return;
-  state.playedVideoId = videoId;
-  state.pendingSelectVideoId = videoId;
-  loadSource(root, state, next, { history: true });
-  onJump?.();
-}
-
-function followPlayingTrack(root, state, status, onJump) {
+function followPlayingTrack(root, state, status) {
   const videoId = status?.videoId || "";
   if (!videoId) return;
   if (state.coverFlow?.isDragging?.()) return;
   const index = indexOfVideo(state.visibleTracks, videoId);
   if (index < 0) {
-    followPlayingSource(root, state, status, onJump);
+    state.playedVideoId = videoId;
     return;
   }
   state.playedVideoId = videoId;
@@ -608,21 +544,22 @@ function markPlayingRows(root, videoId) {
   });
 }
 
-function playTrack(track, playlistId, index) {
+function playTrack(track, playlistId, index, options = {}) {
   if (!track) return Promise.resolve();
   const endpoint = track.endpoint ? { ...track.endpoint } : {};
   const watch = {
     ...(endpoint.watchEndpoint || {}),
     videoId: track.videoId || endpoint.watchEndpoint?.videoId,
   };
+  const ownList = Boolean(options.ownList);
   const listId = String(playlistId || track.playlistId || "").replace(/^VL/, "");
-  if (listId) watch.playlistId = listId;
+  if (listId && !ownList) watch.playlistId = listId;
   if (Number.isFinite(index) && index >= 0) watch.index = index;
   if (watch.videoId) endpoint.watchEndpoint = watch;
   if (!endpoint.watchEndpoint && !endpoint.browseEndpoint) {
     return Promise.reject(new Error("Nothing to play"));
   }
-  return YTM.play({ endpoint });
+  return YTM.play({ endpoint, ownList });
 }
 
 function playlistIdForPlay(state, track) {
@@ -650,11 +587,91 @@ function playlistIndexOf(state, track) {
   return at >= 0 ? at : undefined;
 }
 
+function playableSessionTracks(tracks) {
+  return (tracks || []).filter((track) => track?.videoId && !isSuggestedTrack(track));
+}
+
+function shuffledOrder(count) {
+  const order = Array.from({ length: count }, (_, index) => index);
+  for (let i = count - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const swap = order[i];
+    order[i] = order[j];
+    order[j] = swap;
+  }
+  return order;
+}
+
+function radioListId(id) {
+  const list = String(id || "").replace(/^VL/, "");
+  return list.startsWith("RD") ? list : "";
+}
+
+function sessionTracksForPlay(state, track) {
+  const shown = state.visibleTracks?.length ? state.visibleTracks : state.tracks;
+  if (state.source === "playlist") return splitPlaylistRows(shown).owned;
+  if (state.source === "liked" || state.source === "songs" || state.source === "recents") {
+    return shown;
+  }
+  if (state.source === "now") return state.tracks;
+  const cover = coverForTrack(state, track);
+  if (cover?.tracks?.length > 1) return cover.tracks;
+  if (!isMixedStorefront(state) && playableSessionTracks(shown).length > 1) {
+    return shown;
+  }
+  return track ? [track] : [];
+}
+
+function beginSession(state, options = {}) {
+  const prev = state.session || {};
+  const tracks = playableSessionTracks(options.tracks);
+  const shuffle = options.shuffle == null ? Boolean(prev.shuffle) : Boolean(options.shuffle);
+  state.session = {
+    source: options.source || "list",
+    listId: String(options.listId || "").replace(/^VL/, ""),
+    tracks,
+    shuffle,
+    order: shuffle && tracks.length ? shuffledOrder(tracks.length) : null,
+  };
+  return state.session;
+}
+
+function orderedSessionTracks(session) {
+  const tracks = session?.tracks || [];
+  if (!session?.shuffle) return tracks;
+  if (!session.order || session.order.length !== tracks.length) {
+    session.order = shuffledOrder(tracks.length);
+  }
+  return session.order.map((index) => tracks[index]).filter(Boolean);
+}
+
 function playStateTrack(state, track) {
-  return playTrack(track, playlistIdForPlay(state, track), playlistIndexOf(state, track));
+  const fromRadio = state.session?.source === "radio" && state.source === "now";
+  const listId = fromRadio
+    ? state.session.listId || playlistIdForPlay(state, track)
+    : playlistIdForPlay(state, track);
+  beginSession(state, {
+    source: fromRadio ? "radio" : "list",
+    listId: fromRadio ? state.session.listId || listId : listId,
+    tracks: fromRadio ? state.session.tracks : sessionTracksForPlay(state, track),
+  });
+  return playTrack(track, fromRadio ? listId : "", playlistIndexOf(state, track), {
+    ownList: !fromRadio,
+  });
 }
 
 function skipRoster(state, status) {
+  const session = state.session;
+  if (session?.tracks?.length) {
+    const tracks = orderedSessionTracks(session);
+    const radio = session.source === "radio" || Boolean(radioListId(session.listId));
+    return {
+      tracks,
+      playlistId: radio ? session.listId : isConcretePlaylist(session.listId) ? session.listId : "",
+      ownList: !radio,
+    };
+  }
+
   const playingList = String(status?.playlistId || "").replace(/^VL/, "");
   const stateList = String(state.playlistId || "").replace(/^VL/, "");
   const concretePlaying = isConcretePlaylist(playingList) ? playingList : "";
@@ -667,7 +684,7 @@ function skipRoster(state, status) {
         : state.tracks || [];
     const tracks = owned.filter((track) => track.videoId);
     if (tracks.length) {
-      return { tracks, playlistId: concreteState || concretePlaying };
+      return { tracks, playlistId: concreteState || concretePlaying, ownList: true };
     }
   }
 
@@ -675,7 +692,8 @@ function skipRoster(state, status) {
     state.source === "now" ? state.tracks : state.nowTracks || []
   ).filter((track) => track.videoId);
   if (queued.length) {
-    return { tracks: queued, playlistId: concretePlaying };
+    const radio = Boolean(radioListId(playingList || stateList));
+    return { tracks: queued, playlistId: radio ? playingList || stateList : concretePlaying, ownList: !radio };
   }
 
   const playingId = status?.videoId || "";
@@ -683,20 +701,21 @@ function skipRoster(state, status) {
     (track) => track.videoId && !isSuggestedTrack(track)
   );
   if (playingId && visible.some((track) => track.videoId === playingId)) {
-    return { tracks: visible, playlistId: concretePlaying };
+    return { tracks: visible, playlistId: concretePlaying, ownList: true };
   }
 
-  return { tracks: [], playlistId: concretePlaying };
+  return { tracks: [], playlistId: concretePlaying, ownList: true };
 }
 
 function syncSkipRoster(root, state, status) {
-  const { tracks, playlistId } = skipRoster(state, status);
+  const { tracks, playlistId, ownList } = skipRoster(state, status);
   const ids = tracks
     .map((track) => track.videoId)
     .filter((id) => /^[\w-]{11}$/.test(id));
   const list = String(playlistId || "").replace(/^VL/, "");
-  const skipPlaylist = isConcretePlaylist(list) ? list : "";
+  const skipPlaylist = ownList ? (isConcretePlaylist(list) ? list : "") : list;
   const playingId = status?.videoId || "";
+  const skipIndex = playingId ? ids.indexOf(playingId) : -1;
   if (ids.length > 1 && playingId && ids.includes(playingId)) {
     state.nowTracks = tracks;
   }
@@ -707,6 +726,10 @@ function syncSkipRoster(root, state, status) {
     else delete node.dataset.skipIds;
     if (skipPlaylist) node.dataset.skipPlaylist = skipPlaylist;
     else delete node.dataset.skipPlaylist;
+    if (ownList) node.dataset.ownList = "1";
+    else delete node.dataset.ownList;
+    if (skipIndex >= 0) node.dataset.skipIndex = String(skipIndex);
+    else delete node.dataset.skipIndex;
   });
 }
 
@@ -993,7 +1016,11 @@ function rememberNowPlaying(status, state) {
 }
 
 function isLikedLibrary(state) {
-  return state.source === "songs" || state.source === "liked" || state.playlistId === "LM";
+  return state.source === "liked" || playlistIdOf(state.playlistId) === "LM";
+}
+
+function sourceSortable(state) {
+  return ["songs", "liked", "playlist", "recents", "search"].includes(state.source);
 }
 
 function findTrackByVideo(state, videoId) {
@@ -1154,7 +1181,7 @@ function renderPlayer(root, status, state) {
   }
   const likeVideoId =
     status?.videoId || state.visibleTracks[state.selectedIndex]?.videoId || "";
-  setPressed(root, "shuffle", Boolean(status?.shuffle));
+  setPressed(root, "shuffle", Boolean(state.session?.shuffle));
   setRepeatUi(root, status?.repeat || "off");
   setPressed(root, "like", isTrackLiked(state, likeVideoId, status?.liked));
   setPressed(root, "lyrics", Boolean(state.lyricsOn));
@@ -1384,9 +1411,9 @@ function selectTrackRow(root, state, index, play) {
 }
 
 function sortTracks(state) {
-  const key = state.sortKey;
+  const key = sourceSortable(state) ? state.sortKey : "";
   const playlist = state.source === "playlist";
-  const source = playlist ? state.tracks : state.visibleTracks;
+  const source = state.tracks || [];
   if (!key) {
     if (!playlist) return source;
     const split = splitPlaylistRows(source);
@@ -1437,6 +1464,10 @@ function applyParsed(root, state, parsed, emptyMessage) {
     }
   }
   state.tracks = parsed.tracks;
+  if (sourceSortable(state) && state.sortKey) {
+    parsed = { ...parsed, tracks: sortTracks(state) };
+    state.tracks = parsed.tracks;
+  }
   state.collections = parsed.collections;
   state.lyricsId = parsed.lyricsId || state.lyricsId || "";
   const searchCovers = (parsed.collections || []).filter((item) => item.kind !== "song");
@@ -1552,6 +1583,7 @@ function bindShell(root) {
     playedVideoId: "",
     pendingSelectVideoId: "",
     nowTracks: [],
+    session: { source: "list", listId: "", tracks: [], shuffle: false, order: null },
     menuTrack: null,
     lyricsVideoId: "",
     sleepUntil: 0,
@@ -1597,13 +1629,31 @@ function bindShell(root) {
       cover,
       cover.tracks?.[0] || (isSongCover(cover) ? trackFromSongCover(cover) : null)
     );
-    if (cover.browseId && !cover.tracks?.length) {
+    if (isSongCover(cover)) {
+      playStateTrack(state, trackFromSongCover(cover));
+      return;
+    }
+    if (!cover.tracks?.length && collectionBrowseBody(cover)) {
+      try {
+        await fetchCollectionTracks(cover);
+      } catch {
+        /* fall through to open */
+      }
+    }
+    if (cover.tracks?.[0]) {
+      beginSession(state, {
+        source: "list",
+        listId: collectionPlaylistId(cover) || cover.browseId,
+        tracks: cover.tracks,
+      });
+      playStateTrack(state, cover.tracks[0]);
+      return;
+    }
+    if (cover.browseId) {
       await openCollection(root, state, cover, { history: true });
       return;
     }
-    if (cover.tracks?.[0]) {
-      playStateTrack(state, cover.tracks[0]);
-    } else if (cover.endpoint) {
+    if (cover.endpoint) {
       YTM.play({ endpoint: cover.endpoint }).catch(() => {});
     }
   }
@@ -1749,6 +1799,19 @@ function bindShell(root) {
           resetCovers: stillThin && tracks.length > 1,
           scroll: false,
         });
+        if (state.session?.source === "radio") {
+          state.session.listId = queued.playlistId || state.session.listId;
+          state.session.tracks = playableSessionTracks(tracks);
+          if (state.session.shuffle) {
+            state.session.order = shuffledOrder(state.session.tracks.length);
+          }
+        } else if (!state.session?.tracks?.length) {
+          beginSession(state, {
+            source: radioListId(queued.playlistId) ? "radio" : "queue",
+            listId: queued.playlistId,
+            tracks,
+          });
+        }
       } catch {
         /* keep current table */
       }
@@ -1762,7 +1825,7 @@ function bindShell(root) {
       rememberNowPlaying(live, state);
       const status = overlayStatus(live, state);
       renderPlayer(root, status, state);
-      followPlayingTrack(root, state, live, persistChrome);
+      followPlayingTrack(root, state, live);
       playCounter.note(live);
       tickSleep(live);
       refreshNowPlayingList(live);
@@ -1840,9 +1903,12 @@ function bindShell(root) {
         return;
       }
       if (action === "shuffle") {
-        clickControl("shuffle");
-        refreshUi();
-        window.setTimeout(() => refreshUi(), 120);
+        const session = state.session || beginSession(state, { tracks: sessionTracksForPlay(state) });
+        session.shuffle = !session.shuffle;
+        session.order = session.shuffle ? shuffledOrder((session.tracks || []).length) : null;
+        state.session = session;
+        setPressed(root, "shuffle", session.shuffle);
+        syncSkipRoster(root, state, probe());
         return;
       }
       if (action === "repeat") {
@@ -2900,19 +2966,21 @@ function bindShell(root) {
   async function startRadio(videoId) {
     const id = videoId || probe().videoId;
     if (!id) return;
+    const listId = radioId(id);
+    const seed =
+      state.visibleTracks.find((track) => track.videoId === id) ||
+      findTrackByVideo(state, id) ||
+      { videoId: id, title: "", artist: "" };
+    beginSession(state, { source: "radio", listId, tracks: [seed], shuffle: false });
     try {
       await YTM.play({
-        endpoint: { watchEndpoint: { videoId: id, playlistId: radioId(id) } },
+        endpoint: { watchEndpoint: { videoId: id, playlistId: listId } },
+        ownList: false,
       });
     } catch {
       /* fall through to now playing */
     }
-    loadSource(
-      root,
-      state,
-      { type: "now", playlistId: radioId(id) },
-      { history: true }
-    );
+    loadSource(root, state, { type: "now", playlistId: listId }, { history: true });
   }
 
   async function goHistory(delta) {
@@ -3044,6 +3112,29 @@ function bindShell(root) {
   syncNav();
 }
 
+async function fetchCollectionTracks(cover, stillCurrent) {
+  const body = collectionBrowseBody(cover);
+  if (!body) return cover.tracks || [];
+  let parsed = await YTM.browseParsed(body, 8);
+  if (stillCurrent && !stillCurrent()) return [];
+  let tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
+  const playlistId = collectionPlaylistId(cover);
+  const vl = playlistId
+    ? playlistId.startsWith("VL")
+      ? playlistId
+      : `VL${playlistId}`
+    : "";
+  if (!tracks.length && vl && vl !== body.browseId) {
+    parsed = await YTM.browseParsed({ browseId: vl }, 8);
+    if (stillCurrent && !stillCurrent()) return [];
+    tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
+  }
+  cover.tracks = tracks;
+  if (playlistId) cover.playlistId = playlistId;
+  else if (tracks[0]?.playlistId) cover.playlistId = tracks[0].playlistId;
+  return tracks;
+}
+
 async function previewCoverTracks(root, state, cover, seq) {
   if (!cover || !isCoverBrowser(state)) return;
   const token = seq ?? (state.previewSeq += 1);
@@ -3081,8 +3172,7 @@ async function previewCoverTracks(root, state, cover, seq) {
     return;
   }
 
-  const body = collectionBrowseBody(cover);
-  if (!canPreviewCover(cover) || !body) {
+  if (!canPreviewCover(cover) || !collectionBrowseBody(cover)) {
     if (!stillCurrent()) return;
     if (!cover.tracks?.length) {
       state.tracks = [];
@@ -3094,25 +3184,10 @@ async function previewCoverTracks(root, state, cover, seq) {
 
   renderTracks(root, state, [], "Loading songs…");
   try {
-    let parsed = await YTM.browseParsed(body, 3);
+    const tracks = await fetchCollectionTracks(cover, stillCurrent);
     if (!stillCurrent()) return;
-    let tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
-    if (!stillCurrent()) return;
-    const playlistId = collectionPlaylistId(cover);
-    const vl = playlistId
-      ? playlistId.startsWith("VL")
-        ? playlistId
-        : `VL${playlistId}`
-      : "";
-    if (!tracks.length && vl && vl !== body.browseId) {
-      parsed = await YTM.browseParsed({ browseId: vl }, 3);
-      if (!stillCurrent()) return;
-      tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
-      if (!stillCurrent()) return;
-    }
-    cover.tracks = tracks;
     state.tracks = tracks;
-    state.playlistId = playlistId || tracks[0]?.playlistId || "";
+    state.playlistId = cover.playlistId || tracks[0]?.playlistId || "";
     renderTracks(
       root,
       state,
@@ -3132,7 +3207,7 @@ async function openCollection(root, state, collection, options = {}) {
     const body = collectionBrowseBody(collection) || {
       browseId: collection.browseId || `VL${collection.playlistId}`,
     };
-    const parsed = await YTM.browseParsed(body, 3);
+    const parsed = await YTM.browseParsed(body, 8);
     if (seq !== state.loadSeq) return;
     const tracks = parsed.tracks;
     state.playlistId = collection.playlistId || tracks[0]?.playlistId || "";
@@ -3146,8 +3221,24 @@ async function openCollection(root, state, collection, options = {}) {
         title: collection.title,
       });
     }
-    if (!tracks.length && parsed.collections.length) {
-      showCovers(state, parsed.collections, parsed.collections[0]?.id || "");
+    const nested = (parsed.collections || []).filter(
+      (item) => item.kind !== "artist" && item.id !== collection.id
+    );
+    if (collection.kind === "artist" && nested.length) {
+      showCovers(state, nested, nested[0]?.id || "");
+      state.tracks = tracks;
+      renderTracks(
+        root,
+        state,
+        tracks,
+        tracks.length ? "No tracks yet." : "Select an album."
+      );
+      renderGrid(root, state);
+      applyCoverCaption(root, state, collection, selectedCaptionTrack(state));
+      return;
+    }
+    if (!tracks.length && nested.length) {
+      showCovers(state, nested, nested[0]?.id || "");
       renderTracks(root, state, [], "Select an album.");
       renderGrid(root, state);
       return;
@@ -3200,7 +3291,7 @@ async function loadPlaylists(root, state) {
   try {
     const parsed = await YTM.browseParsed(
       { browseId: "FEmusic_liked_playlists" },
-      2
+      8
     );
     const playlists = parsed.collections.filter(
       (item) => item.playlistId || item.browseId.startsWith("VL")
@@ -3250,7 +3341,7 @@ async function cachedHome(state) {
   if (state.homeCache && Date.now() - (state.homeCacheAt || 0) < 120000) {
     return state.homeCache;
   }
-  const parsed = await YTM.browseParsed({ browseId: BROWSE_IDS.home }, 3);
+  const parsed = await YTM.browseParsed({ browseId: BROWSE_IDS.home }, 6);
   state.homeCache = parsed;
   state.homeCacheAt = Date.now();
   return parsed;
@@ -3274,9 +3365,7 @@ function moodButtonsHtml(chips) {
 async function loadMoods(root, state) {
   const host = root.querySelector("#ytunes-moods");
   if (!host) return;
-  host.innerHTML = moodButtonsHtml(
-    DEFAULT_MOODS.map((title) => ({ title, browseId: "", params: "" }))
-  );
+  host.innerHTML = "";
   let chips = [];
   try {
     const home = await cachedHome(state);
@@ -3284,20 +3373,19 @@ async function loadMoods(root, state) {
   } catch {
     chips = [];
   }
-  if (!chips.length || chips.every((chip) => !chip.browseId && !chip.params)) {
+  if (!chips.some((chip) => chip.browseId || chip.params)) {
     try {
       const page = await YTM.browseParsed({ browseId: BROWSE_IDS.moods }, 1);
       const fromPage = pickMoodChips(page.chips);
       if (fromPage.some((chip) => chip.browseId || chip.params)) chips = fromPage;
-      else if (!chips.length) chips = fromPage;
     } catch {
-      /* keep home or defaults */
+      /* keep home chips */
     }
   }
-  if (!chips.length) {
-    chips = DEFAULT_MOODS.map((title) => ({ title, browseId: "", params: "" }));
-  }
-  host.innerHTML = moodButtonsHtml(chips);
+  chips = chips.filter((chip) => chip.browseId || chip.params);
+  host.innerHTML = chips.length
+    ? moodButtonsHtml(chips)
+    : `<p class="ytunes-source-empty">No stations</p>`;
   setSidebarSelection(root, state.lastSource);
   refreshMarquees(root);
 }
@@ -3358,7 +3446,7 @@ async function loadSource(root, state, source, options = {}) {
 
   state.source = type;
   state.followVideoId = "";
-  state.statusNote = type === "videos" || type === "mixes" ? "From Home" : "";
+  state.statusNote = type === "mixes" ? "From Home" : "";
   state.playlistId = source.playlistId || (type === "liked" ? "LM" : "");
   if (type !== "search") {
     state.lastSource = {
@@ -3396,12 +3484,19 @@ async function loadSource(root, state, source, options = {}) {
         renderTracks(root, state, [], "Play a song, then start Radio.");
         return;
       }
+      const listId = radioId(videoId);
+      beginSession(state, {
+        source: "radio",
+        listId,
+        tracks: [{ videoId, title: "", artist: "" }],
+      });
       if (options.play !== false) {
         await YTM.play({
-          endpoint: { watchEndpoint: { videoId, playlistId: radioId(videoId) } },
+          endpoint: { watchEndpoint: { videoId, playlistId: listId } },
+          ownList: false,
         }).catch(() => {});
       }
-      source = { type: "now", playlistId: radioId(videoId) };
+      source = { type: "now", playlistId: listId };
     }
 
     if ((source.type || type) === "now") {
@@ -3454,25 +3549,35 @@ async function loadSource(root, state, source, options = {}) {
         playlistId: state.playlistId,
         scroll: true,
       });
+      if (state.session?.source === "radio") {
+        state.session.listId = queuedPlaylist || state.session.listId;
+        state.session.tracks = playableSessionTracks(tracks);
+      } else if (!state.session?.tracks?.length) {
+        beginSession(state, {
+          source: radioListId(state.playlistId) ? "radio" : "queue",
+          listId: state.playlistId,
+          tracks,
+        });
+      }
       state.nowVideoId = tracks.length > 1 ? videoId : "";
       return;
     }
 
     if (type === "videos") {
-      const home = await cachedHome(state);
+      const library = await YTM.browseParsed({ browseId: BROWSE_IDS.songs }, 12);
       if (seq !== state.loadSeq) return;
-      const tracks = home.tracks.filter(isVideoish);
-      const collections = home.collections.filter(isVideoish);
+      const tracks = (library.tracks || []).filter(isVideoish);
+      const collections = (library.collections || []).filter(isVideoish);
       applyStorefront(
         root,
         state,
         {
           tracks,
           collections,
-          lyricsId: home.lyricsId,
+          lyricsId: library.lyricsId,
         },
         tracks.length || !collections.length
-          ? "No music videos right now."
+          ? "No music videos in your library."
           : "Select a video. Double-click a cover to open it."
       );
       return;
@@ -3493,8 +3598,28 @@ async function loadSource(root, state, source, options = {}) {
     if (type === "mixes") {
       const home = await cachedHome(state);
       if (seq !== state.loadSeq) return;
+      const seen = new Set();
+      const collections = [];
+      const add = (item) => {
+        const id = item.id || item.playlistId || item.browseId || item.title;
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        collections.push(item);
+      };
+      home.collections.filter(isMixCollection).forEach(add);
+      (state.playlists || []).forEach((item) => {
+        const list = String(item.playlistId || "").replace(/^VL/, "");
+        if (!list.startsWith("RD")) return;
+        add({
+          id: list,
+          title: item.title,
+          playlistId: list,
+          browseId: `VL${list}`,
+          kind: "playlist",
+        });
+      });
       applyStorefront(root, state, {
-        collections: home.collections.filter(isMixCollection),
+        collections,
         tracks: [],
         lyricsId: home.lyricsId,
       });
@@ -3516,7 +3641,10 @@ async function loadSource(root, state, source, options = {}) {
     }
     const body = { browseId };
     if (source.params) body.params = source.params;
-    const parsed = await YTM.browseParsed(body, 3);
+    const parsed = await YTM.browseParsed(
+      body,
+      ["playlist", "songs", "liked", "recents"].includes(type) ? 24 : 8
+    );
     if (seq !== state.loadSeq) return;
     if (type === "home") {
       state.homeCache = parsed;
