@@ -1301,6 +1301,14 @@ function renderTracks(root, state, tracks, emptyMessage) {
   refreshMarquees(root);
 }
 
+function markGridSelection(root, state) {
+  const grid = root.querySelector("#ytunes-grid");
+  if (!grid) return;
+  grid.querySelectorAll("[data-cover-id]").forEach((node) => {
+    node.classList.toggle("is-selected", node.dataset.coverId === state.selectedCoverId);
+  });
+}
+
 function renderGrid(root, state) {
   const grid = root.querySelector("#ytunes-grid");
   if (!grid) return;
@@ -1610,7 +1618,7 @@ function bindShell(root) {
   async function selectCover(cover, play) {
     if (!cover) return;
     state.selectedCoverId = cover.id;
-    renderGrid(root, state);
+    markGridSelection(root, state);
     if (!play) {
       if (isCoverBrowser(state)) {
         const song = isSongCover(cover) ? trackFromSongCover(cover) : null;
@@ -2749,7 +2757,7 @@ function bindShell(root) {
       if (view === "coverflow" && !tableFocus) {
         event.preventDefault();
         event.stopPropagation();
-        state.coverFlow.move(event.key === "ArrowLeft" ? -1 : 1);
+        state.coverFlow.move(event.key === "ArrowLeft" ? -1 : 1, true);
       }
     }
   }

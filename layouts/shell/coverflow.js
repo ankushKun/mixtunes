@@ -3,7 +3,8 @@
  * Geometry: CF_WINDOW 6, angle 56°, depth/gap/spacing scale with cover size, 400ms ease.
  * Cover box is taller than the square so the flipped reflection sits inside the 3D plane.
  */
-const CF_WINDOW = 6;
+const CF_WINDOW = 4;
+const CF_WINDOW_DRAG = 3;
 const CF_SIZE = 150;
 const CF_SIZE_NARROW = 108;
 const CF_SIZE_MIN = 72;
@@ -13,10 +14,11 @@ const CF_ANGLE = 56;
 const CF_CENTER_Z = 70;
 const CF_DEPTH = 48;
 const CF_GAP = 52;
-const CF_MS = 400;
+const CF_MS = 220;
 const CF_WHEEL_STEP = 48;
 const CF_DECEL = 0.998;
 const CF_REFLECT = 0.52;
+const CF_BROWSE_MS = 160;
 
 function faceOriginY(reducedMotion) {
   if (reducedMotion) return "50%";
@@ -136,15 +138,22 @@ function CoverFlow(root, handlers) {
   const titleEl = root.querySelector("#ytunes-cover-title");
   const artistEl = root.querySelector("#ytunes-cover-artist");
   const reduced = prefersReducedMotion();
+  const originY = faceOriginY(reduced);
   let covers = [];
   let center = 0;
-  let lastKey = "";
   let captionTrack = null;
   let captionTimer = null;
+  let captionIndex = -1;
   let wheelAcc = 0;
+  let wheelSteps = 0;
   let drag = null;
   let skipClick = false;
   let fitted = 0;
+  let geo = null;
+  let raf = 0;
+  let flickTimer = 0;
+  let browseTimer = 0;
+  const pool = [];
 
   if (reduced) flow.classList.add("is-reduced");
   flow.style.setProperty("--yt-cf-ms", `${CF_MS}ms`);
@@ -162,74 +171,57 @@ function CoverFlow(root, handlers) {
     );
     if (Math.abs(size - fitted) >= 1) {
       fitted = size;
+      geo = null;
       flow.style.setProperty("--yt-cf-size", `${size}px`);
     }
     return fitted;
   }
 
-  function coverSize() {
-    if (fitted > 8) return fitted;
-    const centerEl = stage.querySelector(".ytunes-cf-cover.is-center");
-    const probeEl = centerEl || stage.querySelector(".ytunes-cf-cover");
-    if (probeEl) {
-      const w = probeEl.offsetWidth;
-      if (w > 8) return w;
-    }
-    const raw = getComputedStyle(flow).getPropertyValue("--yt-cf-size").trim();
-    const fromVar = parseFloat(raw);
-    if (fromVar > 8) return fromVar;
-    return window.matchMedia("(max-width: 720px)").matches
-      ? CF_SIZE_NARROW
-      : CF_SIZE;
-  }
-
   function layout() {
-    const size = coverSize();
+    if (geo) return geo;
+    const size = fitted > 8 ? fitted : fitCoverSize();
     const k = size / CF_SIZE;
-    return {
+    geo = {
       size,
       gap: CF_GAP * k,
       spacing: CF_SPACING * k,
       centerZ: CF_CENTER_Z * k,
       depth: CF_DEPTH * k,
     };
+    return geo;
   }
 
-  function poseCover(cover, offset) {
+  function poseCover(cover, offset, metrics) {
     const abs = Math.abs(offset);
-    const geo = layout();
     const sign = offset < 0 ? -1 : 1;
-    const originY = faceOriginY(reduced);
     let transform;
     let origin = `50% ${originY}`;
     if (reduced) {
       transform = `translate3d(-50%, -${originY}, 0px) rotateY(0deg)`;
     } else if (abs < 0.001) {
-      origin = `50% ${originY}`;
-      transform = `translate3d(-50%, -${originY}, ${geo.centerZ}px) rotateY(0deg)`;
+      transform = `translate3d(-50%, -${originY}, ${metrics.centerZ}px) rotateY(0deg)`;
     } else {
       origin = offset < 0 ? `100% ${originY}` : `0% ${originY}`;
-      const first = geo.size * 0.5 + geo.gap;
+      const first = metrics.size * 0.5 + metrics.gap;
       let x;
       let z;
       let angle;
       if (abs < 1) {
         x = sign * first * abs;
-        z = geo.centerZ * (1 - abs) + -geo.depth * abs;
+        z = metrics.centerZ * (1 - abs) + -metrics.depth * abs;
         angle = -sign * CF_ANGLE * abs;
       } else {
-        x = sign * (first + (abs - 1) * geo.spacing);
-        z = -abs * geo.depth;
+        x = sign * (first + (abs - 1) * metrics.spacing);
+        z = -abs * metrics.depth;
         angle = -sign * CF_ANGLE;
       }
       transform = `translate3d(-50%, -${originY}, 0) translateX(${x}px) translateZ(${z}px) rotateY(${angle}deg)`;
     }
-    cover.dataset.offset = String(offset);
-    cover.classList.toggle("is-center", abs < 0.45);
-    cover.setAttribute("aria-selected", abs < 0.45 ? "true" : "false");
+    const centered = abs < 0.45;
+    cover.classList.toggle("is-center", centered);
+    cover.setAttribute("aria-selected", centered ? "true" : "false");
     cover.style.transformOrigin = origin;
     cover.style.transform = transform;
-    cover.style.opacity = "1";
     cover.style.zIndex = String(200 - Math.round(abs * 2));
   }
 
@@ -260,19 +252,76 @@ function CoverFlow(root, handlers) {
     }, 140);
   }
 
-  function applyCaption(item) {
+  function applyCaption(item, index) {
+    if (index === captionIndex) return;
+    captionIndex = index;
+    if (!item) {
+      setCaption("", "");
+      return;
+    }
     const parts = coverCaptionParts(item, captionTrack);
     setCaption(parts.title, parts.sub);
   }
 
   function setCaptionTrack(track) {
     captionTrack = track || null;
-    applyCaption(current());
+    captionIndex = -1;
+    applyCaption(current(), center);
   }
 
-  function createCoverEl(item) {
+  function createCoverEl() {
     const cover = document.createElement("div");
     cover.className = "ytunes-cf-cover";
+    cover.setAttribute("role", "option");
+    cover.tabIndex = -1;
+    cover.hidden = true;
+    const face = document.createElement("div");
+    face.className = "ytunes-cf-face";
+    const img = document.createElement("img");
+    img.alt = "";
+    img.draggable = false;
+    img.decoding = "async";
+    img.hidden = true;
+    img.onerror = () => {
+      const src = img.getAttribute("src") || "";
+      const next = src
+        .replace("/hq720.", "/hqdefault.")
+        .replace("/maxresdefault.", "/hqdefault.");
+      if (next !== src) {
+        img.src = next;
+        return;
+      }
+      img.hidden = true;
+      ph.hidden = false;
+    };
+    const ph = document.createElement("div");
+    ph.className = "ytunes-cf-ph";
+    ph.hidden = true;
+    face.appendChild(img);
+    face.appendChild(ph);
+    const reflect = document.createElement("div");
+    reflect.className = "ytunes-cf-reflect";
+    reflect.setAttribute("aria-hidden", "true");
+    const inner = document.createElement("div");
+    inner.className = "ytunes-cf-reflect-inner";
+    reflect.appendChild(inner);
+    cover.appendChild(face);
+    cover.appendChild(reflect);
+    cover._img = img;
+    cover._ph = ph;
+    cover._reflect = inner;
+    cover._boundId = "";
+    stage.appendChild(cover);
+    return cover;
+  }
+
+  function ensurePool(count) {
+    while (pool.length < count) pool.push(createCoverEl());
+  }
+
+  function bindCover(cover, item) {
+    if (cover._boundId === item.id) return;
+    cover._boundId = item.id;
     cover.dataset.id = item.id;
     const videoId = item.videoId || item.tracks?.[0]?.videoId || "";
     const playlistId = String(
@@ -282,113 +331,87 @@ function CoverFlow(root, handlers) {
     else delete cover.dataset.video;
     if (playlistId) cover.dataset.playlist = playlistId;
     else delete cover.dataset.playlist;
-    cover.setAttribute("role", "option");
-    cover.tabIndex = -1;
-    const face = document.createElement("div");
-    face.className = "ytunes-cf-face";
-    const reflect = document.createElement("div");
-    reflect.className = "ytunes-cf-reflect";
-    reflect.setAttribute("aria-hidden", "true");
-    const inner = document.createElement("div");
-    inner.className = "ytunes-cf-reflect-inner";
-    reflect.appendChild(inner);
-
-    const addArt = (parent) => {
-      if (item.artwork) {
-        const img = document.createElement("img");
-        img.alt = "";
-        img.draggable = false;
-        img.src = item.artwork;
-        img.onerror = () => {
-          const src = img.getAttribute("src") || "";
-          const next = src
-            .replace("/hq720.", "/hqdefault.")
-            .replace("/maxresdefault.", "/hqdefault.");
-          if (next !== src) {
-            img.src = next;
-            return;
-          }
-          img.remove();
-          const ph = document.createElement("div");
-          ph.className = "ytunes-cf-ph";
-          ph.textContent = (item.title || "?").charAt(0).toUpperCase();
-          parent.appendChild(ph);
-        };
-        parent.appendChild(img);
-        return;
-      }
-      const ph = document.createElement("div");
-      ph.className = "ytunes-cf-ph";
-      ph.textContent = (item.title || "?").charAt(0).toUpperCase();
-      parent.appendChild(ph);
-    };
-    addArt(face);
-    addArt(inner);
-    cover.appendChild(face);
-    cover.appendChild(reflect);
-    return cover;
+    const src = item.artwork || "";
+    if (src) {
+      if (cover._img.getAttribute("src") !== src) cover._img.src = src;
+      cover._img.hidden = false;
+      cover._ph.hidden = true;
+      cover._reflect.style.backgroundImage = `url(${JSON.stringify(src)})`;
+    } else {
+      cover._img.removeAttribute("src");
+      cover._img.hidden = true;
+      cover._ph.hidden = false;
+      cover._ph.textContent = (item.title || "?").charAt(0).toUpperCase();
+      cover._reflect.style.backgroundImage = "";
+    }
   }
 
   function current() {
     return covers[center] || null;
   }
 
-  function render() {
+  function scheduleBrowse() {
+    window.clearTimeout(browseTimer);
+    browseTimer = window.setTimeout(() => {
+      handlers?.onBrowse?.(current());
+    }, CF_BROWSE_MS);
+  }
+
+  function windowFor(centerFloat) {
+    const span = drag || flow.classList.contains("is-flicking") ? CF_WINDOW_DRAG : CF_WINDOW;
+    if (reduced) {
+      const at = Math.round(centerFloat);
+      return { start: at, end: at + 1 };
+    }
+    return {
+      start: Math.max(0, Math.floor(centerFloat) - span),
+      end: Math.min(covers.length, Math.ceil(centerFloat) + span + 1),
+    };
+  }
+
+  function paint(centerFloat, opts = {}) {
     fitCoverSize();
     if (!covers.length) {
       flow.classList.add("is-empty");
       empty.hidden = false;
-      stage.replaceChildren();
-      lastKey = "";
+      pool.forEach((node) => {
+        node.hidden = true;
+      });
       captionTrack = null;
+      captionIndex = -1;
       setCaption("", "");
       return;
     }
     flow.classList.remove("is-empty");
     empty.hidden = true;
-    center = clamp(center, 0, covers.length - 1);
-    applyCaption(covers[center]);
-
-    const start = reduced ? center : Math.max(0, center - CF_WINDOW);
-    const end = reduced
-      ? center + 1
-      : Math.min(covers.length, center + CF_WINDOW + 1);
-    const listKey = `${covers.length}|${reduced ? "r" : "3"}`;
-    const snapPose = listKey !== lastKey || !stage.children.length;
-    lastKey = listKey;
-    if (snapPose) flow.classList.add("is-snap");
-
-    const wanted = new Set();
-    for (let i = start; i < end; i += 1) wanted.add(covers[i].id);
-    Array.from(stage.children).forEach((el) => {
-      if (!wanted.has(el.dataset.id)) el.remove();
-    });
-    const byId = new Map();
-    Array.from(stage.children).forEach((el) => byId.set(el.dataset.id, el));
-
+    const metrics = layout();
+    const { start, end } = windowFor(centerFloat);
+    ensurePool(Math.max(1, end - start));
+    const used = new Set();
+    let slot = 0;
     for (let i = start; i < end; i += 1) {
-      const t = covers[i];
-      let cover = byId.get(t.id);
-      const fresh = !cover;
+      const item = covers[i];
+      let cover = pool.find((node) => node._boundId === item.id);
       if (!cover) {
-        cover = createCoverEl(t);
-        cover.style.transition = "none";
-        stage.appendChild(cover);
+        while (slot < pool.length && used.has(pool[slot])) slot += 1;
+        cover = pool[slot] || pool[0];
+        bindCover(cover, item);
       }
-      poseCover(cover, i - center);
-      if (fresh) {
-        void cover.offsetWidth;
-        cover.style.transition = "";
-      }
+      used.add(cover);
+      cover.hidden = false;
+      poseCover(cover, i - centerFloat, metrics);
     }
+    pool.forEach((node) => {
+      if (!used.has(node)) node.hidden = true;
+    });
+    const nearest = clamp(Math.round(centerFloat), 0, covers.length - 1);
+    if (!opts.skipCaption) applyCaption(covers[nearest], nearest);
+    if (!opts.skipIndex) handlers?.onIndex?.(nearest, covers.length);
+  }
 
-    if (snapPose) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => flow.classList.remove("is-snap"));
-      });
-    }
-
-    handlers?.onIndex?.(center, covers.length);
+  function render(opts = {}) {
+    center = clamp(center, 0, Math.max(0, covers.length - 1));
+    paint(center, opts);
   }
 
   function setList(list, selectedId) {
@@ -399,17 +422,23 @@ function CoverFlow(root, handlers) {
     } else {
       center = 0;
     }
-    lastKey = "";
+    captionIndex = -1;
+    flow.classList.add("is-snap");
     render();
+    requestAnimationFrame(() => flow.classList.remove("is-snap"));
   }
 
-  function move(delta) {
+  function move(delta, instant) {
     if (!covers.length || !delta) return;
     const next = clamp(center + delta, 0, covers.length - 1);
     if (next === center) return;
     center = next;
+    if (instant) flow.classList.add("is-snap");
     render();
-    handlers?.onBrowse?.(current());
+    if (instant) {
+      requestAnimationFrame(() => flow.classList.remove("is-snap"));
+    }
+    scheduleBrowse();
   }
 
   function setIndex(index, silent) {
@@ -418,7 +447,10 @@ function CoverFlow(root, handlers) {
     if (next === center) return;
     center = next;
     render();
-    if (!silent) handlers?.onBrowse?.(current());
+    if (!silent) {
+      window.clearTimeout(browseTimer);
+      handlers?.onBrowse?.(current());
+    }
   }
 
   function coverFromEvent(event) {
@@ -481,44 +513,33 @@ function CoverFlow(root, handlers) {
         : event.deltaY;
     wheelAcc += delta;
     while (Math.abs(wheelAcc) >= CF_WHEEL_STEP) {
-      move(wheelAcc > 0 ? 1 : -1);
+      wheelSteps += wheelAcc > 0 ? 1 : -1;
       wheelAcc -= Math.sign(wheelAcc) * CF_WHEEL_STEP;
     }
+    if (!wheelSteps) return;
+    flow.classList.add("is-flicking");
+    window.clearTimeout(flickTimer);
+    if (!raf) {
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (!wheelSteps) return;
+        const next = clamp(center + wheelSteps, 0, covers.length - 1);
+        wheelSteps = 0;
+        if (next === center) return;
+        center = next;
+        render({ skipCaption: false });
+        scheduleBrowse();
+      });
+    }
+    flickTimer = window.setTimeout(() => {
+      flow.classList.remove("is-flicking");
+      render();
+    }, 90);
   }
 
   function stepWidth() {
-    const geo = layout();
-    return geo.size * 0.5 + geo.gap;
-  }
-
-  function poseAt(centerFloat) {
-    if (!covers.length) return;
-    fitCoverSize();
-    const max = covers.length - 1;
-    const start = reduced
-      ? Math.round(centerFloat)
-      : Math.max(0, Math.floor(centerFloat) - CF_WINDOW);
-    const end = reduced
-      ? Math.round(centerFloat) + 1
-      : Math.min(covers.length, Math.ceil(centerFloat) + CF_WINDOW + 1);
-    const wanted = new Set();
-    for (let i = start; i < end; i += 1) wanted.add(covers[i].id);
-    Array.from(stage.children).forEach((el) => {
-      if (!wanted.has(el.dataset.id)) el.remove();
-    });
-    const byId = new Map();
-    Array.from(stage.children).forEach((el) => byId.set(el.dataset.id, el));
-    for (let i = start; i < end; i += 1) {
-      const t = covers[i];
-      let cover = byId.get(t.id);
-      if (!cover) {
-        cover = createCoverEl(t);
-        stage.appendChild(cover);
-      }
-      poseCover(cover, i - centerFloat);
-    }
-    const nearest = clamp(Math.round(centerFloat), 0, max);
-    applyCaption(covers[nearest]);
+    const metrics = layout();
+    return metrics.size * 0.5 + metrics.gap;
   }
 
   function onPointerDown(event) {
@@ -546,7 +567,11 @@ function CoverFlow(root, handlers) {
     drag.visual = visual;
     drag.samples.push({ x: event.clientX, t: Date.now() });
     if (drag.samples.length > 6) drag.samples.shift();
-    poseAt(visual);
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      if (drag) paint(drag.visual);
+    });
   }
 
   function onPointerUp(event) {
@@ -589,7 +614,7 @@ function CoverFlow(root, handlers) {
     if (document.activeElement !== flow) return;
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
-      move(event.key === "ArrowLeft" ? -1 : 1);
+      move(event.key === "ArrowLeft" ? -1 : 1, true);
     } else if (event.key === "Enter") {
       event.preventDefault();
       handlers?.onPlay?.(current());
@@ -611,7 +636,7 @@ function CoverFlow(root, handlers) {
     if (!covers.length) return;
     if (Math.abs(fitted - before) < 1 && before) return;
     flow.classList.add("is-snap");
-    if (drag) poseAt(drag.visual);
+    if (drag) paint(drag.visual);
     else render();
     requestAnimationFrame(() => {
       if (!drag) flow.classList.remove("is-snap");
