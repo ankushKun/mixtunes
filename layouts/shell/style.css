@@ -837,9 +837,7 @@
 .ytunes-coverflow.is-snap .ytunes-cf-cover,
 .ytunes-coverflow.is-snap .ytunes-coverflow-caption,
 .ytunes-coverflow.is-dragging .ytunes-cf-cover,
-.ytunes-coverflow.is-dragging .ytunes-coverflow-caption,
-.ytunes-main.is-resizing .ytunes-cf-cover,
-.ytunes-main.is-resizing .ytunes-coverflow-caption {
+.ytunes-coverflow.is-dragging .ytunes-coverflow-caption {
   transition: none !important;
 }
 
@@ -880,41 +878,12 @@
   height: calc(var(--yt-cf-size) * 1.52);
   margin: 0;
   transform-style: flat;
-  transform-origin: 50% 32.895%;
-  transition: none;
+  transition: transform var(--yt-cf-ms) var(--yt-cf-ease);
   cursor: pointer;
   user-select: none;
   z-index: 1;
   will-change: transform;
   overflow: visible;
-  contain: layout style;
-  pointer-events: auto;
-}
-
-.ytunes-cf-cover.is-enter {
-  transition: none !important;
-}
-
-.ytunes-cf-cover:not(.is-near) .ytunes-cf-reflect {
-  visibility: hidden;
-}
-
-.ytunes-cf-cover.is-idle {
-  visibility: hidden;
-  pointer-events: none;
-  will-change: auto;
-}
-
-.ytunes-coverflow.is-moving .ytunes-cf-face {
-  box-shadow: none;
-}
-
-.ytunes-coverflow.is-moving .ytunes-cf-face::after {
-  display: none;
-}
-
-.ytunes-coverflow.is-moving .ytunes-cf-cover:not(.is-center) .ytunes-cf-reflect {
-  visibility: hidden;
 }
 
 .ytunes-coverflow.is-reduced .ytunes-cf-cover {
@@ -932,7 +901,9 @@
   background: #111;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .ytunes-cf-face::after {
@@ -942,6 +913,7 @@
   background: rgba(0, 0, 0, 0.32);
   opacity: 1;
   pointer-events: none;
+  transition: opacity calc(var(--yt-cf-ms) * 0.7) ease;
 }
 
 .ytunes-cf-cover.is-center .ytunes-cf-face::after {
@@ -954,7 +926,9 @@
 }
 
 .ytunes-cf-cover.is-center .ytunes-cf-face {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
 .ytunes-cf-reflect {
@@ -967,6 +941,7 @@
   pointer-events: none;
   opacity: 0.68;
   z-index: 1;
+  transition: opacity calc(var(--yt-cf-ms) * 0.7) ease;
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0.92) 0%,
@@ -1006,6 +981,7 @@
   margin: 0;
   object-fit: cover;
   object-position: center;
+  filter: brightness(1.35) saturate(0.94);
 }
 
 .ytunes-coverflow.is-reduced .ytunes-cf-reflect {
