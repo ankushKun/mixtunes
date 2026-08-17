@@ -290,6 +290,23 @@ function parseTwoRow(item, acc) {
   acc.collections.push(collection);
 }
 
+function columnPlain(text) {
+  const value = String(text || "").trim();
+  if (!value || value.includes("•") || isMetaBit(value)) return "";
+  return value;
+}
+
+function creditsFromBits(bits, columns) {
+  const artistCol = columnPlain(columns?.[1]?.text);
+  const albumCol = columnPlain(columns?.[2]?.text);
+  const artist = artistCol || bits.find((bit) => !isMetaBit(bit)) || bits[0] || "";
+  const album =
+    (albumCol && albumCol !== artist ? albumCol : "") ||
+    bits.find((bit) => bit !== artist && !isMetaBit(bit)) ||
+    "";
+  return { artist, album, year: yearFromBits(bits) };
+}
+
 function parseListItem(item, acc) {
   const flex = item.flexColumns || [];
   const columns = flex.map((column) => {
@@ -314,9 +331,7 @@ function parseListItem(item, acc) {
   const browseId = pickBrowseId(item);
   const playlistId = pickPlaylistId(item);
   const endpoint = watchEndpoint(item) || item.navigationEndpoint;
-  const year = yearFromBits(bits);
-  const artist = bits.find((bit) => !isMetaBit(bit)) || bits[0] || "";
-  const album = bits.find((bit) => bit !== artist && !isMetaBit(bit)) || "";
+  const { artist, album, year } = creditsFromBits(bits, columns);
   const pageType =
     item.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs
       ?.browseEndpointContextMusicConfig?.pageType ||
@@ -445,12 +460,18 @@ function parsePanelVideo(item, acc) {
   if (!title) return;
   const videoId = pickVideoId(item);
   if (!videoId && !item.navigationEndpoint?.watchEndpoint) return;
-  const artist = runsText(item.shortBylineText || item.longBylineText);
+  const byline = runsText(item.longBylineText || item.shortBylineText);
+  const bits = byline
+    .split("•")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const { artist, album, year } = creditsFromBits(bits);
   acc.tracks.push({
     id: videoId || `t:${title}:${acc.tracks.length}`,
     title,
-    artist,
-    album: "",
+    artist: artist || runsText(item.shortBylineText) || "",
+    album,
+    year,
     duration: runsText(item.lengthText),
     artwork: thumbnailUrl(item),
     videoId,
@@ -513,7 +534,10 @@ function parseBrowse(response) {
   const seenNodes = new WeakSet();
 
   const rememberTrack = (index) => {
-    const key = `t:${acc.tracks[index].videoId || acc.tracks[index].id}`;
+    const track = acc.tracks[index];
+    const key = track.setVideoId
+      ? `set:${track.setVideoId}`
+      : `t:${track.videoId || track.id}:${track.shelf || ""}:${index}`;
     if (seen.has(key)) acc.tracks.splice(index, 1);
     else seen.add(key);
   };
@@ -585,7 +609,6 @@ function parseBrowse(response) {
     if (node.playlistPanelVideoWrapperRenderer) {
       const wrapper = node.playlistPanelVideoWrapperRenderer;
       walk(wrapper.primaryRenderer);
-      walk(wrapper.counterpartRenderer);
       return;
     }
     if (node.playlistPanelVideoRenderer) {
@@ -617,28 +640,35 @@ function parseBrowse(response) {
 function continuationToken(response) {
   const found = [];
   const seenNodes = new WeakSet();
-  const walk = (node) => {
-    if (!node || typeof node !== "object" || found.length) return;
+  const walk = (node, inShelf) => {
+    if (!node || typeof node !== "object") return;
     if (seenNodes.has(node)) return;
     seenNodes.add(node);
-    if (node.nextContinuationData?.continuation) {
-      found.push(node.nextContinuationData.continuation);
-      return;
-    }
-    if (node.continuationCommand?.token) {
-      found.push(node.continuationCommand.token);
-      return;
+    const shelf =
+      inShelf ||
+      Boolean(
+        node.musicPlaylistShelfRenderer ||
+          node.musicShelfRenderer ||
+          node.playlistPanelRenderer
+      );
+    const token =
+      node.nextContinuationData?.continuation ||
+      node.continuationCommand?.token ||
+      "";
+    if (token) {
+      found.push({ token, shelf });
+      if (shelf) return;
     }
     if (Array.isArray(node)) {
-      node.forEach(walk);
+      node.forEach((child) => walk(child, shelf));
       return;
     }
     for (const value of Object.values(node)) {
-      if (value && typeof value === "object") walk(value);
+      if (value && typeof value === "object") walk(value, shelf);
     }
   };
-  walk(response);
-  return found[0] || "";
+  walk(response, false);
+  return (found.find((item) => item.shelf) || found[0])?.token || "";
 }
 
 const SONGS_SEARCH_PARAMS = "EgWKAQIIAWoMEA4QChADEAQQCRAF";
@@ -750,9 +780,15 @@ function mergeQueueTracks(hostTracks, nextTracks) {
   for (const track of next) extras.set(track.videoId, track);
   const out = [];
   const seen = new Set();
+  const push = (track) => {
+    const key = track.setVideoId || track.videoId;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(track);
+  };
   for (const track of host) {
     const extra = extras.get(track.videoId);
-    out.push(
+    push(
       extra
         ? {
             ...extra,
@@ -764,14 +800,8 @@ function mergeQueueTracks(hostTracks, nextTracks) {
           }
         : track
     );
-    seen.add(track.videoId);
   }
-  if (host.length > 1) return out;
-  for (const track of next) {
-    if (seen.has(track.videoId)) continue;
-    seen.add(track.videoId);
-    out.push(track);
-  }
+  for (const track of next) push(track);
   return out;
 }
 
@@ -784,7 +814,9 @@ function mergeParsed(parts) {
   for (const part of parts) {
     if (!lyricsId && part.lyricsId) lyricsId = part.lyricsId;
     for (const track of part.tracks || []) {
-      const key = `t:${track.videoId || track.id || track.title}`;
+      const key = track.setVideoId
+        ? `set:${track.setVideoId}`
+        : `t:${track.videoId || track.id || track.title}:${tracks.length}`;
       if (seen.has(key)) continue;
       seen.add(key);
       tracks.push(track);
@@ -915,7 +947,7 @@ const YTM = {
   player(payload) {
     return pageRequest("player", payload, 4000);
   },
-  browseParsed(body, pages = 2) {
+  browseParsed(body, pages = 8) {
     return followPages(YTM.browse, body, pages);
   },
   async searchParsed(query) {
@@ -969,15 +1001,15 @@ const YTM = {
     }
     let parsed = parseQueuePanel(response);
     const hostPlayable = playableQueueTracks(host.tracks);
-    if (
-      (parsed.tracks || []).length <= 1 &&
-      hostPlayable.length <= 1 &&
-      !isConcretePlaylist(resolvedPlaylist)
-    ) {
+    const radioList = String(resolvedPlaylist || "").replace(/^VL/, "").startsWith("RD");
+    const thin =
+      (parsed.tracks || []).length < 8 && hostPlayable.length < 8;
+    if (thin && (radioList || !isConcretePlaylist(resolvedPlaylist))) {
       const followId =
         automixPlaylistId(response) ||
+        (radioList ? resolvedPlaylist : "") ||
         (!resolvedPlaylist && videoId ? `RDAMVM${videoId}` : "");
-      if (followId && followId !== resolvedPlaylist) {
+      if (followId) {
         try {
           const more = await YTM.next({
             videoId: videoId || undefined,
