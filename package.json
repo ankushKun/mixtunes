@@ -4,7 +4,8 @@
   "private": true,
   "description": "YouTube Music with a classic iTunes interface",
   "scripts": {
-    "pack": "node pack.js"
+    "pack": "node pack.js",
+    "test": "node tests/playback-core.test.js && node tests/list-core.test.js"
   },
   "devDependencies": {
     "chrome-types": "0.1.436"

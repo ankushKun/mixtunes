@@ -120,6 +120,40 @@ function isMixedStorefront(state) {
   return MIXED_STOREFRONT_SOURCES.has(state.source);
 }
 
+function isQuickPicksTitle(title) {
+  return /^quick picks$/i.test(String(title || "").trim());
+}
+
+function limitQuickPicks(parsed) {
+  let kept = 0;
+  const tracks = [];
+  for (const track of parsed.tracks || []) {
+    if (isQuickPicksTitle(track.shelf)) {
+      if (kept >= 8) continue;
+      kept += 1;
+    }
+    tracks.push(track);
+  }
+  let keptCovers = 0;
+  const collections = [];
+  for (const item of parsed.collections || []) {
+    if (isQuickPicksTitle(item.shelf) && (item.kind === "song" || item.videoId)) {
+      if (keptCovers >= 8) continue;
+      keptCovers += 1;
+    }
+    collections.push(item);
+  }
+  const shelves = (parsed.shelves || []).map((shelf) => {
+    if (!isQuickPicksTitle(shelf.title)) return shelf;
+    return {
+      ...shelf,
+      tracks: (shelf.tracks || []).slice(0, 8),
+      collections: (shelf.collections || []).slice(0, 8),
+    };
+  });
+  return { ...parsed, tracks, collections, shelves };
+}
+
 function collectionPlaylistId(cover) {
   return (
     cover?.playlistId ||
@@ -304,10 +338,9 @@ function pickMoodChips(chips) {
 }
 
 function storefrontCovers(parsed) {
-  const collections = (parsed.collections || []).filter((item) => !isLibraryShelf(item));
+  const collections = parsed.collections || [];
   const seen = new Set(collections.map((item) => item.videoId).filter(Boolean));
   const loose = (parsed.tracks || []).filter((track) => {
-    if (isLibraryShelf(track)) return false;
     if (!(track.videoId || track.endpoint?.watchEndpoint)) return false;
     if (track.videoId && seen.has(track.videoId)) return false;
     return true;
@@ -376,35 +409,11 @@ function splitPlaylistRows(tracks) {
 }
 
 function coverIdForTrack(track) {
-  if (!track) return "";
-  const album = String(track.album || "").trim();
-  const artist = String(track.artist || "").trim();
-  if (album) return `album:${album}:${artist}`;
-  if (track.albumBrowseId) return track.albumBrowseId;
-  return track.videoId || track.id || `t:${track.title}`;
+  return YTunesList.coverIdForTrack(track);
 }
 
 function coversFromTracks(tracks) {
-  const covers = [];
-  const seen = new Set();
-  for (const track of tracks) {
-    const key = coverIdForTrack(track);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    const group = tracks.filter((item) => coverIdForTrack(item) === key);
-    covers.push({
-      id: key,
-      title: track.album || track.title,
-      subtitle: track.artist,
-      artist: track.artist,
-      album: track.album || "",
-      kind: track.album && group.length > 1 ? "album" : "song",
-      videoId: group.length === 1 ? track.videoId || "" : "",
-      artwork: track.artwork,
-      tracks: group,
-    });
-  }
-  return covers;
+  return YTunesList.coversFromTracks(tracks);
 }
 
 function queueCovers(tracks) {
@@ -469,10 +478,8 @@ function applyNowPlaying(root, state, tracks, status, options = {}) {
     state.coverFlow?.current(),
     selectedCaptionTrack(state) || tracks[Math.max(0, state.selectedIndex)] || null
   );
-  if (options.scroll) {
-    root
-      .querySelector("#ytunes-tracks tr.is-selected")
-      ?.scrollIntoView({ block: "nearest" });
+  if (options.scroll && state.selectedIndex >= 0) {
+    scrollTrackIntoView(root, state, state.selectedIndex);
   }
 }
 
@@ -530,9 +537,7 @@ function revealTrackRow(root, state, index) {
     syncCoverFlowToTrack(root, state, track);
     applyCoverCaption(root, state, state.coverFlow?.current(), track);
   }
-  root
-    .querySelector(`#ytunes-tracks tr[data-index="${index}"]`)
-    ?.scrollIntoView({ block: "nearest" });
+  scrollTrackIntoView(root, state, index);
   const active = document.activeElement;
   if (active && (active.matches("input, textarea") || active.closest(".ytunes-dialog, .ytunes-jump"))) {
     return;
@@ -562,6 +567,10 @@ function markPlayingRows(root, videoId) {
   });
 }
 
+function playback() {
+  return typeof YTunesPlayback !== "undefined" ? YTunesPlayback : null;
+}
+
 function playTrack(track, playlistId, index, options = {}) {
   if (!track) return Promise.resolve();
   const endpoint = track.endpoint ? { ...track.endpoint } : {};
@@ -570,13 +579,15 @@ function playTrack(track, playlistId, index, options = {}) {
     videoId: track.videoId || endpoint.watchEndpoint?.videoId,
   };
   const ownList = Boolean(options.ownList);
-  const listId = String(playlistId || track.playlistId || "").replace(/^VL/, "");
+  const listId = String(playlistId || "").replace(/^VL/, "");
   if (listId && !ownList) watch.playlistId = listId;
+  else if (ownList) delete watch.playlistId;
   if (Number.isFinite(index) && index >= 0) watch.index = index;
   if (watch.videoId) endpoint.watchEndpoint = watch;
   if (!endpoint.watchEndpoint && !endpoint.browseEndpoint) {
     return Promise.reject(new Error("Nothing to play"));
   }
+  if (typeof YTM?.invalidateQueue === "function") YTM.invalidateQueue();
   return YTM.play({ endpoint, ownList });
 }
 
@@ -585,6 +596,7 @@ function playlistIdForPlay(state, track) {
   const fromTrack = String(track?.playlistId || "").replace(/^VL/, "");
   const fromState = String(state?.playlistId || "").replace(/^VL/, "");
   if (state?.source === "now") return fromTrack;
+  if (state?.source === "album" && fromState) return fromState;
   if (fromState && !fromState.startsWith("RD")) return fromState;
   if (fromTrack && !fromTrack.startsWith("RD")) return fromTrack;
   return fromState || fromTrack;
@@ -628,7 +640,12 @@ function radioListId(id) {
 function sessionTracksForPlay(state, track) {
   const shown = state.visibleTracks?.length ? state.visibleTracks : state.tracks;
   if (state.source === "playlist") return splitPlaylistRows(shown).owned;
-  if (state.source === "liked" || state.source === "songs" || state.source === "recents") {
+  if (
+    state.source === "liked" ||
+    state.source === "songs" ||
+    state.source === "recents" ||
+    state.source === "album"
+  ) {
     return shown;
   }
   if (state.source === "now") return state.tracks;
@@ -644,12 +661,18 @@ function beginSession(state, options = {}) {
   const prev = state.session || {};
   const tracks = playableSessionTracks(options.tracks);
   const shuffle = options.shuffle == null ? Boolean(prev.shuffle) : Boolean(options.shuffle);
+  const sameRoster =
+    shuffle &&
+    prev.shuffle &&
+    Array.isArray(prev.order) &&
+    prev.tracks?.length === tracks.length &&
+    tracks.every((track, index) => track.videoId === prev.tracks[index]?.videoId);
   state.session = {
     source: options.source || "list",
     listId: String(options.listId || "").replace(/^VL/, ""),
     tracks,
     shuffle,
-    order: shuffle && tracks.length ? shuffledOrder(tracks.length) : null,
+    order: sameRoster ? prev.order : shuffle && tracks.length ? shuffledOrder(tracks.length) : null,
   };
   return state.session;
 }
@@ -663,46 +686,107 @@ function orderedSessionTracks(session) {
   return session.order.map((index) => tracks[index]).filter(Boolean);
 }
 
-function playStateTrack(state, track) {
-  const fromRadio = state.session?.source === "radio" && state.source === "now";
-  const listId = fromRadio
-    ? state.session.listId || playlistIdForPlay(state, track)
-    : playlistIdForPlay(state, track);
+function playStateTrack(state, track, extras = {}) {
+  if (!track) return Promise.resolve();
+  const api = playback();
+  const cover = extras.cover || coverForTrack(state, track);
+  const sessionTracks =
+    extras.tracks ||
+    (cover?.tracks?.length > 1 ? cover.tracks : sessionTracksForPlay(state, track));
+  const ctx = api?.resolvePlayContext
+    ? api.resolvePlayContext(state, track, {
+        mixedStorefront: isMixedStorefront(state),
+        cover,
+        sessionTracks,
+      })
+    : {
+        mode: "list",
+        listId: playlistIdForPlay(state, track),
+        tracks: sessionTracks,
+        ownList: true,
+      };
   beginSession(state, {
-    source: fromRadio ? "radio" : "list",
-    listId: fromRadio ? state.session.listId || listId : listId,
-    tracks: fromRadio ? state.session.tracks : sessionTracksForPlay(state, track),
+    source: ctx.mode === "radio" ? "radio" : ctx.ownList ? "list" : "queue",
+    listId: ctx.listId,
+    tracks: ctx.tracks,
   });
-  return playTrack(track, fromRadio ? listId : "", playlistIndexOf(state, track), {
-    ownList: !fromRadio,
+  let index;
+  const trustIndex =
+    !ctx.ownList &&
+    ctx.mode === "queue" &&
+    (state.source === "playlist" || state.source === "liked" || state.source === "album");
+  if (trustIndex && ctx.tracks?.length) {
+    const at = ctx.tracks.findIndex((item) => item.videoId && item.videoId === track.videoId);
+    index = at >= 0 ? at : playlistIndexOf(state, track);
+  } else if (trustIndex) {
+    index = playlistIndexOf(state, track);
+  }
+  return playTrack(track, ctx.ownList ? "" : ctx.listId, index, {
+    ownList: Boolean(ctx.ownList),
   });
 }
 
 function skipRoster(state, status) {
-  const session = state.session;
-  if (session?.tracks?.length) {
-    const tracks = orderedSessionTracks(session);
-    const radio = session.source === "radio" || Boolean(radioListId(session.listId));
+  const session = state.session || {};
+  const playingList = String(status?.playlistId || "").replace(/^VL/, "");
+  const playingRadio = radioListId(playingList) || radioListId(session.listId);
+  const forcedMode = document.getElementById("ytunes-root")?.dataset?.sessionMode || "";
+  if (forcedMode === "radio" && session.source === "list") {
+    session.source = "radio";
+    session.listId = radioListId(playingList) || radioListId(session.listId) || session.listId;
+  }
+
+  if (playingRadio && session.source === "list") {
+    const videoId = status?.videoId || "";
+    const inList = Boolean(videoId && session.tracks?.some((track) => track.videoId === videoId));
+    const last = session.tracks?.[session.tracks.length - 1];
+    const atEnd = Boolean(last?.videoId && last.videoId === videoId);
+    if (!inList || atEnd) {
+      session.source = "radio";
+      session.listId = radioListId(playingList) || playingRadio;
+    }
+  }
+
+  if (session.source === "radio" || (playingRadio && session.source !== "list")) {
     return {
-      tracks,
-      playlistId: radio ? session.listId : isConcretePlaylist(session.listId) ? session.listId : "",
-      ownList: !radio,
+      tracks: [],
+      playlistId: playingRadio || session.listId,
+      ownList: false,
     };
   }
 
-  const playingList = String(status?.playlistId || "").replace(/^VL/, "");
+  if (session.source === "queue" && isConcretePlaylist(session.listId)) {
+    return {
+      tracks: session.tracks || [],
+      playlistId: session.listId,
+      ownList: false,
+    };
+  }
+
+  if (session?.tracks?.length) {
+    return {
+      tracks: orderedSessionTracks(session),
+      playlistId: isConcretePlaylist(session.listId) ? session.listId : "",
+      ownList: true,
+    };
+  }
+
   const stateList = String(state.playlistId || "").replace(/^VL/, "");
   const concretePlaying = isConcretePlaylist(playingList) ? playingList : "";
   const concreteState = isConcretePlaylist(stateList) ? stateList : "";
 
-  if (state.source === "playlist" || state.source === "liked") {
+  if (state.source === "playlist" || state.source === "liked" || state.source === "album") {
     const owned =
       state.source === "playlist"
         ? splitPlaylistRows(state.tracks || []).owned
         : state.tracks || [];
     const tracks = owned.filter((track) => track.videoId);
     if (tracks.length) {
-      return { tracks, playlistId: concreteState || concretePlaying, ownList: true };
+      return {
+        tracks,
+        playlistId: concreteState || concretePlaying,
+        ownList: false,
+      };
     }
   }
 
@@ -711,18 +795,14 @@ function skipRoster(state, status) {
   ).filter((track) => track.videoId);
   if (queued.length) {
     const radio = Boolean(radioListId(playingList || stateList));
-    return { tracks: queued, playlistId: radio ? playingList || stateList : concretePlaying, ownList: !radio };
+    return {
+      tracks: queued,
+      playlistId: radio ? playingList || stateList : concretePlaying,
+      ownList: !radio && !concretePlaying,
+    };
   }
 
-  const playingId = status?.videoId || "";
-  const visible = (state.visibleTracks || []).filter(
-    (track) => track.videoId && !isSuggestedTrack(track)
-  );
-  if (playingId && visible.some((track) => track.videoId === playingId)) {
-    return { tracks: visible, playlistId: concretePlaying, ownList: true };
-  }
-
-  return { tracks: [], playlistId: concretePlaying, ownList: true };
+  return { tracks: [], playlistId: concretePlaying, ownList: !concretePlaying };
 }
 
 function syncSkipRoster(root, state, status) {
@@ -733,11 +813,27 @@ function syncSkipRoster(root, state, status) {
   const list = String(playlistId || "").replace(/^VL/, "");
   const skipPlaylist = ownList ? (isConcretePlaylist(list) ? list : "") : list;
   const playingId = status?.videoId || "";
-  const skipIndex = playingId ? ids.indexOf(playingId) : -1;
+  const transport = root.querySelector(".ytunes-transport");
+  const pendingId = transport?.dataset?.pendingSkip || root.dataset.pendingSkip || "";
+  const pendingUntil = Number(
+    transport?.dataset?.pendingSkipUntil || root.dataset.pendingSkipUntil || 0
+  );
+  const skipIndex = playback()?.skipIndexAfterPending
+    ? playback().skipIndexAfterPending(ids, playingId, pendingId, pendingUntil, Date.now())
+    : playingId
+      ? ids.indexOf(playingId)
+      : -1;
+  if (pendingId && Date.now() >= pendingUntil) {
+    delete root.dataset.pendingSkip;
+    delete root.dataset.pendingSkipUntil;
+    if (transport) {
+      delete transport.dataset.pendingSkip;
+      delete transport.dataset.pendingSkipUntil;
+    }
+  }
   if (ids.length > 1 && playingId && ids.includes(playingId)) {
     state.nowTracks = tracks;
   }
-  const transport = root.querySelector(".ytunes-transport");
   [root, transport].forEach((node) => {
     if (!node) return;
     if (ids.length) node.dataset.skipIds = ids.join(",");
@@ -746,6 +842,9 @@ function syncSkipRoster(root, state, status) {
     else delete node.dataset.skipPlaylist;
     if (ownList) node.dataset.ownList = "1";
     else delete node.dataset.ownList;
+    const mode = state.session?.source || (ownList ? "list" : "queue");
+    if (mode) node.dataset.sessionMode = mode;
+    else delete node.dataset.sessionMode;
     if (skipIndex >= 0) node.dataset.skipIndex = String(skipIndex);
     else delete node.dataset.skipIndex;
   });
@@ -1338,16 +1437,21 @@ function renderStatusMeta(root, state, tracks) {
   setMarqueeText(el, [items, extra, state.statusNote, time].filter(Boolean).join(" · "));
 }
 
-function trackRowHtml(state, track, index, selected) {
+function trackRowHtml(state, track, index, selected, extras = {}) {
   const stats = playStat(state.prefs, track.videoId);
-  const suggested = isSuggestedTrack(track);
+  const suggested = extras.suggested ?? isSuggestedTrack(track);
   const playlist = state.source === "playlist";
   const listId = String(
     suggested ? "" : track.playlistId || state.playlistId || ""
   ).replace(/^VL/, "");
+  const playing = Boolean(extras.playing);
+  const browse = Boolean(extras.browse);
+  const parity = extras.parity || (index % 2 === 0 ? "odd" : "even");
   const classes = [
     index === selected ? "is-selected" : "",
     suggested ? "is-suggested" : "",
+    playing ? "is-playing" : "",
+    browse ? "is-browse" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1375,7 +1479,7 @@ function trackRowHtml(state, track, index, selected) {
     ? `<span class="ytunes-row-acts">${acts.join("")}</span>`
     : "";
   return `
-      <tr data-index="${index}" data-id="${escapeHtml(track.id || "")}" data-video="${escapeHtml(
+      <tr data-index="${index}" data-parity="${parity}" data-id="${escapeHtml(track.id || "")}" data-video="${escapeHtml(
         track.videoId || ""
       )}" data-playlist="${escapeHtml(listId)}" class="${classes}">
         <td><span class="ytunes-speaker" aria-hidden="true"></span></td>
@@ -1392,6 +1496,120 @@ function trackRowHtml(state, track, index, selected) {
       </tr>`;
 }
 
+function listRowHeight(root) {
+  const table = root?.querySelector?.(".ytunes-table");
+  if (table) {
+    const raw = getComputedStyle(table).getPropertyValue("--yt-row-h");
+    const n = parseFloat(raw);
+    if (n > 8) return n;
+  }
+  return YTunesList.LIST_ROW_HEIGHT;
+}
+
+function listHeaderHeight(root) {
+  return root.querySelector(".ytunes-table thead")?.offsetHeight || 0;
+}
+
+function measureRowMarquees(row) {
+  if (!row || typeof measureMarquee !== "function") return;
+  row.querySelectorAll(".ytunes-marquee").forEach(measureMarquee);
+}
+
+function virtualRowHtml(state, row, parity, selected, playingId) {
+  if (row.kind === "empty") {
+    return `<tr class="is-empty"><td colspan="8"><span class="ytunes-spinner" aria-hidden="true"></span>${escapeHtml(
+      row.title || "No tracks yet."
+    )}</td></tr>`;
+  }
+  if (row.kind === "section") {
+    return `<tr class="ytunes-section" data-parity="${parity}"><td colspan="8">${escapeHtml(
+      row.title || ""
+    )}</td></tr>`;
+  }
+  const track = row.track;
+  return trackRowHtml(state, track, row.index, selected, {
+    suggested: row.suggested,
+    playing: Boolean(track?.videoId && playingId && track.videoId === playingId),
+    browse: Boolean(state.browseCover && YTunesList.trackMatchesCover(track, state.browseCover)),
+    parity,
+  });
+}
+
+function paintVirtualTracks(root, state, opts = {}) {
+  const body = root.querySelector("#ytunes-tracks");
+  const wrap = root.querySelector("#ytunes-table-wrap");
+  if (!body || !wrap) return;
+  const rows = state.listRows || [];
+  if (!rows.length) return;
+  const rowHeight = listRowHeight(root);
+  const win = YTunesList.virtualWindow({
+    count: rows.length,
+    rowHeight,
+    scrollTop: wrap.scrollTop,
+    viewportHeight: wrap.clientHeight || 480,
+    overscan: 8,
+    headerHeight: listHeaderHeight(root),
+  });
+  const structKey = `${state.listGen || 0}:${win.start}:${win.end}:${rows.length}`;
+  if (state.virtStructKey === structKey && !opts.force) {
+    patchVirtualRowState(body, state);
+    return;
+  }
+  state.virtStructKey = structKey;
+  const selected = state.selectedIndex;
+  const playingId = probe()?.videoId || "";
+  const parts = [];
+  const top = YTunesList.spacerRowHtml(win.padTop);
+  if (top) parts.push(top);
+  for (let i = win.start; i < win.end; i += 1) {
+    const parity = i % 2 === 0 ? "odd" : "even";
+    parts.push(virtualRowHtml(state, rows[i], parity, selected, playingId));
+  }
+  const bottom = YTunesList.spacerRowHtml(win.padBottom);
+  if (bottom) parts.push(bottom);
+  body.innerHTML = parts.join("");
+  fillSpinners(body);
+  const table = root.querySelector(".ytunes-table");
+  if (table) table.setAttribute("aria-rowcount", String(rows.length + 1));
+  const selectedRow = body.querySelector("tr.is-selected");
+  if (selectedRow) measureRowMarquees(selectedRow);
+}
+
+function patchVirtualRowState(body, state) {
+  const playingId = probe()?.videoId || "";
+  const selected = state.selectedIndex;
+  const browse = state.browseCover;
+  body.querySelectorAll("tr[data-index]").forEach((row) => {
+    const index = Number(row.dataset.index);
+    const track = state.visibleTracks[index];
+    row.classList.toggle("is-selected", index === selected);
+    row.classList.toggle("is-playing", Boolean(playingId && row.dataset.video === playingId));
+    row.classList.toggle(
+      "is-browse",
+      Boolean(track && browse && YTunesList.trackMatchesCover(track, browse))
+    );
+  });
+}
+
+function scrollTrackIntoView(root, state, index) {
+  const wrap = root.querySelector("#ytunes-table-wrap");
+  if (!wrap) return;
+  const rows = state.listRows || [];
+  const rowIndex = YTunesList.flattenIndexForTrack(rows, index);
+  if (rowIndex < 0) return;
+  wrap.scrollTop = YTunesList.scrollToRowIndex({
+    scrollTop: wrap.scrollTop,
+    viewportHeight: wrap.clientHeight,
+    headerHeight: listHeaderHeight(root),
+    rowIndex,
+    rowHeight: listRowHeight(root),
+  });
+  paintVirtualTracks(root, state);
+  wrap
+    .querySelector(`#ytunes-tracks tr[data-index="${index}"]`)
+    ?.scrollIntoView({ block: "nearest" });
+}
+
 function renderTracks(root, state, tracks, emptyMessage) {
   const body = root.querySelector("#ytunes-tracks");
   const playlist = state.source === "playlist";
@@ -1401,7 +1619,10 @@ function renderTracks(root, state, tracks, emptyMessage) {
     : { owned: unique, suggested: [] };
   const visible = playlist ? owned.concat(suggested) : tracks || [];
   state.visibleTracks = visible;
+  state.listGen = (state.listGen || 0) + 1;
+  state.virtStructKey = "";
   if (!visible.length) {
+    state.listRows = [];
     body.innerHTML = `<tr class="is-empty"><td colspan="8"><span class="ytunes-spinner" aria-hidden="true"></span>${escapeHtml(
       emptyMessage || "No tracks yet."
     )}</td></tr>`;
@@ -1409,31 +1630,18 @@ function renderTracks(root, state, tracks, emptyMessage) {
     renderStatusMeta(root, state, []);
     return;
   }
-  const selected = state.selectedIndex;
-  const parts = [];
-  if (playlist && !owned.length) {
-    parts.push(
-      `<tr class="is-empty"><td colspan="8"><span class="ytunes-spinner" aria-hidden="true"></span>${escapeHtml(
-        emptyMessage || "This playlist is empty."
-      )}</td></tr>`
-    );
-  }
-  owned.forEach((track, i) => {
-    parts.push(trackRowHtml(state, track, i, selected));
+  const listOwned = playlist ? owned : visible;
+  const listSuggested = playlist ? suggested : [];
+  const sectioned = isMixedStorefront(state) && listOwned.some((track) => track.shelf);
+  state.listRows = YTunesList.flattenListRows({
+    owned: listOwned,
+    suggested: listSuggested,
+    sectioned,
+    emptyOwnedMessage:
+      playlist && !owned.length ? emptyMessage || "This playlist is empty." : "",
   });
-  if (playlist && suggested.length) {
-    parts.push(
-      `<tr class="ytunes-section"><td colspan="8">Suggestions</td></tr>`
-    );
-    suggested.forEach((track, i) => {
-      parts.push(trackRowHtml(state, track, owned.length + i, selected));
-    });
-  }
-  body.innerHTML = parts.join("");
-  fillSpinners(body);
+  paintVirtualTracks(root, state, { force: true });
   renderStatusMeta(root, state, visible);
-  markPlayingRows(root, probe()?.videoId || "");
-  refreshMarquees(root);
 }
 
 function markGridSelection(root, state) {
@@ -1447,6 +1655,14 @@ function markGridSelection(root, state) {
 function renderGrid(root, state) {
   const grid = root.querySelector("#ytunes-grid");
   if (!grid) return;
+  const view = root.querySelector(".ytunes-main")?.dataset.view;
+  if (view !== "grid") {
+    if (grid.childElementCount > 48) {
+      grid.innerHTML = "";
+      delete grid.dataset.painted;
+    }
+    return;
+  }
   if (!state.covers.length) {
     grid.innerHTML = `<p class="ytunes-source-empty">No albums</p>`;
     return;
@@ -1468,7 +1684,7 @@ function renderGrid(root, state) {
       )}">
         <span class="ytunes-tile-art">${
           cover.artwork
-            ? `<img src="${escapeHtml(cover.artwork)}" alt="">`
+            ? `<img src="${escapeHtml(cover.artwork)}" alt="" loading="lazy" decoding="async">`
             : `<span class="ytunes-cf-ph">${escapeHtml(
                 (cover.title || "?").charAt(0).toUpperCase()
               )}</span>`
@@ -1478,7 +1694,7 @@ function renderGrid(root, state) {
       </button>`;
     })
     .join("");
-  refreshMarquees(root);
+  grid.dataset.painted = "1";
 }
 
 function renderArtwell(root, cover, status, track) {
@@ -1503,24 +1719,17 @@ function showCovers(state, covers, selectedId) {
 }
 
 function highlightCoverRows(root, state, cover, opts = {}) {
-  const album = cover?.title || "";
-  const art = cover?.artwork || "";
-  const coverTracks = cover?.tracks || [];
+  state.browseCover = cover || null;
   let first = -1;
-  root.querySelectorAll("#ytunes-tracks tr[data-index]").forEach((row) => {
-    const index = Number(row.dataset.index);
-    const track = state.visibleTracks[index];
-    const match = Boolean(
-      track &&
-        (coverTracks.some((item) => item.videoId && item.videoId === track.videoId) ||
-          cover?.id === coverIdForTrack(track) ||
-          (album && track.album === album) ||
-          (art && track.artwork === art))
-    );
-    row.classList.toggle("is-browse", match);
-    if (match && first < 0) first = index;
-  });
+  const tracks = state.visibleTracks || [];
+  for (let i = 0; i < tracks.length; i += 1) {
+    if (YTunesList.trackMatchesCover(tracks[i], cover)) {
+      first = i;
+      break;
+    }
+  }
   if (first < 0) {
+    paintVirtualTracks(root, state);
     applyCoverCaption(
       root,
       state,
@@ -1530,14 +1739,8 @@ function highlightCoverRows(root, state, cover, opts = {}) {
     return;
   }
   state.selectedIndex = first;
-  root.querySelectorAll("#ytunes-tracks tr[data-index]").forEach((row) => {
-    row.classList.toggle("is-selected", Number(row.dataset.index) === first);
-  });
-  if (!opts.quiet) {
-    root
-      .querySelector(`#ytunes-tracks tr[data-index="${first}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }
+  if (!opts.quiet) scrollTrackIntoView(root, state, first);
+  else paintVirtualTracks(root, state);
   const songCaption =
     !isCoverBrowser(state) || isSongCover(cover) ? selectedCaptionTrack(state) : null;
   applyCoverCaption(root, state, cover, songCaption);
@@ -1546,9 +1749,7 @@ function highlightCoverRows(root, state, cover, opts = {}) {
 function selectTrackRow(root, state, index, play) {
   if (index < 0 || index >= state.visibleTracks.length) return;
   state.selectedIndex = index;
-  root.querySelectorAll("#ytunes-tracks tr[data-index]").forEach((node) => {
-    node.classList.toggle("is-selected", Number(node.dataset.index) === index);
-  });
+  paintVirtualTracks(root, state);
   const track = state.visibleTracks[index];
   syncCoverFlowToTrack(root, state, track);
   applyCoverCaption(root, state, state.coverFlow?.current(), track);
@@ -1601,8 +1802,15 @@ function sortTracks(state) {
   return source.slice().sort(compare);
 }
 
-function applyParsed(root, state, parsed, emptyMessage) {
-  state.followVideoId = "";
+function applyParsed(root, state, parsed, emptyMessage, options = {}) {
+  const keepSelection = Boolean(options.keepSelection);
+  const prevVideo = keepSelection
+    ? state.visibleTracks[state.selectedIndex]?.videoId || ""
+    : "";
+  const prevCoverId = keepSelection ? state.selectedCoverId || "" : "";
+  const wrap = root.querySelector("#ytunes-table-wrap");
+  const prevScroll = keepSelection && wrap ? wrap.scrollTop : null;
+  if (!keepSelection) state.followVideoId = "";
   if (isLikedLibrary(state)) {
     for (const track of parsed.tracks) {
       track.liked = true;
@@ -1628,29 +1836,36 @@ function applyParsed(root, state, parsed, emptyMessage) {
     state.source === "search"
       ? searchCovers
       : isMixedStorefront(state)
-        ? collectionCovers.length
-          ? collectionCovers
-          : coversFromTracks(playlistOwned)
+        ? uniqueCovers(
+            collectionCovers.length
+              ? collectionCovers
+              : coversFromTracks(playlistOwned)
+          )
         : parsed.collections.length &&
             (COVER_BROWSER_SOURCES.has(state.source) || state.source === "search")
           ? parsed.collections
           : coversFromTracks(playlistOwned)
   );
   const pendingId = state.pendingSelectVideoId || "";
-  state.pendingSelectVideoId = "";
-  const pendingIndex = indexOfVideo(visible, pendingId);
-  state.selectedIndex =
-    pendingIndex >= 0
-      ? pendingIndex
-      : playlistOwned.length
-        ? 0
-        : parsed.tracks.length
-          ? splitPlaylistRows(parsed.tracks).owned.length
-          : -1;
+  if (!keepSelection) state.pendingSelectVideoId = "";
+  const pendingIndex = indexOfVideo(visible, pendingId || prevVideo);
+  if (pendingIndex >= 0) {
+    state.selectedIndex = pendingIndex;
+  } else if (!keepSelection || state.selectedIndex >= visible.length) {
+    state.selectedIndex = playlistOwned.length
+      ? 0
+      : parsed.tracks.length
+        ? splitPlaylistRows(parsed.tracks).owned.length
+        : -1;
+  }
   state.covers = covers;
   const pendingCover =
     pendingIndex >= 0 ? coverForTrack(state, visible[pendingIndex]) : null;
-  showCovers(state, covers, pendingCover?.id || covers[0]?.id || "");
+  showCovers(
+    state,
+    covers,
+    pendingCover?.id || prevCoverId || covers[0]?.id || ""
+  );
   if (!covers.length) {
     setCoverEmptyMessage(
       root,
@@ -1677,19 +1892,24 @@ function applyParsed(root, state, parsed, emptyMessage) {
   renderGrid(root, state);
   applyCoverCaption(root, state, state.coverFlow.current(), selectedCaptionTrack(state));
   syncSkipRoster(root, state, probe());
-  if (pendingIndex >= 0) {
-    root
-      .querySelector(`#ytunes-tracks tr[data-index="${pendingIndex}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+  if (keepSelection && prevScroll != null && wrap) {
+    wrap.scrollTop = prevScroll;
+    paintVirtualTracks(root, state);
+  } else if (pendingIndex >= 0) {
+    scrollTrackIntoView(root, state, pendingIndex);
     const active = document.activeElement;
     if (
       !active ||
       !(active.matches("input, textarea") || active.closest(".ytunes-dialog, .ytunes-jump"))
     ) {
-      root.querySelector("#ytunes-table-wrap")?.focus({ preventScroll: true });
+      wrap?.focus({ preventScroll: true });
     }
   }
-  if (isCoverBrowser(state) && state.source !== "search") {
+  if (
+    isCoverBrowser(state) &&
+    state.source !== "search" &&
+    !(isMixedStorefront(state) && parsed.tracks.length)
+  ) {
     previewCoverTracks(root, state, state.coverFlow?.current());
   }
 }
@@ -1709,20 +1929,24 @@ function bindShell(root) {
     draggingVolume: false,
     volumeLock: { value: null, until: 0 },
     draggingSeek: false,
-    source: "songs",
+    source: "home",
     playlistId: "",
     collections: [],
     tracks: [],
     visibleTracks: [],
+    listRows: [],
+    listGen: 0,
+    virtStructKey: "",
+    browseCover: null,
     covers: [],
     selectedCoverId: "",
     selectedIndex: -1,
     coverFlow: null,
-    lastSource: { type: "songs" },
+    lastSource: { type: "home" },
     loadSeq: 0,
     suggestSeq: 0,
     busySlots: {},
-    history: [{ type: "songs" }],
+    history: [{ type: "home" }],
     historyIndex: 0,
     sortKey: "",
     sortDir: "asc",
@@ -1787,10 +2011,10 @@ function bindShell(root) {
       cover.tracks?.[0] || (isSongCover(cover) ? trackFromSongCover(cover) : null)
     );
     if (isSongCover(cover)) {
-      playStateTrack(state, trackFromSongCover(cover));
+      playStateTrack(state, trackFromSongCover(cover), { cover });
       return;
     }
-    if (!cover.tracks?.length && collectionBrowseBody(cover)) {
+    if ((cover.tracks?.length || 0) <= 1 && collectionBrowseBody(cover)) {
       try {
         await fetchCollectionTracks(cover);
       } catch {
@@ -1798,20 +2022,15 @@ function bindShell(root) {
       }
     }
     if (cover.tracks?.[0]) {
-      beginSession(state, {
-        source: "list",
-        listId: collectionPlaylistId(cover) || cover.browseId,
-        tracks: cover.tracks,
-      });
-      playStateTrack(state, cover.tracks[0]);
+      playStateTrack(state, cover.tracks[0], { cover, tracks: cover.tracks });
       return;
     }
     if (cover.browseId) {
       await openCollection(root, state, cover, { history: true });
       return;
     }
-    if (cover.endpoint) {
-      YTM.play({ endpoint: cover.endpoint }).catch(() => {});
+    if (cover.endpoint || cover.videoId || collectionPlaylistId(cover)) {
+      playStateTrack(state, trackFromSongCover(cover), { cover });
     }
   }
 
@@ -1956,7 +2175,7 @@ function bindShell(root) {
           resetCovers: stillThin && tracks.length > 1,
           scroll: false,
         });
-        if (state.session?.source === "radio") {
+        if (state.session?.source === "radio" || state.session?.source === "queue") {
           state.session.listId = queued.playlistId || state.session.listId;
           state.session.tracks = playableSessionTracks(tracks);
           if (state.session.shuffle) {
@@ -2001,11 +2220,6 @@ function bindShell(root) {
   }
 
   async function resumeOrToggle(action) {
-    const gestured = Number(document.documentElement.dataset.ytunesGesture || 0);
-    if (gestured && Date.now() - gestured < 400) {
-      await refreshUi();
-      return;
-    }
     if (action === "playPause" || action === "play") {
       const live = probe();
       if (isIdleStatus(live)) {
@@ -2065,6 +2279,9 @@ function bindShell(root) {
         session.order = session.shuffle ? shuffledOrder((session.tracks || []).length) : null;
         state.session = session;
         setPressed(root, "shuffle", session.shuffle);
+        if (session.source === "queue" || session.source === "radio") {
+          clickControl("shuffle");
+        }
         syncSkipRoster(root, state, probe());
         return;
       }
@@ -2200,6 +2417,7 @@ function bindShell(root) {
     root.querySelector(".ytunes-main").dataset.view = button.dataset.view;
     persistChrome();
     if (button.dataset.view === "coverflow") state.coverFlow.focus();
+    if (button.dataset.view === "grid") renderGrid(root, state);
   });
 
   root.querySelector("#ytunes-prefs-open")?.addEventListener("click", () => {
@@ -2347,7 +2565,7 @@ function bindShell(root) {
   function restoreLibrary() {
     hideSuggest();
     syncSearchClear();
-    loadSource(root, state, state.lastSource || { type: "songs" }, { history: false });
+    loadSource(root, state, state.lastSource || { type: "home" }, { history: false });
   }
 
   search.addEventListener("input", () => {
@@ -2454,6 +2672,25 @@ function bindShell(root) {
   );
 
   const table = root.querySelector("#ytunes-tracks");
+  const tableWrap = root.querySelector("#ytunes-table-wrap");
+  let virtFrame = 0;
+  const scheduleVirtualPaint = () => {
+    if (virtFrame) return;
+    virtFrame = requestAnimationFrame(() => {
+      virtFrame = 0;
+      paintVirtualTracks(root, state);
+    });
+  };
+  tableWrap?.addEventListener("scroll", scheduleVirtualPaint, { passive: true });
+  if (typeof ResizeObserver === "function" && tableWrap) {
+    new ResizeObserver(scheduleVirtualPaint).observe(tableWrap);
+  }
+  table.addEventListener("mouseover", (event) => {
+    const row = event.target.closest("tr[data-index]");
+    if (!row || row.dataset.mq === "1") return;
+    row.dataset.mq = "1";
+    measureRowMarquees(row);
+  });
 
   async function reloadPlaylist() {
     if (state.source !== "playlist" || !state.lastSource) return;
@@ -2535,6 +2772,12 @@ function bindShell(root) {
     persistChrome();
   });
 
+  root.querySelector("#ytunes-grid").addEventListener("mouseover", (event) => {
+    const tile = event.target.closest("[data-cover-id]");
+    if (!tile || tile.dataset.mq === "1") return;
+    tile.dataset.mq = "1";
+    measureRowMarquees(tile);
+  });
   root.querySelector("#ytunes-grid").addEventListener("click", (event) => {
     const tile = event.target.closest("[data-cover-id]");
     if (!tile) return;
@@ -2733,15 +2976,31 @@ function bindShell(root) {
       return;
     }
     if ((action === "next" || action === "queue") && track.videoId) {
+      let hostOk = false;
       try {
         await YTM.enqueue(track.videoId, action === "next" ? "next" : "end");
+        hostOk = true;
         YTM.invalidateQueue();
+      } catch {
+        hostOk = false;
+      }
+      const session = state.session;
+      if (session?.source === "list" && session.tracks?.length) {
+        const currentId = probe().videoId;
+        const at = session.tracks.findIndex((item) => item.videoId === currentId);
+        if (action === "next" && at >= 0) session.tracks.splice(at + 1, 0, track);
+        else session.tracks.push(track);
+        if (session.shuffle) session.order = shuffledOrder(session.tracks.length);
+        syncSkipRoster(root, state, probe());
+        hostOk = true;
+      }
+      if (hostOk) {
         toast.show(action === "next" ? "Playing next" : "Added to queue");
         if (state.source === "now") {
           state.nowVideoId = "";
           refreshNowPlayingList(probe(), true);
         }
-      } catch {
+      } else {
         toast.show("Could not add to queue", "error");
       }
       return;
@@ -2864,7 +3123,6 @@ function bindShell(root) {
     if (media) {
       event.preventDefault();
       event.stopPropagation();
-      controlPlayback(media).then(() => refreshUi());
       return;
     }
     // Hotkey priority: prefs/search chords > dialog > menu/suggest > lyrics > nav
@@ -2924,6 +3182,7 @@ function bindShell(root) {
       return;
     }
     if (event.key === "Enter") {
+      if (document.activeElement?.closest?.("#ytunes-coverflow")) return;
       event.preventDefault();
       event.stopPropagation();
       if (state.selectedIndex >= 0) {
@@ -2965,8 +3224,7 @@ function bindShell(root) {
         Math.min(state.visibleTracks.length - 1, (state.selectedIndex < 0 ? 0 : state.selectedIndex) + delta)
       );
       selectTrackRow(root, state, next, false);
-      const row = table.querySelector(`tr[data-index="${next}"]`);
-      row?.scrollIntoView({ block: "nearest" });
+      scrollTrackIntoView(root, state, next);
       return;
     }
     if (
@@ -3011,6 +3269,7 @@ function bindShell(root) {
     syncRowLikes(root, state);
     try {
       await YTM.like(videoId, next);
+      libraryMemo.clear();
       toast.show(liked ? "Liked" : "Removed like");
     } catch {
       if (status?.videoId === videoId) clickControl("like");
@@ -3334,8 +3593,9 @@ function bindShell(root) {
     state.sortDir = state.prefs.sortDir || "asc";
     state.lyricsOn = Boolean(state.prefs.lyricsOn);
     if (state.prefs.source?.type && state.prefs.source.type !== "search") {
-      state.lastSource = state.prefs.source;
-      state.history = [state.prefs.source];
+      const saved = state.prefs.source;
+      state.lastSource = saved.type === "songs" ? { type: "home" } : saved;
+      state.history = [state.lastSource];
       state.historyIndex = 0;
     }
     applySourceGroups(root, state.prefs.sourceGroups);
@@ -3354,10 +3614,22 @@ function bindShell(root) {
   syncNav();
 }
 
-async function fetchCollectionTracks(cover, stillCurrent) {
+async function fetchCollectionTracks(cover, stillCurrent, onTracks) {
   const body = collectionBrowseBody(cover);
   if (!body) return cover.tracks || [];
-  let parsed = await YTM.browseParsed(body, 2);
+  const emit = (tracks) => {
+    cover.tracks = tracks;
+    if (onTracks && tracks.length) onTracks(tracks);
+  };
+  const opts = {
+    pages: "all",
+    shouldStop: stillCurrent ? () => !stillCurrent() : null,
+    onProgress: (parsed) => {
+      const tracks = uniqueTracks(parsed.tracks);
+      if (tracks.length) emit(tracks);
+    },
+  };
+  let parsed = await YTM.browseParsed(body, opts);
   if (stillCurrent && !stillCurrent()) return [];
   let tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
   const playlistId = collectionPlaylistId(cover);
@@ -3367,7 +3639,7 @@ async function fetchCollectionTracks(cover, stillCurrent) {
       : `VL${playlistId}`
     : "";
   if (!tracks.length && vl && vl !== body.browseId) {
-    parsed = await YTM.browseParsed({ browseId: vl }, 2);
+    parsed = await YTM.browseParsed({ browseId: vl }, opts);
     if (stillCurrent && !stillCurrent()) return [];
     tracks = await collectSongsFromParsed(parsed, cover, stillCurrent);
   }
@@ -3426,16 +3698,43 @@ async function previewCoverTracks(root, state, cover, seq) {
 
   beginBusy(root, state, { seq: token, slot: "preview", label: "Loading songs…" });
   try {
-    const tracks = await fetchCollectionTracks(cover, stillCurrent);
+    let paintedCount = 0;
+    const tracks = await fetchCollectionTracks(cover, stillCurrent, (partial) => {
+      if (!stillCurrent()) return;
+      const plan = YTunesList.libraryUpdatePlan({
+        paintedCount,
+        nextCount: partial.length,
+        isFinal: false,
+      });
+      if (plan === "paint") {
+        state.tracks = partial;
+        state.playlistId = cover.playlistId || partial[0]?.playlistId || "";
+        renderTracks(root, state, partial, "No tracks yet.");
+        paintedCount = partial.length;
+        return;
+      }
+      if (plan === "status") noteLibraryFetch(root, state, partial.length);
+    });
     if (!stillCurrent()) return;
+    state.statusNote = "";
     state.tracks = tracks;
     state.playlistId = cover.playlistId || tracks[0]?.playlistId || "";
-    renderTracks(
-      root,
-      state,
-      tracks,
-      tracks.length ? "No tracks yet." : "No songs in this collection."
-    );
+    if (
+      YTunesList.libraryUpdatePlan({
+        paintedCount,
+        nextCount: tracks.length,
+        isFinal: true,
+      }) === "paint"
+    ) {
+      renderTracks(
+        root,
+        state,
+        tracks,
+        tracks.length ? "No tracks yet." : "No songs in this collection."
+      );
+    } else {
+      renderStatusMeta(root, state, state.visibleTracks);
+    }
     if (tracks.length) highlightCoverRows(root, state, cover);
   } catch (error) {
     if (!stillCurrent()) return;
@@ -3452,12 +3751,11 @@ async function openCollection(root, state, collection, options = {}) {
     const body = collectionBrowseBody(collection) || {
       browseId: collection.browseId || `VL${collection.playlistId}`,
     };
-    const parsed = await YTM.browseParsed(body, 2);
-    if (seq !== state.loadSeq) return;
-    const tracks = parsed.tracks;
-    state.playlistId = collection.playlistId || tracks[0]?.playlistId || "";
+    if (collection.kind === "artist") state.source = "artist";
+    else if (collection.kind === "playlist") state.source = "playlist";
+    else if (collection.kind === "podcast") state.source = "podcasts";
+    else state.source = "album";
     state.selectedCoverId = collection.id;
-    collection.tracks = tracks;
     if (options.history) {
       pushHistoryFor(root, state, {
         type: collection.kind || "album",
@@ -3466,38 +3764,79 @@ async function openCollection(root, state, collection, options = {}) {
         title: collection.title,
       });
     }
-    const nested = (parsed.collections || []).filter(
-      (item) => item.kind !== "artist" && item.id !== collection.id
-    );
-    if (collection.kind === "artist" && nested.length) {
-      showCovers(state, nested, nested[0]?.id || "");
+    const paint = (parsed) => {
+      if (seq !== state.loadSeq) return;
+      const tracks = parsed.tracks || [];
+      state.playlistId = collection.playlistId || tracks[0]?.playlistId || "";
+      collection.tracks = tracks;
+      const nested = (parsed.collections || []).filter(
+        (item) => item.kind !== "artist" && item.id !== collection.id
+      );
+      if (collection.kind === "artist" && nested.length) {
+        showCovers(state, nested, nested[0]?.id || "");
+        state.tracks = tracks;
+        renderTracks(
+          root,
+          state,
+          tracks,
+          tracks.length ? "No tracks yet." : "Select an album."
+        );
+        renderGrid(root, state);
+        applyCoverCaption(root, state, collection, selectedCaptionTrack(state));
+        return;
+      }
+      if (!tracks.length && nested.length) {
+        showCovers(state, nested, nested[0]?.id || "");
+        renderTracks(root, state, [], "Select an album.");
+        renderGrid(root, state);
+        return;
+      }
       state.tracks = tracks;
       renderTracks(
         root,
         state,
         tracks,
-        tracks.length ? "No tracks yet." : "Select an album."
+        tracks.length ? "No tracks yet." : "No tracks in this album."
       );
+      showCovers(state, state.covers, state.selectedCoverId);
       renderGrid(root, state);
       applyCoverCaption(root, state, collection, selectedCaptionTrack(state));
-      return;
+    };
+    let paintedCount = 0;
+    const parsed = await YTM.browseParsed(body, {
+      pages: "all",
+      shouldStop: () => seq !== state.loadSeq,
+      onProgress: (next) => {
+        if (seq !== state.loadSeq) return;
+        const nextCount = libraryItemCount(next);
+        const plan = YTunesList.libraryUpdatePlan({
+          paintedCount,
+          nextCount,
+          isFinal: false,
+        });
+        if (plan === "paint") {
+          paint(next);
+          paintedCount = nextCount;
+          endBusy(root, state, { seq, slot: "source" });
+          return;
+        }
+        if (plan === "status") noteLibraryFetch(root, state, nextCount);
+      },
+    });
+    if (seq !== state.loadSeq) return;
+    const finalCount = libraryItemCount(parsed);
+    state.statusNote = "";
+    if (
+      YTunesList.libraryUpdatePlan({
+        paintedCount,
+        nextCount: finalCount,
+        isFinal: true,
+      }) === "paint"
+    ) {
+      paint(parsed);
+    } else {
+      renderStatusMeta(root, state, state.visibleTracks);
     }
-    if (!tracks.length && nested.length) {
-      showCovers(state, nested, nested[0]?.id || "");
-      renderTracks(root, state, [], "Select an album.");
-      renderGrid(root, state);
-      return;
-    }
-    state.tracks = tracks;
-    renderTracks(
-      root,
-      state,
-      tracks,
-      tracks.length ? "No tracks yet." : "No tracks in this album."
-    );
-    showCovers(state, state.covers, state.selectedCoverId);
-    renderGrid(root, state);
-    applyCoverCaption(root, state, collection, selectedCaptionTrack(state));
   } catch (error) {
     if (seq !== state.loadSeq) return;
     renderTracks(root, state, [], error.message || "Could not load album.");
@@ -3566,15 +3905,24 @@ async function loadPlaylists(root, state) {
 }
 
 function applyStorefront(root, state, parsed, emptyMessage) {
+  parsed = limitQuickPicks(parsed);
   const { collections, songCovers } = storefrontCovers(parsed);
-  const tracks = topLevelSongsFromCovers(songCovers);
+  const tracks = uniqueTracks(
+    (parsed.tracks || []).concat(topLevelSongsFromCovers(songCovers))
+  );
+  const albumish = collections.filter((item) => !isSongCover(item));
+  const songTiles = songCovers.filter((cover) =>
+    /quick picks|listen again|forgotten|mixed for you|songs/i.test(cover.shelf || "")
+  );
   applyParsed(
     root,
     state,
     {
       tracks,
-      collections,
+      collections: albumish.concat(songTiles),
       lyricsId: parsed.lyricsId,
+      chips: parsed.chips || [],
+      shelves: parsed.shelves || [],
     },
     tracks.length
       ? emptyMessage
@@ -3588,7 +3936,7 @@ async function cachedHome(state) {
   if (state.homeCache && Date.now() - (state.homeCacheAt || 0) < 120000) {
     return state.homeCache;
   }
-  const parsed = await YTM.browseParsed({ browseId: BROWSE_IDS.home }, 2);
+  const parsed = await YTM.browseParsed({ browseId: BROWSE_IDS.home }, 4);
   state.homeCache = parsed;
   state.homeCacheAt = Date.now();
   return parsed;
@@ -3682,6 +4030,73 @@ async function loadMoodStation(source) {
   return YTM.browseParsed({ browseId: BROWSE_IDS.moods }, 2);
 }
 
+const LIBRARY_MEMO_MS = 120000;
+const libraryMemo = new Map();
+
+function libraryMemoKey(body) {
+  return JSON.stringify(body);
+}
+
+function readLibraryMemo(body) {
+  const key = libraryMemoKey(body);
+  const hit = libraryMemo.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > LIBRARY_MEMO_MS) {
+    libraryMemo.delete(key);
+    return null;
+  }
+  return hit;
+}
+
+function writeLibraryMemo(body, parsed) {
+  libraryMemo.set(libraryMemoKey(body), { at: Date.now(), parsed });
+}
+
+function libraryItemCount(parsed) {
+  return Math.max(
+    (parsed?.tracks || []).length,
+    (parsed?.collections || []).length
+  );
+}
+
+function noteLibraryFetch(root, state, count) {
+  state.statusNote = count > 0 ? `Fetching more (${count})…` : "Fetching more…";
+  renderStatusMeta(root, state, state.visibleTracks);
+}
+
+function applyLibraryParsed(root, state, type, source, parsed, emptyMessage, options = {}) {
+  const collectionFirst =
+    !parsed.tracks.length ||
+    ["albums", "artists", "artist", "album"].includes(type);
+  applyParsed(
+    root,
+    state,
+    {
+      tracks: parsed.tracks,
+      collections: collectionFirst ? parsed.collections : [],
+      lyricsId: parsed.lyricsId,
+    },
+    emptyMessage,
+    options
+  );
+  if ((type === "playlist" || type === "album") && parsed.tracks.length) {
+    const pid = String(source.playlistId || parsed.tracks[0]?.playlistId || "").replace(
+      /^VL/,
+      ""
+    );
+    state.playlistId = pid;
+    if (pid && !pid.startsWith("RD")) {
+      const rows =
+        type === "playlist" ? splitPlaylistRows(state.tracks).owned : state.tracks;
+      for (const track of rows) {
+        if (!track.playlistId || String(track.playlistId).startsWith("RD")) {
+          track.playlistId = pid;
+        }
+      }
+    }
+  }
+}
+
 async function loadSource(root, state, source, options = {}) {
   const seq = (state.loadSeq += 1);
   const type = source.type || "songs";
@@ -3691,7 +4106,8 @@ async function loadSource(root, state, source, options = {}) {
 
   state.source = type;
   state.followVideoId = "";
-  state.statusNote = type === "mixes" ? "From Home" : "";
+  state.statusNote =
+    type === "home" ? "YouTube Music Home" : type === "mixes" ? "From Home" : "";
   state.playlistId = source.playlistId || (type === "liked" ? "LM" : "");
   if (type !== "search") {
     state.lastSource = {
@@ -3709,7 +4125,13 @@ async function loadSource(root, state, source, options = {}) {
     seq,
     slot: "source",
     label:
-      type === "search" ? "Searching…" : type === "now" ? "Loading queue…" : "Loading library…",
+      type === "search"
+        ? "Searching…"
+        : type === "now"
+          ? "Loading queue…"
+          : type === "home"
+            ? "Loading Home…"
+            : "Loading library…",
   });
 
   try {
@@ -3788,7 +4210,6 @@ async function loadSource(root, state, source, options = {}) {
         if (fallback) tracks = [fallback];
       }
       if (seq !== state.loadSeq) return;
-      if ((state.tracks || []).length > tracks.length) return;
       if (!tracks.length) {
         renderTracks(root, state, [], "Nothing is playing.");
         showCovers(state, [], "");
@@ -3802,7 +4223,7 @@ async function loadSource(root, state, source, options = {}) {
         playlistId: state.playlistId,
         scroll: true,
       });
-      if (state.session?.source === "radio") {
+      if (state.session?.source === "radio" || state.session?.source === "queue") {
         state.session.listId = queuedPlaylist || state.session.listId;
         state.session.tracks = playableSessionTracks(tracks);
       } else if (!state.session?.tracks?.length) {
@@ -3817,7 +4238,10 @@ async function loadSource(root, state, source, options = {}) {
     }
 
     if (type === "videos") {
-      const library = await YTM.browseParsed({ browseId: BROWSE_IDS.songs }, 2);
+      const library = await YTM.browseParsed(
+        { browseId: BROWSE_IDS.songs },
+        { pages: "all" }
+      );
       if (seq !== state.loadSeq) return;
       const tracks = (library.tracks || []).filter(isVideoish);
       const collections = (library.collections || []).filter(isVideoish);
@@ -3894,22 +4318,68 @@ async function loadSource(root, state, source, options = {}) {
     }
     const body = { browseId };
     if (source.params) body.params = source.params;
-    const parsed = await YTM.browseParsed(body, 2);
-    if (seq !== state.loadSeq) return;
-    if (type === "home") {
-      state.homeCache = parsed;
-      state.homeCacheAt = Date.now();
-    }
+    const pages = YTunesList.libraryBrowsePages(type);
+    const cached = pages === "all" ? readLibraryMemo(body) : null;
     if (type === "home" || type === "explore" || type === "charts") {
+      const parsed = await YTM.browseParsed(body, type === "home" ? 4 : 2);
+      if (seq !== state.loadSeq) return;
+      if (type === "home") {
+        state.homeCache = parsed;
+        state.homeCacheAt = Date.now();
+      }
       applyStorefront(root, state, parsed);
       return;
     }
-    const collectionFirst =
-      !parsed.tracks.length ||
-      ["albums", "artists", "artist", "album"].includes(type);
+    const collectionFirst = ["albums", "artists", "artist", "album"].includes(type);
     let emptyMessage = collectionFirst
       ? "Select an album. Double-click a cover to open it."
       : "No items.";
+    if (cached?.parsed) {
+      applyLibraryParsed(root, state, type, source, cached.parsed, emptyMessage);
+      endBusy(root, state, { seq, slot: "source" });
+      if (Date.now() - cached.at < 15000) return;
+      const parsed = await YTM.browseParsed(body, {
+        pages,
+        shouldStop: () => seq !== state.loadSeq,
+      });
+      if (seq !== state.loadSeq) return;
+      writeLibraryMemo(body, parsed);
+      if (
+        !parsed.tracks.length &&
+        !parsed.collections.length &&
+        !(await YTM.signedIn())
+      ) {
+        emptyMessage = "Sign in on YouTube Music to see this library.";
+      }
+      applyLibraryParsed(root, state, type, source, parsed, emptyMessage, {
+        keepSelection: true,
+      });
+      return;
+    }
+    let paintedCount = 0;
+    const parsed = await YTM.browseParsed(body, {
+      pages,
+      shouldStop: () => seq !== state.loadSeq,
+      onProgress: (next) => {
+        if (seq !== state.loadSeq) return;
+        const nextCount = libraryItemCount(next);
+        const plan = YTunesList.libraryUpdatePlan({
+          paintedCount,
+          nextCount,
+          isFinal: false,
+        });
+        if (plan === "paint") {
+          applyLibraryParsed(root, state, type, source, next, emptyMessage);
+          paintedCount = nextCount;
+          endBusy(root, state, { seq, slot: "source" });
+          return;
+        }
+        if (plan === "status" && pages === "all") {
+          noteLibraryFetch(root, state, nextCount);
+        }
+      },
+    });
+    if (seq !== state.loadSeq) return;
     if (
       !parsed.tracks.length &&
       !parsed.collections.length &&
@@ -3917,30 +4387,21 @@ async function loadSource(root, state, source, options = {}) {
     ) {
       emptyMessage = "Sign in on YouTube Music to see this library.";
     }
-    applyParsed(
-      root,
-      state,
-      {
-        tracks: parsed.tracks,
-        collections: collectionFirst ? parsed.collections : [],
-        lyricsId: parsed.lyricsId,
-      },
-      emptyMessage
-    );
-    if (type === "playlist" && parsed.tracks.length) {
-      const pid = String(source.playlistId || parsed.tracks[0]?.playlistId || "").replace(
-        /^VL/,
-        ""
-      );
-      state.playlistId = pid;
-      if (pid && !pid.startsWith("RD")) {
-        for (const track of splitPlaylistRows(state.tracks).owned) {
-          if (!track.playlistId || String(track.playlistId).startsWith("RD")) {
-            track.playlistId = pid;
-          }
-        }
-      }
+    const finalCount = libraryItemCount(parsed);
+    const finalPlan = YTunesList.libraryUpdatePlan({
+      paintedCount,
+      nextCount: finalCount,
+      isFinal: true,
+    });
+    state.statusNote = "";
+    if (finalPlan === "paint") {
+      applyLibraryParsed(root, state, type, source, parsed, emptyMessage, {
+        keepSelection: paintedCount > 0,
+      });
+    } else {
+      renderStatusMeta(root, state, state.visibleTracks);
     }
+    if (pages === "all") writeLibraryMemo(body, parsed);
   } catch (error) {
     if (seq !== state.loadSeq) return;
     setCoverEmptyMessage(root, "Could not load library.");
@@ -3953,7 +4414,7 @@ async function loadSource(root, state, source, options = {}) {
 function bootLibrary(root, state) {
   loadPlaylists(root, state);
   loadMoods(root, state);
-  loadSource(root, state, state.lastSource || { type: "songs" }, {
+  loadSource(root, state, state.lastSource || { type: "home" }, {
     history: false,
     play: false,
   });

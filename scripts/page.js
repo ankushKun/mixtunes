@@ -617,7 +617,34 @@ function readPlayerQueue() {
   };
 }
 
-let autoplayArmed = true;
+const OVERLAY_PREF_KEY = "ytunes-overlay";
+
+function overlayPrefValue() {
+  try {
+    return localStorage.getItem(OVERLAY_PREF_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function overlayHookState() {
+  return {
+    pref: overlayPrefValue(),
+    dataset: document.documentElement.dataset.ytunesOverlay || "",
+    hasRoot: Boolean(document.getElementById("ytunes-root")),
+    hasLaunch: Boolean(document.getElementById("ytunes-launch")),
+  };
+}
+
+function overlayHooksActive() {
+  const api = playback();
+  if (api?.overlayHooksActive) return api.overlayHooksActive(overlayHookState());
+  return overlayHookState().pref !== "0";
+}
+
+let autoplayArmed = overlayHooksActive();
+let lastUserGesture = 0;
+let restoreParked = false;
 
 function allowUserPlayback() {
   autoplayArmed = false;
@@ -625,10 +652,50 @@ function allowUserPlayback() {
 
 function markGesture() {
   allowUserPlayback();
-  document.documentElement.dataset.ytunesGesture = String(Date.now());
+  lastUserGesture = Date.now();
+  document.documentElement.dataset.ytunesGesture = String(lastUserGesture);
+}
+
+function hasRecentUserGesture() {
+  return Date.now() - lastUserGesture < 4000;
+}
+
+function shouldParkRestoreAutoplay() {
+  const api = playback();
+  if (api?.shouldParkRestoreAutoplay) {
+    return api.shouldParkRestoreAutoplay({
+      hooksActive: overlayHooksActive(),
+      hasGesture: hasRecentUserGesture(),
+      parked: restoreParked,
+    });
+  }
+  return !overlayHooksActive() && !restoreParked && !hasRecentUserGesture();
+}
+
+function restoredSongLoaded() {
+  const snap = playerSnapshot();
+  const api = playback();
+  if (api?.nativeBarHasSong) return api.nativeBarHasSong(snap);
+  return Boolean(snap.videoId);
+}
+
+function parkRestorePlayback() {
+  if (callPlayer("getPlayerState") === 1) callPlayer("pauseVideo");
+  document.querySelectorAll("video, audio").forEach((media) => {
+    try {
+      if (!media.paused) media.pause();
+    } catch {
+      /* media element may already be tearing down */
+    }
+  });
+  if (restoredSongLoaded()) restoreParked = true;
 }
 
 function pauseAutoplay() {
+  if (!overlayHooksActive()) {
+    autoplayArmed = false;
+    return;
+  }
   if (!autoplayArmed) return;
   if (callPlayer("getPlayerState") === 1) callPlayer("pauseVideo");
   document.querySelectorAll("video, audio").forEach((media) => {
@@ -644,6 +711,10 @@ function bindAutoplayGuard() {
   document.addEventListener(
     "playing",
     (event) => {
+      if (!overlayHooksActive()) {
+        autoplayArmed = false;
+        return;
+      }
       if (!autoplayArmed) return;
       if (!(event.target instanceof HTMLMediaElement)) return;
       try {
@@ -662,7 +733,7 @@ function bindAutoplayGuard() {
     player.__ytunesNoAutoplay = true;
     try {
       player.addEventListener("onStateChange", (state) => {
-        if (autoplayArmed && state === 1) pauseAutoplay();
+        if (overlayHooksActive() && autoplayArmed && state === 1) pauseAutoplay();
       });
     } catch {
       /* player may not expose YT event listeners yet */
@@ -670,6 +741,7 @@ function bindAutoplayGuard() {
   };
 
   const tick = () => {
+    if (!overlayHooksActive()) autoplayArmed = false;
     if (!autoplayArmed) {
       clearInterval(timer);
       return;
@@ -740,6 +812,10 @@ function markWatchReplace() {
   replacingWatch = Date.now();
 }
 
+function watchReplaceWindow() {
+  return Date.now() - replacingWatch < 1800;
+}
+
 function overlayRepeat() {
   const node = document.querySelector("#ytunes-root [data-action='repeat']");
   const value = String(node?.dataset?.repeat || "").toLowerCase();
@@ -790,15 +866,17 @@ function queueSkipIds() {
   };
 }
 
+function playback() {
+  return typeof YTunesPlayback !== "undefined" ? YTunesPlayback : null;
+}
+
 function adjacentInRoster(ids, currentId, kind, wrap = true, hintIndex = -1) {
+  const api = playback();
+  if (api?.adjacentInRoster) {
+    return api.adjacentInRoster(ids, currentId, kind, wrap, hintIndex);
+  }
   if (!ids.length) return { videoId: "", index: -1 };
-  const index =
-    hintIndex >= 0 &&
-    (!currentId || ids[hintIndex] === currentId || !ids.includes(currentId))
-      ? hintIndex
-      : currentId
-        ? ids.indexOf(currentId)
-        : -1;
+  const index = currentId ? ids.indexOf(currentId) : -1;
   if (kind === "next") {
     if (index < 0) return { videoId: ids[0], index: 0 };
     if (index + 1 < ids.length) return { videoId: ids[index + 1], index: index + 1 };
@@ -811,18 +889,41 @@ function adjacentInRoster(ids, currentId, kind, wrap = true, hintIndex = -1) {
   return { videoId: "", index: -1 };
 }
 
+function stampPendingSkip(videoId, index) {
+  const transport = document.querySelector("#ytunes-root .ytunes-transport");
+  const root = document.getElementById("ytunes-root");
+  [transport, root].forEach((node) => {
+    if (!node) return;
+    if (videoId) node.dataset.pendingSkip = videoId;
+    else delete node.dataset.pendingSkip;
+    if (videoId) node.dataset.pendingSkipUntil = String(Date.now() + 2500);
+    else delete node.dataset.pendingSkipUntil;
+    if (index >= 0) node.dataset.skipIndex = String(index);
+  });
+}
+
+function nativeSkip(kind) {
+  return clickBarControl(kind) || (kind === "next" ? ran("nextVideo") : ran("previousVideo"));
+}
+
 function skipPlayback(kind, options = {}) {
   const auto = Boolean(options.auto);
   if (auto && autoplayArmed) return { ok: false };
   allowUserPlayback();
   const now = Date.now();
-  if (now - skipAt < 280) return { ok: true };
+  if (now - skipAt < (auto ? 400 : 90)) return { ok: true };
   skipAt = now;
 
   const snap = playerSnapshot();
+  const overlay = overlaySkipRoster();
+  const ownList = Boolean(overlay.ownList);
   const repeat = overlayRepeat();
+  const handleAuto = playback()?.shouldHandleAutoAdvance
+    ? playback().shouldHandleAutoAdvance(ownList)
+    : ownList;
 
   if (auto && kind === "next" && repeat === "one") {
+    if (!handleAuto) return { ok: true };
     ran("seekTo", 0, true) || ran("seekTo", 0);
     ran("playVideo");
     return { ok: true };
@@ -832,10 +933,16 @@ function skipPlayback(kind, options = {}) {
     return { ok: ran("seekTo", 0, true) || ran("seekTo", 0) };
   }
 
-  const overlay = overlaySkipRoster();
+  if (auto && !handleAuto) {
+    return { ok: true };
+  }
+
+  if (!ownList && !auto) {
+    if (nativeSkip(kind)) return { ok: true };
+  }
+
   const queued = overlay.ids.length > 1 ? overlay : queueSkipIds();
   const ids = queued.ids.length ? queued.ids : overlay.ids;
-  const ownList = Boolean(overlay.ownList);
   const playlistId = ownList
     ? ""
     : queued.playlistId ||
@@ -848,8 +955,7 @@ function skipPlayback(kind, options = {}) {
   const next = adjacentInRoster(ids, currentId, kind, wrap, overlay.skipIndex);
   if (next.videoId) {
     if (auto && snap.videoId === next.videoId) return { ok: true };
-    const transport = document.querySelector("#ytunes-root .ytunes-transport");
-    if (transport && next.index >= 0) transport.dataset.skipIndex = String(next.index);
+    stampPendingSkip(next.videoId, next.index);
     const ok = play({
       ownList,
       endpoint: {
@@ -872,13 +978,28 @@ function skipPlayback(kind, options = {}) {
     return { ok: Boolean(ok) };
   }
 
+  if (auto && ownList && currentId) {
+    const radio = playback()?.radioId?.(currentId) || `RDAMVM${currentId}`;
+    const transport = document.querySelector("#ytunes-root .ytunes-transport");
+    const root = document.getElementById("ytunes-root");
+    [transport, root].forEach((node) => {
+      if (!node) return;
+      delete node.dataset.ownList;
+      node.dataset.skipPlaylist = radio;
+      node.dataset.sessionMode = "radio";
+    });
+    stampPendingSkip(currentId, -1);
+    const ok = tryNavigate({ watchEndpoint: { playlistId: radio, videoId: currentId } });
+    window.setTimeout(() => {
+      const later = playerSnapshot();
+      if (!later.playing || later.videoId === currentId) nativeSkip("next");
+    }, 1100);
+    return { ok: Boolean(ok) };
+  }
+
   if (auto) return { ok: true };
 
-  return {
-    ok:
-      clickBarControl(kind) ||
-      (kind === "next" ? ran("nextVideo") : ran("previousVideo")),
-  };
+  return { ok: nativeSkip(kind) };
 }
 
 function bindMediaKeys() {
@@ -892,20 +1013,23 @@ function bindMediaKeys() {
       previoustrack: () => skip("previous"),
     };
     session.setActionHandler = (action, handler) => {
-      if (ours[action]) return nativeSet(action, ours[action]);
+      if (overlayHooksActive() && ours[action]) return nativeSet(action, ours[action]);
       return nativeSet(action, handler);
     };
-    try {
-      nativeSet("nexttrack", ours.nexttrack);
-      nativeSet("previoustrack", ours.previoustrack);
-    } catch {
-      /* some browsers reject media session actions */
+    if (overlayHooksActive()) {
+      try {
+        nativeSet("nexttrack", ours.nexttrack);
+        nativeSet("previoustrack", ours.previoustrack);
+      } catch {
+        /* some browsers reject media session actions */
+      }
     }
   }
 
   document.addEventListener(
     "keydown",
     (event) => {
+      if (!overlayHooksActive()) return;
       const name = `${event.key || ""} ${event.code || ""}`.toLowerCase();
       if (name.includes("mediatracknext")) {
         event.preventDefault();
@@ -1042,32 +1166,120 @@ function cueLcdWatch() {
   return Boolean(watch && play({ endpoint: { watchEndpoint: watch } }));
 }
 
+function bindRestorePark() {
+  document.addEventListener(
+    "pointerdown",
+    () => {
+      lastUserGesture = Date.now();
+    },
+    true
+  );
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      lastUserGesture = Date.now();
+    },
+    true
+  );
+  document.addEventListener(
+    "playing",
+    (event) => {
+      if (!(event.target instanceof HTMLMediaElement)) return;
+      if (!shouldParkRestoreAutoplay()) {
+        if (!overlayHooksActive() && restoredSongLoaded()) restoreParked = true;
+        return;
+      }
+      try {
+        event.target.pause();
+      } catch {
+        /* ignore */
+      }
+      parkRestorePlayback();
+    },
+    true
+  );
+  const hookPlayer = () => {
+    const player = moviePlayer();
+    if (!player || player.__ytunesRestorePark) return;
+    player.__ytunesRestorePark = true;
+    try {
+      player.addEventListener("onStateChange", (state) => {
+        if (state === 1 && shouldParkRestoreAutoplay()) parkRestorePlayback();
+      });
+    } catch {
+      /* player may not expose YT event listeners yet */
+    }
+  };
+  hookPlayer();
+  const timer = window.setInterval(() => {
+    if (restoreParked || overlayHooksActive()) {
+      clearInterval(timer);
+      return;
+    }
+    hookPlayer();
+  }, 400);
+}
+
+function cueWatch(watch) {
+  const videoId = watch?.videoId;
+  if (!/^[\w-]{11}$/.test(String(videoId || ""))) return false;
+  restoreParked = false;
+  const snap = playerSnapshot();
+  if (snap.videoId === videoId) {
+    parkRestorePlayback();
+    return true;
+  }
+  const playlistId = String(watch?.playlistId || "").replace(/^VL/, "");
+  const command = {
+    watchEndpoint: playlistId ? { videoId, playlistId } : { videoId },
+  };
+  if (tryNavigate(command)) {
+    window.setTimeout(() => parkRestorePlayback(), 160);
+    return true;
+  }
+  const player = moviePlayer();
+  if (!player) return false;
+  try {
+    if (typeof player.cueVideoById === "function") {
+      player.cueVideoById({ videoId, startSeconds: 0 });
+      window.setTimeout(() => parkRestorePlayback(), 80);
+      return true;
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    if (typeof player.loadVideoById === "function") {
+      player.loadVideoById({ videoId, startSeconds: 0 });
+      window.setTimeout(() => parkRestorePlayback(), 80);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 function bindOverlayPlayGesture() {
   const inRoot = (node) => node instanceof Element && node.closest("#ytunes-root");
 
   document.addEventListener(
-    "dblclick",
+    "pointerdown",
     (event) => {
       if (!inRoot(event.target)) return;
-      const row = event.target.closest("#ytunes-tracks tr[data-index]");
-      const cover = event.target.closest(".ytunes-cf-cover");
-      const videoId =
-        row?.dataset.video ||
-        (cover?.dataset.video && cover.dataset.video === cover.dataset.id
-          ? cover.dataset.video
-          : "");
-      if (!videoId) return;
-      markGesture();
-      const playlistId = row?.dataset.playlist || cover?.dataset.playlist || "";
-      const ownList =
-        document.querySelector("#ytunes-root .ytunes-transport")?.dataset?.ownList === "1";
-      play({
-        ownList,
-        endpoint: {
-          watchEndpoint:
-            playlistId && !ownList ? { videoId, playlistId } : { videoId },
-        },
-      });
+      const playish = event.target.closest(
+        "[data-action='playPause'], [data-action='play'], [data-action='next'], [data-action='previous'], #ytunes-tracks tr[data-index], .ytunes-cf-cover, .ytunes-tile"
+      );
+      if (playish) markGesture();
+    },
+    true
+  );
+
+  document.addEventListener(
+    "dblclick",
+    (event) => {
+      if (inRoot(event.target)) markGesture();
     },
     true
   );
@@ -1081,7 +1293,6 @@ function bindOverlayPlayGesture() {
       const action = btn.dataset.action;
       if (!["playPause", "play", "next", "previous"].includes(action)) return;
       markGesture();
-      playerControl({ method: action === "play" ? "playPause" : action });
     },
     true
   );
@@ -1094,7 +1305,6 @@ function bindOverlayPlayGesture() {
       const typing = event.target?.closest?.("input, textarea, [contenteditable]");
       if (typing) return;
       markGesture();
-      playerControl({ method: "playPause" });
     },
     true
   );
@@ -1102,6 +1312,7 @@ function bindOverlayPlayGesture() {
 
 function play(payload) {
   allowUserPlayback();
+  markWatchReplace();
   const endpoint = payload?.endpoint;
   const watch = { ...(endpoint?.watchEndpoint || payload || {}) };
   if (watch.playlistId) {
@@ -1114,29 +1325,36 @@ function play(payload) {
   const command = endpoint?.watchEndpoint
     ? { ...endpoint, watchEndpoint: { ...endpoint.watchEndpoint, ...watch } }
     : { watchEndpoint: watch };
+  if (videoId) stampPendingSkip(videoId, Number.isFinite(Number(watch.index)) ? Number(watch.index) : -1);
 
-  if (playlistId && ownList) {
+  if (ownList) {
     if (loadWatch(watch)) return true;
     return tryNavigate({ watchEndpoint: { videoId } }) || tryNavigate(command);
   }
 
   if (playlistId) {
-    tryNavigate(command);
-    if (videoId) loadWatch(watch);
-    if (videoId && videoId === snap.videoId) return true;
-    window.setTimeout(() => {
-      const now = playerSnapshot();
-      if (videoId && now.videoId === videoId) return;
-      loadPlaylistAt(watch);
-    }, 400);
-    return true;
+    if (tryNavigate(command)) {
+      if (videoId && videoId === snap.videoId) {
+        ran("seekTo", 0, true) || ran("seekTo", 0);
+        ran("playVideo");
+      }
+      window.setTimeout(() => {
+        const now = playerSnapshot();
+        if (videoId && now.videoId === videoId) {
+          if (!now.playing) ran("playVideo");
+          return;
+        }
+        if (now.playing && now.videoId && now.videoId !== snap.videoId) return;
+        if (snap.videoId && now.videoId === snap.videoId) loadPlaylistAt(watch);
+      }, 1200);
+      return true;
+    }
+    if (loadPlaylistAt(watch)) return true;
+    return false;
   }
 
-  const wantNavigate = !snap.videoId;
-  const navigated = wantNavigate ? tryNavigate(command) : false;
+  if (tryNavigate(command)) return true;
   if (loadWatch(watch)) return true;
-  if (navigated) return true;
-  if (!wantNavigate && tryNavigate(command)) return true;
   return false;
 }
 
@@ -1169,6 +1387,11 @@ document.addEventListener(REQ, async (event) => {
         return;
       }
       reply(req.id, true, { ok: true });
+      return;
+    }
+    if (req.action === "cue") {
+      const ok = cueWatch(req.payload || {});
+      reply(req.id, ok, { ok }, ok ? undefined : "Could not cue");
       return;
     }
     if (req.action === "player") {
@@ -1206,8 +1429,9 @@ function bindQueueAdvance() {
   };
 
   const onEnded = (fromMedia) => {
+    if (!overlayHooksActive()) return;
     if (autoplayArmed) return;
-    if (Date.now() - replacingWatch < 900) return;
+    if (watchReplaceWindow()) return;
     if (!fromMedia && !trackFinished()) return;
     skipPlayback("next", { auto: true });
   };
@@ -1246,7 +1470,13 @@ function bindQueueAdvance() {
   window.setInterval(hookPlayer, 1500);
 }
 
+document.addEventListener("ytunes-overlay-pref", (event) => {
+  const off = event.detail === "0" || event.detail === "off" || event.detail === false;
+  if (off) autoplayArmed = false;
+});
+
 bindMediaKeys();
-bindAutoplayGuard();
+if (autoplayArmed) bindAutoplayGuard();
+bindRestorePark();
 bindOverlayPlayGesture();
 bindQueueAdvance();

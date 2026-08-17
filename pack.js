@@ -25,6 +25,7 @@ const IGNORE_TOP = new Set([
   "build",
   "references",
   "tasks",
+  "tests",
   "pack.js",
   "package.json",
   "package-lock.json",

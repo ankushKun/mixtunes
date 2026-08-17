@@ -518,18 +518,40 @@ function shelfTitle(node) {
   );
 }
 
+function pushShelf(acc, title, tracksAt, collectionsAt) {
+  const tracks = acc.tracks.slice(tracksAt);
+  const collections = acc.collections.slice(collectionsAt);
+  if (!tracks.length && !collections.length) return;
+  if (!acc.shelves) acc.shelves = [];
+  acc.shelves.push({
+    title: title || acc.shelf || "",
+    tracks,
+    collections,
+  });
+}
+
 function walkNamedShelf(renderer, acc, walk) {
   const title = shelfTitle(renderer);
   const prev = acc.shelf;
+  const tracksAt = acc.tracks.length;
+  const collectionsAt = acc.collections.length;
   if (title) acc.shelf = title;
   for (const value of Object.values(renderer)) {
     if (value && typeof value === "object") walk(value);
   }
+  pushShelf(acc, title, tracksAt, collectionsAt);
   acc.shelf = prev;
 }
 
 function parseBrowse(response) {
-  const acc = { tracks: [], collections: [], lyricsId: "", suggestions: [], chips: [] };
+  const acc = {
+    tracks: [],
+    collections: [],
+    shelves: [],
+    lyricsId: "",
+    suggestions: [],
+    chips: [],
+  };
   const seen = new Set();
   const seenNodes = new WeakSet();
 
@@ -565,6 +587,7 @@ function parseBrowse(response) {
         rememberCollection(i);
       }
       walk(node.musicCardShelfRenderer.contents);
+      pushShelf(acc, shelf || acc.shelf, tracksAt, collectionsAt);
       acc.shelf = prev;
       return;
     }
@@ -807,6 +830,8 @@ function mergeParsed(parts) {
   const tracks = [];
   const collections = [];
   const chips = [];
+  const shelves = [];
+  const shelfIndex = new Map();
   const seen = new Set();
   let lyricsId = "";
   for (const part of parts) {
@@ -829,18 +854,78 @@ function mergeParsed(parts) {
       seen.add(key);
       chips.push(chip);
     }
+    for (const shelf of part.shelves || []) {
+      const name = String(shelf.title || "").trim();
+      const next = {
+        title: name,
+        tracks: [...(shelf.tracks || [])],
+        collections: [...(shelf.collections || [])],
+      };
+      if (name && shelfIndex.has(name)) {
+        const existing = shelves[shelfIndex.get(name)];
+        const known = new Set(
+          existing.tracks
+            .map((track) => track.videoId || track.id)
+            .concat(existing.collections.map((item) => item.id))
+        );
+        for (const track of next.tracks) {
+          const key = track.videoId || track.id;
+          if (key && known.has(key)) continue;
+          if (key) known.add(key);
+          existing.tracks.push(track);
+        }
+        for (const item of next.collections) {
+          if (item.id && known.has(item.id)) continue;
+          if (item.id) known.add(item.id);
+          existing.collections.push(item);
+        }
+      } else {
+        if (name) shelfIndex.set(name, shelves.length);
+        shelves.push(next);
+      }
+    }
   }
-  return { tracks, collections, lyricsId, chips };
+  return { tracks, collections, lyricsId, chips, shelves };
 }
 
-async function followPages(fetchPage, body, pages) {
+function resolveFollowOpts(pagesOrOpts) {
+  if (typeof YTunesList !== "undefined" && YTunesList.resolveFollowOpts) {
+    return YTunesList.resolveFollowOpts(pagesOrOpts);
+  }
+  const pages =
+    pagesOrOpts && typeof pagesOrOpts === "object" ? pagesOrOpts.pages ?? 2 : pagesOrOpts;
+  const n =
+    pages === "all" || pages === Infinity
+      ? 500
+      : Number.isFinite(Number(pages)) && Number(pages) > 0
+        ? Math.min(500, Math.floor(Number(pages)))
+        : 2;
+  return {
+    pages: n,
+    onProgress:
+      pagesOrOpts && typeof pagesOrOpts.onProgress === "function" ? pagesOrOpts.onProgress : null,
+    shouldStop:
+      pagesOrOpts && typeof pagesOrOpts.shouldStop === "function" ? pagesOrOpts.shouldStop : null,
+  };
+}
+
+function yieldBrowse() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function followPages(fetchPage, body, pagesOrOpts) {
+  const opts = resolveFollowOpts(pagesOrOpts);
   let response = await fetchPage(body);
   const parts = [parseBrowse(response)];
-  for (let i = 1; i < pages; i += 1) {
+  if (opts.onProgress) opts.onProgress(mergeParsed(parts));
+  for (let i = 1; i < opts.pages; i += 1) {
+    if (opts.shouldStop && opts.shouldStop()) break;
     const token = continuationToken(response);
     if (!token) break;
     response = await fetchPage({ continuation: token });
     parts.push(parseBrowse(response));
+    if (opts.onProgress) opts.onProgress(mergeParsed(parts));
+    if (opts.onProgress) await yieldBrowse();
   }
   return mergeParsed(parts);
 }
@@ -940,11 +1025,14 @@ const YTM = {
   play(payload) {
     return pageRequest("play", payload);
   },
+  cue(payload) {
+    return pageRequest("cue", payload, 4000);
+  },
   player(payload) {
     return pageRequest("player", payload, 4000);
   },
-  browseParsed(body, pages = 2) {
-    return followPages(YTM.browse, body, pages);
+  browseParsed(body, pagesOrOpts = 2) {
+    return followPages(YTM.browse, body, pagesOrOpts);
   },
   async searchParsed(query) {
     const mixed = followPages(YTM.search, { query }, 1);
@@ -982,7 +1070,11 @@ const YTM = {
     } catch {
       host = { tracks: [], playlistId: "" };
     }
-    const resolvedPlaylist = host.playlistId || playlistId || "";
+    const hostMatches =
+      typeof YTunesPlayback !== "undefined" && YTunesPlayback.hostQueueMatches
+        ? YTunesPlayback.hostQueueMatches(host, videoId, playlistId)
+        : true;
+    const resolvedPlaylist = (hostMatches && host.playlistId) || playlistId || "";
     const nextBody = {
       videoId: videoId || undefined,
       playlistId: resolvedPlaylist || undefined,
@@ -998,8 +1090,8 @@ const YTM = {
     let parsed = parseQueuePanel(response);
     const hostPlayable = playableQueueTracks(host.tracks);
     const radioList = String(resolvedPlaylist || "").replace(/^VL/, "").startsWith("RD");
-    const thin =
-      (parsed.tracks || []).length < 8 && hostPlayable.length < 8;
+    const parsedCount = playableQueueTracks(parsed.tracks).length;
+    const thin = parsedCount < 8 && (!hostMatches || hostPlayable.length < 8);
     if (thin && (radioList || !isConcretePlaylist(resolvedPlaylist))) {
       const followId =
         automixPlaylistId(response) ||
@@ -1019,8 +1111,16 @@ const YTM = {
         }
       }
     }
+    const tracks =
+      typeof YTunesPlayback !== "undefined" && YTunesPlayback.resolveQueueTracks
+        ? YTunesPlayback.resolveQueueTracks(host, parsed.tracks, videoId, resolvedPlaylist)
+        : hostMatches
+          ? mergeQueueTracks(host.tracks || [], parsed.tracks || [])
+          : playableQueueTracks(parsed.tracks).length
+            ? playableQueueTracks(parsed.tracks)
+            : mergeQueueTracks(host.tracks || [], parsed.tracks || []);
     return {
-      tracks: mergeQueueTracks(host.tracks || [], parsed.tracks || []),
+      tracks,
       lyricsId: parsed.lyricsId || "",
       playlistId: resolvedPlaylist || parsed.tracks?.[0]?.playlistId || "",
     };
@@ -1036,11 +1136,12 @@ const YTM = {
       return queueMemo.data;
     }
     if (queueMemo.inflight && queueMemo.key === key) return queueMemo.inflight;
-    const gen = queueMemo.gen;
+    const gen = (queueMemo.gen += 1);
+    const requestKey = key;
     queueMemo.key = key;
     queueMemo.inflight = YTM.queue(videoId, playlistId)
       .then((data) => {
-        if (gen === queueMemo.gen) {
+        if (gen === queueMemo.gen && queueMemo.key === requestKey) {
           queueMemo.data = data;
           queueMemo.at = Date.now();
           queueMemo.inflight = null;
@@ -1048,7 +1149,9 @@ const YTM = {
         return data;
       })
       .catch((error) => {
-        if (gen === queueMemo.gen) queueMemo.inflight = null;
+        if (gen === queueMemo.gen && queueMemo.key === requestKey) {
+          queueMemo.inflight = null;
+        }
         throw error;
       });
     return queueMemo.inflight;

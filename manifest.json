@@ -37,7 +37,7 @@
   "content_scripts": [
     {
       "matches": ["https://music.youtube.com/*"],
-      "js": ["scripts/page.js"],
+      "js": ["scripts/playback-core.js", "scripts/page.js"],
       "run_at": "document_idle",
       "world": "MAIN"
     },
@@ -45,6 +45,8 @@
       "matches": ["https://music.youtube.com/*"],
       "js": [
         "scripts/host.js",
+        "scripts/playback-core.js",
+        "scripts/list-core.js",
         "scripts/ytm.js",
         "layouts/shell/prefs.js",
         "layouts/shell/toast.js",

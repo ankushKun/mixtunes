@@ -1376,6 +1376,7 @@
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 12px;
+  --yt-row-h: 24px;
 }
 
 #ytunes-root .ytunes-table thead {
@@ -1450,12 +1451,26 @@
   width: 64px;
 }
 
-.ytunes-table tbody tr:nth-child(odd):not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr[data-parity="odd"]:not(.is-selected):not(.is-browse) {
   background: var(--yt-row-odd);
 }
 
-.ytunes-table tbody tr:nth-child(even):not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr[data-parity="even"]:not(.is-selected):not(.is-browse) {
   background: var(--yt-row-even);
+}
+
+.ytunes-table tbody tr[data-index],
+.ytunes-table tbody tr.ytunes-section {
+  height: var(--yt-row-h);
+}
+
+.ytunes-table tbody tr.ytunes-virt-pad,
+.ytunes-table tbody tr.ytunes-virt-pad td {
+  padding: 0;
+  border: 0;
+  line-height: 0;
+  background: transparent;
+  pointer-events: none;
 }
 
 .ytunes-table tbody tr:not(.is-empty) {
@@ -1616,12 +1631,12 @@
   padding: 4px 10px;
 }
 
-.ytunes-table tbody tr.is-suggested:nth-child(odd):not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr.is-suggested[data-parity="odd"]:not(.is-selected):not(.is-browse) {
   background: #e6ebe6;
   color: #3a3a3a;
 }
 
-.ytunes-table tbody tr.is-suggested:nth-child(even):not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr.is-suggested[data-parity="even"]:not(.is-selected):not(.is-browse) {
   background: #dde4dd;
   color: #3a3a3a;
 }
@@ -2828,12 +2843,12 @@
   border-bottom-color: #1a1a1a;
 }
 
-#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested:nth-child(odd):not(.is-selected):not(.is-browse) {
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested[data-parity="odd"]:not(.is-selected):not(.is-browse) {
   background: #232823;
   color: #c8c8c8;
 }
 
-#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested:nth-child(even):not(.is-selected):not(.is-browse) {
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested[data-parity="even"]:not(.is-selected):not(.is-browse) {
   background: #1d221d;
   color: #c8c8c8;
 }

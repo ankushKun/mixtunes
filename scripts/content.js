@@ -1,4 +1,5 @@
 const OVERLAY_KEY = "overlayEnabled";
+const OVERLAY_PREF_KEY = "ytunes-overlay";
 const LAUNCH_ID = "ytunes-launch";
 const STYLE_IDS = {
   host: "ytunes-css-host",
@@ -18,9 +19,23 @@ function stripOverlayParam() {
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function persistOverlayPref(enabled) {
+  const on = Boolean(enabled);
+  try {
+    localStorage.setItem(OVERLAY_PREF_KEY, on ? "1" : "0");
+  } catch {
+    /* storage can be blocked */
+  }
+  document.documentElement.dataset.ytunesOverlay = on ? "on" : "off";
+  document.dispatchEvent(
+    new CustomEvent("ytunes-overlay-pref", { detail: on ? "1" : "0" })
+  );
+}
+
 async function readOverlayEnabled() {
   if (overlayParamOff()) {
     stripOverlayParam();
+    persistOverlayPref(false);
     await chrome.storage.local.set({ [OVERLAY_KEY]: false });
     return false;
   }
@@ -29,6 +44,7 @@ async function readOverlayEnabled() {
 }
 
 async function writeOverlayEnabled(enabled) {
+  persistOverlayPref(enabled);
   await chrome.storage.local.set({ [OVERLAY_KEY]: Boolean(enabled) });
 }
 
@@ -195,9 +211,76 @@ function placeLaunchButton() {
   }
 }
 
+function nativeBarTitle() {
+  const bar = typeof playerBar === "function" ? playerBar() : document.querySelector("ytmusic-player-bar");
+  if (!bar) return "";
+  const node =
+    typeof firstMatch === "function" && typeof SELECTORS !== "undefined"
+      ? firstMatch(bar, SELECTORS.title)
+      : bar.querySelector(".title");
+  return typeof textOf === "function"
+    ? textOf(node)
+    : node?.textContent?.replace(/\s+/g, " ").trim() || "";
+}
+
+function nativeBarHasSong(info) {
+  if (typeof YTunesPlayback !== "undefined" && YTunesPlayback.nativeBarHasSong) {
+    return YTunesPlayback.nativeBarHasSong(info);
+  }
+  const title = String(info?.title || "").trim();
+  return Boolean(title) && title !== "yTunes" && !/^youtube music$/i.test(title);
+}
+
+function shouldCueStoredTrack(opts) {
+  if (typeof YTunesPlayback !== "undefined" && YTunesPlayback.shouldCueStoredTrack) {
+    return YTunesPlayback.shouldCueStoredTrack(opts);
+  }
+  return !opts?.overlayOn && !opts?.barHasSong && Boolean(opts?.storedVideoId);
+}
+
+async function restoreLastNativeBar() {
+  if (await readOverlayEnabled()) return;
+  let last = null;
+  try {
+    const prefs = typeof loadPrefs === "function" ? await loadPrefs() : null;
+    last = typeof sanitizeNowPlaying === "function" ? sanitizeNowPlaying(prefs?.nowPlaying) : null;
+  } catch {
+    last = null;
+  }
+  if (!last?.videoId) return;
+  const ready = await waitForPlayerBar();
+  if (!ready || (await readOverlayEnabled())) return;
+
+  const barHasSong = () => nativeBarHasSong({ title: nativeBarTitle() });
+  const deadline = Date.now() + 3500;
+  while (Date.now() < deadline) {
+    if (await readOverlayEnabled()) return;
+    if (barHasSong()) return;
+    await new Promise((resolve) => window.setTimeout(resolve, 250));
+  }
+
+  if (await readOverlayEnabled()) return;
+  if (
+    !shouldCueStoredTrack({
+      overlayOn: false,
+      barHasSong: barHasSong(),
+      storedVideoId: last.videoId,
+    })
+  ) {
+    return;
+  }
+  if (typeof YTM?.cue !== "function") return;
+  try {
+    await YTM.cue({ videoId: last.videoId, playlistId: last.playlistId || undefined });
+  } catch {
+    /* native restore may still win */
+  }
+}
+
 function startLauncher() {
   injectSheet(STYLE_IDS.host, "scripts/content.css");
   placeLaunchButton();
+  restoreLastNativeBar();
   if (launchPageWatch) return;
   const root = document.querySelector("ytmusic-app") || document.documentElement;
   launchPageWatch = new MutationObserver(() => scheduleLaunchPlace());
@@ -228,7 +311,9 @@ async function startOverlay() {
 
 async function boot() {
   teardownOverlay();
-  if (await readOverlayEnabled()) await startOverlay();
+  const enabled = await readOverlayEnabled();
+  persistOverlayPref(enabled);
+  if (enabled) await startOverlay();
   else startLauncher();
 }
 
@@ -253,6 +338,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[OVERLAY_KEY]) return;
+  persistOverlayPref(changes[OVERLAY_KEY].newValue !== false);
   location.reload();
 });
 
