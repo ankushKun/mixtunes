@@ -1230,7 +1230,10 @@
 }
 
 #ytunes-root .ytunes-table td .ytunes-marquee {
+  display: block;
   width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 #ytunes-root .ytunes-table thead,

@@ -535,9 +535,7 @@ function parseBrowse(response) {
 
   const rememberTrack = (index) => {
     const track = acc.tracks[index];
-    const key = track.setVideoId
-      ? `set:${track.setVideoId}`
-      : `t:${track.videoId || track.id}`;
+    const key = `t:${track.videoId || track.setVideoId || track.id}`;
     if (seen.has(key)) acc.tracks.splice(index, 1);
     else seen.add(key);
   };
@@ -814,9 +812,7 @@ function mergeParsed(parts) {
   for (const part of parts) {
     if (!lyricsId && part.lyricsId) lyricsId = part.lyricsId;
     for (const track of part.tracks || []) {
-      const key = track.setVideoId
-        ? `set:${track.setVideoId}`
-        : `t:${track.videoId || track.id || track.title}`;
+      const key = `t:${track.videoId || track.setVideoId || track.id || track.title}`;
       if (seen.has(key)) continue;
       seen.add(key);
       tracks.push(track);

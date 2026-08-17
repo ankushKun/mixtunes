@@ -208,10 +208,26 @@ function uniqueTracks(tracks) {
   const seen = new Set();
   const out = [];
   for (const track of tracks || []) {
-    const key = track.videoId || track.id || "";
+    const key =
+      track.videoId ||
+      (track.title
+        ? `n:${track.title}:${track.artist || ""}:${track.duration || ""}`
+        : track.id || "");
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(track);
+  }
+  return out;
+}
+
+function uniqueCovers(covers) {
+  const seen = new Set();
+  const out = [];
+  for (const cover of covers || []) {
+    const key = cover.id || `${cover.title || ""}:${cover.artist || ""}`;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(cover);
   }
   return out;
 }
@@ -361,8 +377,10 @@ function splitPlaylistRows(tracks) {
 
 function coverIdForTrack(track) {
   if (!track) return "";
+  const album = String(track.album || "").trim();
+  const artist = String(track.artist || "").trim();
+  if (album) return `album:${album}:${artist}`;
   if (track.albumBrowseId) return track.albumBrowseId;
-  if (track.album) return `album:${track.album}:${track.artist || ""}`;
   return track.videoId || track.id || `t:${track.title}`;
 }
 
@@ -1263,9 +1281,10 @@ function trackRowHtml(state, track, index, selected) {
 function renderTracks(root, state, tracks, emptyMessage) {
   const body = root.querySelector("#ytunes-tracks");
   const playlist = state.source === "playlist";
+  const unique = uniqueTracks(tracks);
   const { owned, suggested } = playlist
-    ? splitPlaylistRows(tracks)
-    : { owned: tracks || [], suggested: [] };
+    ? splitPlaylistRows(unique)
+    : { owned: unique, suggested: [] };
   const visible = playlist ? owned.concat(suggested) : tracks || [];
   state.visibleTracks = visible;
   if (!visible.length) {
@@ -1471,6 +1490,7 @@ function applyParsed(root, state, parsed, emptyMessage) {
       track.liked = true;
     }
   }
+  parsed = { ...parsed, tracks: uniqueTracks(parsed.tracks) };
   state.tracks = parsed.tracks;
   if (sourceSortable(state) && state.sortKey) {
     parsed = { ...parsed, tracks: sortTracks(state) };
@@ -1486,7 +1506,7 @@ function applyParsed(root, state, parsed, emptyMessage) {
       ? playlistOwned.concat(splitPlaylistRows(parsed.tracks).suggested)
       : parsed.tracks;
   const collectionCovers = (parsed.collections || []).filter((item) => !isSongCover(item));
-  const covers =
+  const covers = uniqueCovers(
     state.source === "search"
       ? searchCovers
       : isMixedStorefront(state)
@@ -1496,7 +1516,8 @@ function applyParsed(root, state, parsed, emptyMessage) {
         : parsed.collections.length &&
             (COVER_BROWSER_SOURCES.has(state.source) || state.source === "search")
           ? parsed.collections
-          : coversFromTracks(playlistOwned);
+          : coversFromTracks(playlistOwned)
+  );
   const pendingId = state.pendingSelectVideoId || "";
   state.pendingSelectVideoId = "";
   const pendingIndex = indexOfVideo(visible, pendingId);
