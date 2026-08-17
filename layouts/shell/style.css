@@ -880,7 +880,8 @@
   height: calc(var(--yt-cf-size) * 1.52);
   margin: 0;
   transform-style: flat;
-  transition: transform var(--yt-cf-ms) var(--yt-cf-ease);
+  transform-origin: 50% 32.895%;
+  transition: none;
   cursor: pointer;
   user-select: none;
   z-index: 1;
@@ -892,6 +893,10 @@
 
 .ytunes-cf-cover.is-enter {
   transition: none !important;
+}
+
+.ytunes-cf-cover:not(.is-near) .ytunes-cf-reflect {
+  visibility: hidden;
 }
 
 .ytunes-cf-cover.is-idle {

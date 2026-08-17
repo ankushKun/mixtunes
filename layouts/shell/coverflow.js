@@ -3,8 +3,8 @@
  * Geometry: CF_WINDOW 6, angle 56°, depth/gap/spacing scale with cover size, 400ms ease.
  * Cover box is taller than the square so the flipped reflection sits inside the 3D plane.
  */
-const CF_WINDOW = 6;
-const CF_WINDOW_DRAG = 4;
+const CF_WINDOW = 4;
+const CF_WINDOW_DRAG = 3;
 const CF_SIZE = 150;
 const CF_SIZE_NARROW = 108;
 const CF_SIZE_MIN = 72;
@@ -15,10 +15,11 @@ const CF_CENTER_Z = 70;
 const CF_DEPTH = 48;
 const CF_GAP = 52;
 const CF_MS = 400;
-const CF_WHEEL_STEP = 48;
+const CF_TAU = 0.09;
+const CF_WHEEL_STEP = 56;
 const CF_DECEL = 0.998;
 const CF_REFLECT = 0.52;
-const CF_BROWSE_MS = 420;
+const CF_BROWSE_MS = 360;
 
 function faceOriginY(reducedMotion) {
   if (reducedMotion) return "50%";
@@ -157,6 +158,10 @@ function CoverFlow(root, handlers) {
   let resizeStart = 0;
   let browseTimer = 0;
   let movingUntil = 0;
+  let visual = 0;
+  let target = 0;
+  let lastTick = 0;
+  let ticking = false;
   const pool = [];
   const byId = new Map();
   const cap = flow.querySelector(".ytunes-coverflow-caption");
@@ -201,50 +206,98 @@ function CoverFlow(root, handlers) {
 
   function poseCover(cover, offset, metrics) {
     const abs = Math.abs(offset);
-    const sign = offset < 0 ? -1 : 1;
-    let transform;
-    let origin = `50% ${originY}`;
-    if (reduced) {
-      transform = `translate3d(-50%, -${originY}, 0px) rotateY(0deg)`;
-    } else if (abs < 0.001) {
-      transform = `translate3d(-50%, -${originY}, ${metrics.centerZ}px) rotateY(0deg)`;
-    } else {
-      origin = offset < 0 ? `100% ${originY}` : `0% ${originY}`;
-      const first = metrics.size * 0.5 + metrics.gap;
-      let x;
-      let z;
-      let angle;
-      if (abs < 1) {
-        x = sign * first * abs;
-        z = metrics.centerZ * (1 - abs) + -metrics.depth * abs;
-        angle = -sign * CF_ANGLE * abs;
-      } else {
-        x = sign * (first + (abs - 1) * metrics.spacing);
-        z = -abs * metrics.depth;
-        angle = -sign * CF_ANGLE;
-      }
-      transform = `translate3d(-50%, -${originY}, 0) translateX(${x}px) translateZ(${z}px) rotateY(${angle}deg)`;
-    }
     if (cover._offset === offset && cover._size === metrics.size) return;
     cover._offset = offset;
     cover._size = metrics.size;
+    const sign = offset < 0 ? -1 : 1;
+    let transform;
+    if (reduced) {
+      transform = `translate3d(-50%, -${originY}, 0) rotateY(0deg)`;
+    } else {
+      const first = metrics.size * 0.5 + metrics.gap;
+      const x =
+        abs < 1
+          ? sign * first * abs
+          : sign * (first + (abs - 1) * metrics.spacing);
+      const z =
+        abs < 1
+          ? metrics.centerZ * (1 - abs) - metrics.depth * abs
+          : -abs * metrics.depth;
+      const angle = -sign * CF_ANGLE * Math.min(abs, 1);
+      transform = `translate3d(-50%, -${originY}, 0) translate3d(${x}px, 0, ${z}px) rotateY(${angle}deg)`;
+    }
     const centered = abs < 0.45;
     if (cover._centered !== centered) {
       cover._centered = centered;
       cover.classList.toggle("is-center", centered);
-      cover.setAttribute("aria-selected", centered ? "true" : "false");
     }
-    cover.style.transformOrigin = origin;
+    const near = abs <= 1.35;
+    if (cover._near !== near) {
+      cover._near = near;
+      cover.classList.toggle("is-near", near);
+    }
     cover.style.transform = transform;
-    cover.style.zIndex = String(200 - Math.round(abs * 2));
+    cover.style.zIndex = String(200 - ((abs * 2) | 0));
   }
 
   function markMoving() {
-    movingUntil = Date.now() + CF_MS + 80;
+    movingUntil = Date.now() + 480;
   }
 
   function isBusy() {
-    return Boolean(drag || resizing || Date.now() < movingUntil);
+    return Boolean(drag || resizing || ticking || Date.now() < movingUntil);
+  }
+
+  function startTick() {
+    if (ticking) return;
+    ticking = true;
+    lastTick = performance.now();
+    requestAnimationFrame(step);
+  }
+
+  function step(now) {
+    const dt = Math.min(0.032, Math.max(0.008, (now - lastTick) / 1000));
+    lastTick = now;
+    if (drag) {
+      paint(visual, { skipCaption: true });
+      ticking = false;
+      return;
+    }
+    const max = Math.max(0, covers.length - 1);
+    target = clamp(target, 0, max);
+    const k = 1 - Math.exp(-dt / CF_TAU);
+    visual += (target - visual) * k;
+    const done = Math.abs(target - visual) < 0.002;
+    if (done) visual = target;
+    center = Math.round(visual);
+    paint(visual, { skipCaption: !done });
+    if (done) {
+      ticking = false;
+      scheduleBrowse();
+      return;
+    }
+    requestAnimationFrame(step);
+  }
+
+  function prefetchAround(index) {
+    const from = Math.max(0, index - CF_WINDOW - 2);
+    const to = Math.min(covers.length, index + CF_WINDOW + 3);
+    for (let i = from; i < to; i += 1) {
+      const src = covers[i]?.artwork;
+      if (!src) continue;
+      const img = new Image();
+      img.decoding = "async";
+      img.src = src;
+    }
+  }
+
+  function goTo(index) {
+    if (!covers.length) return;
+    target = clamp(index, 0, covers.length - 1);
+    center = target;
+    markMoving();
+    prefetchAround(target);
+    startTick();
   }
 
   function setCaption(title, artist, instant) {
@@ -481,8 +534,8 @@ function CoverFlow(root, handlers) {
   }
 
   function render(opts = {}) {
-    center = clamp(center, 0, Math.max(0, covers.length - 1));
-    paint(center, opts);
+    center = clamp(Math.round(visual), 0, Math.max(0, covers.length - 1));
+    paint(visual, opts);
   }
 
   function setList(list, selectedId) {
@@ -499,9 +552,10 @@ function CoverFlow(root, handlers) {
       center = 0;
     }
     captionIndex = -1;
-    flow.classList.add("is-snap");
-    render();
-    requestAnimationFrame(() => flow.classList.remove("is-snap"));
+    visual = center;
+    target = center;
+    ticking = false;
+    render({ skipCaption: false });
   }
 
   function beginResize() {
@@ -520,30 +574,29 @@ function CoverFlow(root, handlers) {
       node._offset = NaN;
     });
     fitCoverSize();
+    visual = center;
+    target = center;
     render();
     requestAnimationFrame(() => flow.classList.remove("is-snap"));
   }
 
   function move(delta) {
     if (!covers.length || !delta) return;
-    const next = clamp(center + delta, 0, covers.length - 1);
-    if (next === center) return;
-    center = next;
-    markMoving();
-    render();
-    scheduleBrowse();
+    goTo(target + delta);
   }
 
   function setIndex(index, silent) {
     if (!covers.length) return;
     const next = clamp(index, 0, covers.length - 1);
-    if (next === center) return;
-    center = next;
-    render();
-    if (!silent) {
-      window.clearTimeout(browseTimer);
-      handlers?.onBrowse?.(current());
+    if (silent) {
+      visual = next;
+      target = next;
+      center = next;
+      ticking = false;
+      render({ skipCaption: true });
+      return;
     }
+    goTo(next);
   }
 
   function coverFromEvent(event) {
@@ -586,7 +639,10 @@ function CoverFlow(root, handlers) {
     const idx = covers.findIndex((item) => item.id === id);
     if (idx < 0) return;
     if (event.type === "dblclick") {
+      visual = idx;
+      target = idx;
       center = idx;
+      ticking = false;
       render();
       handlers?.onPlay?.(covers[idx]);
       return;
@@ -614,7 +670,7 @@ function CoverFlow(root, handlers) {
       wheelRaf = 0;
       const steps = wheelSteps;
       wheelSteps = 0;
-      if (steps) move(steps);
+      if (steps) goTo(target + steps);
     });
   }
 
@@ -641,18 +697,19 @@ function CoverFlow(root, handlers) {
   function onPointerMove(event) {
     if (!drag || event.pointerId !== drag.id) return;
     const step = Math.max(24, stepWidth());
-    let visual = drag.startCenter - (event.clientX - drag.startX) / step;
+    let next = drag.startCenter - (event.clientX - drag.startX) / step;
     const max = Math.max(0, covers.length - 1);
-    if (visual < 0) visual = -rubberband(-visual, step);
-    else if (visual > max) visual = max + rubberband(visual - max, step);
+    if (next < 0) next = -rubberband(-next, step);
+    else if (next > max) next = max + rubberband(next - max, step);
     if (Math.abs(event.clientX - drag.startX) > 4) drag.moved = true;
-    drag.visual = visual;
+    drag.visual = next;
+    visual = next;
     drag.samples.push({ x: event.clientX, t: Date.now() });
     if (drag.samples.length > 6) drag.samples.shift();
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
-      if (drag) paint(drag.visual);
+      if (drag) paint(drag.visual, { skipCaption: true });
     });
   }
 
@@ -660,7 +717,7 @@ function CoverFlow(root, handlers) {
     if (!drag || event.pointerId !== drag.id) return;
     const samples = drag.samples;
     const moved = drag.moved;
-    const visual = drag.visual;
+    const at = drag.visual;
     const pointerId = drag.id;
     skipClick = moved;
     drag = null;
@@ -672,7 +729,7 @@ function CoverFlow(root, handlers) {
     }
     if (!covers.length) return;
     const max = covers.length - 1;
-    let target = clamp(Math.round(visual || 0), 0, max);
+    let landing = clamp(Math.round(at || 0), 0, max);
     if (moved && samples.length >= 2) {
       const first = samples[0];
       const last = samples[samples.length - 1];
@@ -680,16 +737,10 @@ function CoverFlow(root, handlers) {
       const vPx = (last.x - first.x) / dt;
       const step = Math.max(24, stepWidth());
       const v = -vPx / step;
-      const projected = (visual || 0) + project(v * 1000);
-      target = clamp(Math.round(projected), 0, max);
+      landing = clamp(Math.round((at || 0) + project(v * 1000)), 0, max);
     }
-    if (target !== center) {
-      center = target;
-      render();
-      if (moved) handlers?.onBrowse?.(current());
-    } else {
-      render();
-    }
+    visual = at;
+    goTo(landing);
   }
 
   function onKey(event) {
