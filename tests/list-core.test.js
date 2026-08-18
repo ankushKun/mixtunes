@@ -183,6 +183,26 @@ function testFlattenEmptyOwnedNotice() {
   assert.strictEqual(rows[2].index, 0);
 }
 
+/** Automix tracks render as a separated section below the plain queue rows. */
+function testFlattenAutomixSection() {
+  const owned = [
+    track("aaaaaaaaaaa"),
+    track("bbbbbbbbbbb"),
+    track("ccccccccccc", { shelf: "Automix", automix: true }),
+    track("ddddddddddd", { shelf: "Automix", automix: true }),
+  ];
+  const rows = L.flattenListRows({ owned, suggested: [], sectioned: true });
+  const kinds = rows.map((row) => `${row.kind}:${row.title || row.index}`);
+  assert.deepStrictEqual(kinds, [
+    "track:0",
+    "track:1",
+    "section:Automix",
+    "track:2",
+    "track:3",
+  ]);
+  assert.strictEqual(L.flattenIndexForTrack(rows, 2), 3);
+}
+
 function testCoversFromTracksGroupsAlbums() {
   const tracks = [
     track("aaaaaaaaaaa", { album: "Blue", artist: "Joni", title: "River" }),
@@ -249,6 +269,36 @@ function testTrackMatchesCover() {
   assert.strictEqual(L.trackMatchesCover(null, covers[0]), false);
 }
 
+/** Browse tint must not apply when the cover owns the entire visible list. */
+function testBrowseHighlightOnlyForSubset() {
+  const blue = [
+    track("aaaaaaaaaaa", { album: "Blue", artist: "Joni" }),
+    track("bbbbbbbbbbb", { album: "Blue", artist: "Joni" }),
+  ];
+  const mixed = [
+    ...blue,
+    track("ccccccccccc", { album: "Court", artist: "Joni" }),
+  ];
+  const cover = L.coversFromTracks(blue)[0];
+  assert.strictEqual(
+    L.browseHighlightActive(mixed, cover),
+    true,
+    "subset of a mixed list should highlight"
+  );
+  assert.strictEqual(
+    L.browseHighlightActive(blue, cover),
+    false,
+    "full-list match (opened album) must keep zebra"
+  );
+  assert.strictEqual(L.browseHighlightActive(blue, null), false);
+  assert.strictEqual(L.browseHighlightActive([], cover), false);
+  assert.strictEqual(
+    L.browseHighlightActive([blue[0]], cover),
+    false,
+    "single-row lists never need browse tint"
+  );
+}
+
 function testBrowsePageCount() {
   assert.strictEqual(L.browsePageCount(), 2);
   assert.strictEqual(L.browsePageCount(2), 2);
@@ -309,10 +359,12 @@ const tests = [
   testFlattenPlainTracks,
   testFlattenSectionsAndSuggestions,
   testFlattenEmptyOwnedNotice,
+  testFlattenAutomixSection,
   testCoversFromTracksGroupsAlbums,
   testCoversFromTracksIsLinear,
   testCoversWorkWithoutVideoIdAlias,
   testTrackMatchesCover,
+  testBrowseHighlightOnlyForSubset,
   testBrowsePageCount,
   testLibraryUpdatePlan,
   testLibraryBrowsePages,

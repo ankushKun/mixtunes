@@ -30,6 +30,7 @@ const REQUIRED_HOST_SURFACE = [
   "moods",
   "collectionQuery",
   "listIdFor",
+  "builtinLists",
   "isSongCover",
   "trackFromCover",
   "albumOf",
@@ -68,6 +69,7 @@ const CAPABILITY_KEYS = [
   "playlistEdit",
   "signedIn",
   "radio",
+  "automix",
   "shuffle",
   "repeat",
   "seek",
@@ -171,7 +173,24 @@ function testPageCoreMatchesSharedRules() {
     ["listId", ["VLPL123"], ["PL123"], [""], [null]],
     ["isConcreteList", ["VLPL123"], ["RDAMVMdQw4w9WgXcQ"], ["RDCLAK5"], [""]],
     ["radioFor", ["dQw4w9WgXcQ"], ["nope"], [""]],
+    [
+      "rowKey",
+      [{ setVideoId: "row1", id: "dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }],
+      [{ id: "dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }],
+      [{ videoId: "dQw4w9WgXcQ" }],
+      [{}],
+      [null],
+    ],
     ["shouldHandleAutoAdvance", [true], [false], [undefined]],
+    [
+      "shouldTakeOverAutoAdvance",
+      [{ playerState: 0, playing: false, videoId: "a", fromId: "a" }],
+      [{ playerState: 2, playing: false, videoId: "a", fromId: "a" }],
+      [{ playerState: 1, playing: true, videoId: "b", fromId: "a" }],
+      [{ playerState: NaN, playing: false, videoId: "a", fromId: "a" }],
+      [{ playerState: 0, playing: false, videoId: "", fromId: "a" }],
+      [undefined],
+    ],
     [
       "adjacentInRoster",
       [["a", "b", "c"], "b", "next", true, -1],
@@ -189,21 +208,12 @@ function testPageCoreMatchesSharedRules() {
       [undefined],
     ],
     [
-      "shouldParkRestoreAutoplay",
-      [{ hooksActive: true }],
-      [{ hasGesture: true }],
-      [{ parked: true }],
-      [{}],
-    ],
-    [
-      "nativeBarHasSong",
-      [{ videoId: "dQw4w9WgXcQ" }],
-      [{ id: "dQw4w9WgXcQ" }],
-      [{ title: "YouTube Music" }],
-      [{ title: "yTunes" }],
-      [{ title: "Real Song" }],
-      [{}],
-      [null],
+      "stockSiteUntouched",
+      [{ pref: "1", hasRoot: true }],
+      [{ pref: "0" }],
+      [{ dataset: "off" }],
+      [{ pref: "1", hasLaunch: true, hasRoot: false }],
+      [undefined],
     ],
   ];
 
@@ -304,11 +314,129 @@ function testNowPlayingAcceptsCanonicalId() {
   assert.strictEqual(prefs.sanitizeNowPlaying(null), null);
 }
 
+/**
+ * The shell script is a pure function module (no top-level side effects), so
+ * its roster logic can be exercised in a sandbox with stubbed host globals.
+ */
+function loadShellModule() {
+  const playback = require("../scripts/playback-core");
+  playback.configure(require("../scripts/hosts/ytm/ids"));
+  const context = {
+    YTunesPlayback: playback,
+    MusicHost: { forcedSessionMode: () => "", strings: {}, probe: () => null },
+    console,
+  };
+  vm.createContext(context);
+  vm.runInContext(read("layouts/shell/script.js"), context);
+  return context;
+}
+
+/** Browsing must never republish the roster: only the session or live queue. */
+function testSkipRosterIgnoresBrowsedSource() {
+  const shell = loadShellModule();
+  const state = {
+    session: null,
+    tracks: [{ id: "browsed1" }, { id: "browsed2" }],
+    visibleTracks: [{ id: "browsed1" }, { id: "browsed2" }],
+    nowTracks: [{ id: "queue1" }, { id: "queue2" }],
+  };
+  const roster = shell.skipRoster(state, { trackId: "queue1", playlistId: "" });
+  // The sandbox builds objects in its own realm, so compare as JSON.
+  assert.strictEqual(
+    JSON.stringify(roster.tracks.map((track) => track.id)),
+    JSON.stringify(["queue1", "queue2"]),
+    "roster must be the live queue, not the browsed source"
+  );
+
+  state.nowTracks = [];
+  const empty = shell.skipRoster(state, { trackId: "", playlistId: "" });
+  assert.strictEqual(
+    empty.tracks.length,
+    0,
+    "no session and no live queue must yield an empty roster"
+  );
+}
+
+/** A radio handoff replaces the list session and keeps a skip fallback roster. */
+function testRadioHandoffReplacesListSession() {
+  const shell = loadShellModule();
+  const state = {
+    session: {
+      source: "list",
+      listId: "",
+      tracks: [{ id: "a" }, { id: "b" }],
+      shuffle: false,
+      order: null,
+    },
+    nowTracks: [{ id: "zz" }, { id: "yy" }, { id: "xx" }],
+  };
+  const roster = shell.skipRoster(state, {
+    trackId: "zz",
+    playlistId: "RDAMVMzz",
+  });
+  assert.strictEqual(roster.handedOff, true, "handoff must be signalled");
+  assert.strictEqual(state.session.source, "radio");
+  assert.strictEqual(roster.ownList, false, "host still drives radio transport");
+  assert.strictEqual(
+    JSON.stringify(roster.tracks.map((track) => track.id)),
+    JSON.stringify(["zz", "yy", "xx"]),
+    "radio must publish the live queue so next/prev have a fallback"
+  );
+}
+
+/** Home/radio with only a seed session still prefers the live nowTracks roster. */
+function testRadioSkipRosterPrefersLiveQueue() {
+  const shell = loadShellModule();
+  const state = {
+    session: {
+      source: "radio",
+      listId: "RDAMVMaa",
+      tracks: [{ id: "aaaaaaaaaaa" }],
+      shuffle: false,
+      order: null,
+    },
+    nowTracks: [
+      { id: "aaaaaaaaaaa" },
+      { id: "bbbbbbbbbbb" },
+      { id: "ccccccccccc" },
+    ],
+  };
+  const roster = shell.skipRoster(state, {
+    trackId: "aaaaaaaaaaa",
+    playlistId: "RDAMVMaa",
+  });
+  assert.strictEqual(roster.ownList, false);
+  assert.strictEqual(
+    JSON.stringify(roster.tracks.map((track) => track.id)),
+    JSON.stringify(["aaaaaaaaaaa", "bbbbbbbbbbb", "ccccccccccc"])
+  );
+}
+
+/** A stale shuffle order falls back to roster order; it is never re-rolled. */
+function testOrderedSessionTracksNeverRerolls() {
+  const shell = loadShellModule();
+  const tracks = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const stale = { shuffle: true, order: [1, 0], tracks };
+  assert.strictEqual(
+    JSON.stringify(shell.orderedSessionTracks(stale).map((track) => track.id)),
+    JSON.stringify(["a", "b", "c"])
+  );
+  const valid = { shuffle: true, order: [2, 0, 1], tracks };
+  assert.strictEqual(
+    JSON.stringify(shell.orderedSessionTracks(valid).map((track) => track.id)),
+    JSON.stringify(["c", "a", "b"])
+  );
+}
+
 testHostSurface();
 testShellHasNoHostKnowledge();
 testWorldsDoNotShareFiles();
 testPageCoreMatchesSharedRules();
 testNowPlayingAcceptsCanonicalId();
+testSkipRosterIgnoresBrowsedSource();
+testRadioHandoffReplacesListSession();
+testRadioSkipRosterPrefersLiveQueue();
+testOrderedSessionTracksNeverRerolls();
 testPrefsAreNamespacedByHost().then(() => {
-  console.log("host-contract: 6 groups passed");
+  console.log("host-contract: 10 groups passed");
 });

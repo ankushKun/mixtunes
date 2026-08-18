@@ -30,11 +30,36 @@ function testHostShape() {
       "originalLabel",
       "originalTitle",
       "bootFail",
+      "continuationLabel",
+      "continuationToast",
       "popupAlive",
       "popupOverlayHint",
       "popupOpen",
     ]) {
       assert.ok(host.strings?.[key], `${host.id} is missing strings.${key}`);
+    }
+    assert.ok(
+      Array.isArray(host.sourceGroups) && host.sourceGroups.length > 0,
+      `${host.id} needs a sourceGroups sidebar descriptor`
+    );
+    for (const group of host.sourceGroups) {
+      assert.ok(group.id && group.label, `${host.id} sourceGroup needs id and label`);
+      assert.ok(
+        Array.isArray(group.sources),
+        `${host.id} sourceGroup ${group.id} needs a sources array`
+      );
+      for (const item of group.sources) {
+        assert.ok(
+          item.source && item.label && item.icon,
+          `${host.id} sourceGroup ${group.id} entry needs source, label, and icon`
+        );
+      }
+    }
+    if (host.moodCap != null) {
+      assert.ok(
+        Number.isInteger(host.moodCap) && host.moodCap > 0,
+        `${host.id} moodCap must be a positive integer`
+      );
     }
   }
   assert.strictEqual(hosts.primary(), hosts.list[0]);

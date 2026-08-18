@@ -229,43 +229,13 @@ function testSearchSongWithAlbumIdStillRadio() {
   assert.strictEqual(ctx.listId, "RDAMVMabcdefghijk");
 }
 
-function testParkRestoreAutoplay() {
-  assert.strictEqual(P.shouldParkRestoreAutoplay({ hooksActive: true }), false);
-  assert.strictEqual(P.shouldParkRestoreAutoplay({ hooksActive: false, hasGesture: true }), false);
-  assert.strictEqual(P.shouldParkRestoreAutoplay({ hooksActive: false, parked: true }), false);
-  assert.strictEqual(
-    P.shouldParkRestoreAutoplay({ hooksActive: false, hasGesture: false, parked: false }),
-    true
-  );
-}
-
-function testNativeBarHasSong() {
-  assert.strictEqual(P.nativeBarHasSong(null), false);
-  assert.strictEqual(P.nativeBarHasSong({}), false);
-  assert.strictEqual(P.nativeBarHasSong({ title: "YouTube Music" }), false);
-  assert.strictEqual(P.nativeBarHasSong({ title: "yTunes" }), false);
-  assert.strictEqual(P.nativeBarHasSong({ title: "Night Drive" }), true);
-  assert.strictEqual(P.nativeBarHasSong({ videoId: "abcdefghijk" }), true);
-}
-
-function testShouldCueStoredTrack() {
-  assert.strictEqual(
-    P.shouldCueStoredTrack({ overlayOn: true, storedTrackId: "abcdefghijk" }),
-    false
-  );
-  assert.strictEqual(
-    P.shouldCueStoredTrack({
-      overlayOn: false,
-      barHasSong: true,
-      storedTrackId: "abcdefghijk",
-    }),
-    false
-  );
-  assert.strictEqual(P.shouldCueStoredTrack({ overlayOn: false, storedTrackId: "" }), false);
-  assert.strictEqual(
-    P.shouldCueStoredTrack({ overlayOn: false, barHasSong: false, storedTrackId: "abcdefghijk" }),
-    true
-  );
+function testStockSiteUntouched() {
+  // Overlay on: hooks may act. Overlay off in any spelling: hands off.
+  assert.strictEqual(P.stockSiteUntouched({ pref: "1", hasRoot: true }), false);
+  assert.strictEqual(P.stockSiteUntouched({ pref: null, hasRoot: false, hasLaunch: false }), false);
+  assert.strictEqual(P.stockSiteUntouched({ pref: "0" }), true);
+  assert.strictEqual(P.stockSiteUntouched({ dataset: "off" }), true);
+  assert.strictEqual(P.stockSiteUntouched({ pref: "1", hasLaunch: true, hasRoot: false }), true);
 }
 
 function testOverlayHooksStayOffWhenDisabled() {
@@ -320,7 +290,6 @@ function testOpaqueIdsHost() {
     // Concrete lists are not detected by a "RD" prefix.
     assert.strictEqual(P.isConcreteList("RDpretendRadio"), true);
     assert.strictEqual(P.listId("VLsomething"), "VLsomething");
-    assert.strictEqual(P.nativeBarHasSong({ title: "YouTube Music" }), true);
 
     const owned = P.resolvePlayContext({ source: "songs", session: {} }, tracks[0], {
       sessionTracks: tracks,
@@ -359,6 +328,62 @@ function testRowKeyDedupesDuplicatePlaylistRows() {
   );
 }
 
+function testShuffleOrderStable() {
+  const prev = [song("aaaaaaaaaaa"), song("bbbbbbbbbbb"), song("ccccccccccc"), song("ddddddddddd")];
+  // Shuffled: d, a, c, b
+  const prevOrder = [3, 0, 2, 1];
+
+  // Refresh drops b and appends e: surviving relative order must hold.
+  const next = [song("aaaaaaaaaaa"), song("ccccccccccc"), song("ddddddddddd"), song("eeeeeeeeeee")];
+  const order = P.shuffleOrderStable(prevOrder, prev, next);
+  assert.deepStrictEqual(
+    order.map((index) => next[index].videoId),
+    ["ddddddddddd", "aaaaaaaaaaa", "ccccccccccc", "eeeeeeeeeee"],
+    "survivors keep shuffled order, new tracks append"
+  );
+
+  // Identical roster: order passes through untouched.
+  assert.deepStrictEqual(
+    P.shuffleOrderStable(prevOrder, prev, prev),
+    prevOrder,
+    "unchanged roster keeps the exact order"
+  );
+
+  // No prior order: identity order.
+  assert.deepStrictEqual(P.shuffleOrderStable(null, prev, next), [0, 1, 2, 3]);
+}
+
+function testShouldTakeOverAutoAdvance() {
+  // Host advanced on its own: hands off.
+  assert.strictEqual(
+    P.shouldTakeOverAutoAdvance({ playerState: 1, playing: true, videoId: "b", fromId: "a" }),
+    false
+  );
+  // Same video still loaded and player ENDED (state 0): take over.
+  assert.strictEqual(
+    P.shouldTakeOverAutoAdvance({ playerState: 0, playing: false, videoId: "a", fromId: "a" }),
+    true
+  );
+  // Same video but user-PAUSED (state 2): never take over a user's pause.
+  assert.strictEqual(
+    P.shouldTakeOverAutoAdvance({ playerState: 2, playing: false, videoId: "a", fromId: "a" }),
+    false
+  );
+  // No player state available: fall back to the playing flag.
+  assert.strictEqual(
+    P.shouldTakeOverAutoAdvance({ playerState: NaN, playing: false, videoId: "a", fromId: "a" }),
+    true
+  );
+  assert.strictEqual(
+    P.shouldTakeOverAutoAdvance({ playerState: NaN, playing: true, videoId: "a", fromId: "a" }),
+    false
+  );
+  // Missing ids: no opinion.
+  assert.strictEqual(P.shouldTakeOverAutoAdvance({ playerState: 0, videoId: "", fromId: "a" }), false);
+  assert.strictEqual(P.shouldTakeOverAutoAdvance({ playerState: 0, videoId: "a", fromId: "" }), false);
+  assert.strictEqual(P.shouldTakeOverAutoAdvance(), false);
+}
+
 function run() {
   testAdjacentRoster();
   testPendingSkipIndex();
@@ -378,12 +403,12 @@ function run() {
   testSearchSongWithAlbumIdStillRadio();
   testSearchSongStartsRadio();
   testOverlayHooksStayOffWhenDisabled();
-  testParkRestoreAutoplay();
-  testNativeBarHasSong();
-  testShouldCueStoredTrack();
+  testStockSiteUntouched();
   testOpaqueIdsHost();
   testTrackIdPrefersCanonicalId();
   testRowKeyDedupesDuplicatePlaylistRows();
+  testShuffleOrderStable();
+  testShouldTakeOverAutoAdvance();
   console.log("playback-core: 24 tests passed");
 }
 

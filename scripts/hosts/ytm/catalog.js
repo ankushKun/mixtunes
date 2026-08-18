@@ -695,6 +695,20 @@ const SONGS_SEARCH_PARAMS = "EgWKAQIIAWoMEA4QChADEAQQCRAF";
 
 const queueMemo = { key: "", at: 0, data: null, inflight: null, gen: 0 };
 
+// Safety cap only: the MAIN world fires ytunes-queue-changed on real queue
+// changes (new video, navigation, queue DOM edits, enqueue), so a populated
+// cache otherwise stays valid until the queue actually changes.
+const QUEUE_CACHE_CAP = 30000;
+
+if (typeof document !== "undefined") {
+  document.addEventListener("ytunes-queue-changed", () => {
+    queueMemo.gen += 1;
+    queueMemo.key = "";
+    queueMemo.data = null;
+    queueMemo.at = 0;
+  });
+}
+
 function parseQueuePanel(response) {
   const acc = { tracks: [], collections: [], lyricsId: "", chips: [] };
   const seen = new Set();
@@ -1087,27 +1101,38 @@ const YTM = {
       response = {};
     }
     let parsed = parseQueuePanel(response);
+    const autoId = automixPlaylistId(response);
     const hostPlayable = playableQueueTracks(host.tracks);
     const radioList = String(resolvedPlaylist || "").replace(/^VL/, "").startsWith("RD");
     const parsedCount = playableQueueTracks(parsed.tracks).length;
     const thin = parsedCount < 8 && (!hostMatches || hostPlayable.length < 8);
-    if (thin && (radioList || !isConcretePlaylist(resolvedPlaylist))) {
-      const followId =
-        automixPlaylistId(response) ||
-        (radioList ? resolvedPlaylist : "") ||
-        (!resolvedPlaylist && videoId ? `RDAMVM${videoId}` : "");
-      if (followId) {
-        try {
-          const more = await YTM.next({
-            videoId: videoId || undefined,
-            playlistId: followId,
-            enablePersistentPlaylistPanel: true,
-            isAudioOnly: true,
-          });
-          parsed = mergeParsed([parsed, parseQueuePanel(more)]);
-        } catch {
-          /* keep the first panel */
+    // Nothing playable may be invisible: when the panel advertises an automix
+    // continuation, append its tracks (tagged) so the UI shows what YTM will
+    // play after the listed queue ends.
+    const followId =
+      autoId ||
+      (thin && (radioList || !isConcretePlaylist(resolvedPlaylist))
+        ? (radioList ? resolvedPlaylist : "") ||
+          (!resolvedPlaylist && videoId ? `RDAMVM${videoId}` : "")
+        : "");
+    if (followId) {
+      try {
+        const more = await YTM.next({
+          videoId: videoId || undefined,
+          playlistId: followId,
+          enablePersistentPlaylistPanel: true,
+          isAudioOnly: true,
+        });
+        const extra = parseQueuePanel(more);
+        if (autoId && followId === autoId) {
+          extra.tracks = (extra.tracks || []).map((track) => ({
+            ...track,
+            automix: true,
+          }));
         }
+        parsed = mergeParsed([parsed, extra]);
+      } catch {
+        /* keep the first panel */
       }
     }
     const tracks =
@@ -1126,7 +1151,7 @@ const YTM = {
   },
   async queueCached(videoId, playlistId) {
     const key = `${videoId || ""}|${playlistId || ""}`;
-    const ttl = (queueMemo.data?.tracks || []).length > 1 ? 4000 : 500;
+    const ttl = (queueMemo.data?.tracks || []).length > 1 ? QUEUE_CACHE_CAP : 500;
     if (
       queueMemo.key === key &&
       queueMemo.data &&

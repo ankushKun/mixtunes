@@ -19,7 +19,6 @@
   const VIDEO_ID = /^[\w-]{11}$/;
   const RADIO_PREFIX = "RD";
   const SONG_RADIO_PREFIX = "RDAMVM";
-  const IDLE_TITLE = /^youtube music$/i;
 
   function text(value) {
     return String(value ?? "").trim();
@@ -63,6 +62,13 @@
     return Boolean(ownList);
   }
 
+  function shouldTakeOverAutoAdvance({ playerState, playing, videoId, fromId } = {}) {
+    if (!fromId || !videoId || videoId !== fromId) return false;
+    const state = Number(playerState);
+    if (Number.isFinite(state)) return state === 0;
+    return !playing;
+  }
+
   function overlayHooksActive({ pref, dataset, hasRoot, hasLaunch } = {}) {
     if (pref === "0" || pref === "off" || pref === false) return false;
     if (dataset === "off" || dataset === "0") return false;
@@ -70,25 +76,18 @@
     return true;
   }
 
-  function shouldParkRestoreAutoplay({
-    hooksActive = false,
-    hasGesture = false,
-    parked = false,
-  } = {}) {
-    if (hooksActive) return false;
-    if (parked) return false;
-    if (hasGesture) return false;
-    return true;
+  /**
+   * True when the overlay is off and the stock site must run untouched: no
+   * pausing, no cueing, no media-key interception. Every MAIN-world side effect
+   * that could touch host playback checks this first.
+   */
+  function stockSiteUntouched(hookState) {
+    return !overlayHooksActive(hookState);
   }
 
-  function nativeBarHasSong(info) {
-    if (!info || typeof info !== "object") return false;
-    if (playable(text(info.id) || text(info.videoId))) return true;
-    const title = text(info.title);
-    if (!title) return false;
-    if (title === "yTunes") return false;
-    if (IDLE_TITLE.test(title)) return false;
-    return true;
+  /** Row identity inside a playlist; distinguishes duplicate videos. */
+  function rowKey(track) {
+    return text(track?.setVideoId) || text(track?.id) || text(track?.videoId);
   }
 
   return {
@@ -96,10 +95,11 @@
     listId,
     isConcreteList,
     radioFor,
+    rowKey,
     adjacentInRoster,
     shouldHandleAutoAdvance,
+    shouldTakeOverAutoAdvance,
     overlayHooksActive,
-    shouldParkRestoreAutoplay,
-    nativeBarHasSong,
+    stockSiteUntouched,
   };
 });

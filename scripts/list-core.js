@@ -207,6 +207,20 @@
     return false;
   }
 
+  /**
+   * Browse highlighting is for mixed lists ("these rows belong to the selected
+   * cover"). When every visible row matches — opened album, album preview —
+   * the highlight would paint the whole table one color and kill zebra striping.
+   */
+  function browseHighlightActive(tracks, cover) {
+    if (!cover || !tracks?.length || tracks.length <= 1) return false;
+    let matches = 0;
+    for (const track of tracks) {
+      if (trackMatchesCover(track, cover)) matches += 1;
+    }
+    return matches > 0 && matches < tracks.length;
+  }
+
   function spacerRowHtml(height, colspan = 8) {
     const px = Math.max(0, Math.round(Number(height) || 0));
     if (!px) return "";
@@ -228,6 +242,7 @@
     coverIdForTrack,
     coversFromTracks,
     trackMatchesCover,
+    browseHighlightActive,
     spacerRowHtml,
   };
 });

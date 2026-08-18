@@ -41,6 +41,10 @@
         originalTitle: "Hide the yTunes overlay and reload YouTube Music",
         /** Shown when the host player never appeared. */
         bootFail: "YouTube Music didn’t become ready",
+        /** Section label for host-generated queue continuations (automix). */
+        continuationLabel: "Automix",
+        /** Toast when playback hands off to a host-generated continuation. */
+        continuationToast: "Similar music will keep playing",
         /** Popup: host is up but has no track metadata yet. */
         popupAlive: "YouTube Music player is alive.",
         /** Popup: overlay toggle hint. */
@@ -48,6 +52,57 @@
         /** Popup: link that opens the host. */
         popupOpen: "Open YouTube Music",
       },
+      /**
+       * Sidebar layout: which sources exist, under which group, with which
+       * icon, and whether the group starts open. `dynamic` marks the group
+       * that hosts a runtime list (mood chips or user playlists). The shell
+       * renders this verbatim and stays host-agnostic.
+       */
+      sourceGroups: [
+        {
+          id: "store",
+          label: "Store",
+          sources: [
+            { source: "home", label: "Home", icon: "home" },
+            { source: "explore", label: "Explore", icon: "explore" },
+            { source: "charts", label: "Charts", icon: "chart" },
+          ],
+        },
+        {
+          id: "library",
+          label: "Library",
+          sources: [
+            { source: "songs", label: "Music", icon: "note" },
+            { source: "liked", label: "Liked Songs", icon: "heart" },
+            { source: "albums", label: "Albums", icon: "album" },
+            { source: "artists", label: "Artists", icon: "artist" },
+            { source: "recents", label: "Recents", icon: "clock" },
+          ],
+        },
+        {
+          id: "media",
+          label: "Media",
+          open: false,
+          sources: [
+            { source: "videos", label: "Videos", icon: "video" },
+            { source: "podcasts", label: "Podcasts", icon: "podcast" },
+          ],
+        },
+        {
+          id: "genius",
+          label: "Genius",
+          dynamic: "moods",
+          sources: [{ source: "mixes", label: "Radio & Mixes", icon: "radio" }],
+        },
+        {
+          id: "playlists",
+          label: "Playlists",
+          dynamic: "playlists",
+          sources: [{ source: "now", label: "Now Playing", icon: "speaker" }],
+        },
+      ],
+      /** Mood chips beyond this count live under Explore instead. */
+      moodCap: 6,
     },
   ];
 

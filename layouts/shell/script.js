@@ -243,21 +243,6 @@ function coversFromTracks(tracks) {
   return YTunesList.coversFromTracks(tracks);
 }
 
-function queueCovers(tracks) {
-  return (tracks || []).map((track, index) => ({
-    id: trackId(track) || track.id || `q:${index}`,
-    title: track.title,
-    subtitle: track.artist,
-    artist: track.artist,
-    album: track.album,
-    artwork: track.artwork,
-    kind: "song",
-    videoId: trackId(track),
-    tracks: [track],
-    endpoint: track.endpoint,
-  }));
-}
-
 function queueFingerprint(tracks) {
   return (tracks || []).map((track) => trackId(track) || track.id || track.title).join("\n");
 }
@@ -274,6 +259,10 @@ function applyCoverCaption(root, state, cover, track) {
 }
 
 function applyNowPlaying(root, state, tracks, status, options = {}) {
+  const continuation = MusicHost.strings.continuationLabel || "Up next";
+  tracks = (tracks || []).map((track) =>
+    track?.automix && !track.shelf ? { ...track, shelf: continuation } : track
+  );
   const playingId = status?.trackId || "";
   const keep =
     options.keepSelection && trackId(state.visibleTracks[state.selectedIndex]);
@@ -293,7 +282,8 @@ function applyNowPlaying(root, state, tracks, status, options = {}) {
   state.selectedIndex = index >= 0 ? index : tracks.length ? 0 : -1;
   renderTracks(root, state, tracks, "Nothing is playing.");
   if (options.resetCovers || wasThin) {
-    const covers = queueCovers(tracks);
+    // Group by album: a 12-track album in the queue is one cover, not twelve.
+    const covers = coversFromTracks(tracks);
     const cover = covers[Math.max(0, state.selectedIndex)];
     showCovers(state, covers, cover?.id || "");
     renderGrid(root, state);
@@ -400,6 +390,56 @@ function markPlayingRows(root, videoId) {
   });
 }
 
+/**
+ * The sidebar key of the item that owns the playing session, so the "playing"
+ * indicator stays on the session's home no matter what is being browsed.
+ */
+function sessionSourceKey(state) {
+  const session = state.session;
+  if (!session || (!session.tracks?.length && !session.listId)) return "";
+  if (session.source === "radio") return "mixes";
+  const origin = session.origin || "";
+  if (origin === "playlist") {
+    const id = playlistIdOf(session.originListId || session.listId);
+    return id ? `playlist:${id}` : "";
+  }
+  if (origin === "album") return "albums";
+  return origin;
+}
+
+function markPlayingSource(root, state) {
+  const key = sessionSourceKey(state);
+  root.querySelectorAll(".ytunes-source-list button").forEach((node) => {
+    let on = false;
+    if (key) {
+      if (node.dataset.playlist) on = key === `playlist:${node.dataset.playlist}`;
+      else if (node.dataset.source) on = key === node.dataset.source;
+    }
+    node.classList.toggle("is-playing-source", on);
+  });
+}
+
+/**
+ * Status-bar affordance shown when the playing track is not in the visible
+ * list — clicking jumps to Now Playing instead of silently doing nothing.
+ */
+function syncNowJump(root, state, status) {
+  const btn = root.querySelector("#ytunes-now-jump");
+  if (!btn) return;
+  const videoId = status?.trackId || "";
+  const missing =
+    Boolean(videoId) &&
+    state.source !== "now" &&
+    indexOfVideo(state.visibleTracks, videoId) < 0;
+  if (!missing) {
+    btn.hidden = true;
+    return;
+  }
+  btn.hidden = false;
+  btn.textContent = `Now Playing: ${status?.title || "…"}`;
+  btn.title = "Jump to Now Playing";
+}
+
 function playback() {
   return typeof YTunesPlayback !== "undefined" ? YTunesPlayback : null;
 }
@@ -475,6 +515,8 @@ function beginSession(state, options = {}) {
     tracks,
     shuffle,
     order: sameRoster ? prev.order : shuffle && tracks.length ? shuffledOrder(tracks.length) : null,
+    origin: options.origin || "",
+    originListId: options.originListId || "",
   };
   return state.session;
 }
@@ -482,10 +524,11 @@ function beginSession(state, options = {}) {
 function orderedSessionTracks(session) {
   const tracks = session?.tracks || [];
   if (!session?.shuffle) return tracks;
-  if (!session.order || session.order.length !== tracks.length) {
-    session.order = shuffledOrder(tracks.length);
-  }
-  return session.order.map((index) => tracks[index]).filter(Boolean);
+  const order = session.order;
+  // An order that no longer matches the roster is meaningless; never re-roll
+  // here — re-rolling desyncs the shown order from the playback order.
+  if (!order || order.length !== tracks.length) return tracks;
+  return order.map((index) => tracks[index]).filter(Boolean);
 }
 
 /**
@@ -496,13 +539,17 @@ function orderedSessionTracks(session) {
 async function playStateTrack(state, track, extras = {}) {
   if (!track) return;
   const cover = extras.cover || coverForTrack(state, track);
+  // In Now Playing covers group by album, so a cover's tracks are an album
+  // subset — never let that replace the live queue as the play context.
   const sessionTracks =
     extras.tracks ||
-    (cover?.tracks?.length > 1 ? cover.tracks : sessionTracksForPlay(state, track));
+    (state.source !== "now" && cover?.tracks?.length > 1
+      ? cover.tracks
+      : sessionTracksForPlay(state, track));
   const ctx = await MusicHost.play({
     track,
     context: {
-      source: state.source,
+      source: extras.source || state.source,
       playlistId: state.playlistId,
       session: state.session,
       cover,
@@ -516,6 +563,8 @@ async function playStateTrack(state, track, extras = {}) {
     source: ctx.mode === "radio" ? "radio" : ctx.ownList ? "list" : "queue",
     listId: ctx.listId,
     tracks: ctx.tracks,
+    origin: extras.source || state.source,
+    originListId: state.playlistId,
   });
 }
 
@@ -524,9 +573,11 @@ function skipRoster(state, status) {
   const playingList = playlistIdOf(status?.playlistId);
   const playingRadio = radioListId(playingList) || radioListId(session.listId);
   const forcedMode = MusicHost.forcedSessionMode();
+  let handedOff = false;
   if (forcedMode === "radio" && session.source === "list") {
     session.source = "radio";
     session.listId = radioListId(playingList) || radioListId(session.listId) || session.listId;
+    handedOff = true;
   }
 
   if (playingRadio && session.source === "list") {
@@ -539,14 +590,24 @@ function skipRoster(state, status) {
     if (!inList || atEnd) {
       session.source = "radio";
       session.listId = radioListId(playingList) || playingRadio;
+      handedOff = true;
     }
   }
 
   if (session.source === "radio" || (playingRadio && session.source !== "list")) {
+    // Host drives transport (ownList false), but the live queue / session
+    // snapshot MUST stay published so next/prev have a fallback when the
+    // native bar button is a no-op. Returning [] here is what made Home /
+    // radio skips fail even while Now Playing showed a full queue.
+    const live = (state.nowTracks || []).filter(trackId);
+    const fromSession = playableSessionTracks(session.tracks);
+    const tracks =
+      live.length > 1 ? live : fromSession.length > 1 ? fromSession : live;
     return {
-      tracks: [],
-      playlistId: playingRadio || session.listId,
+      tracks,
+      playlistId: playingRadio || session.listId || "",
       ownList: false,
+      handedOff,
     };
   }
 
@@ -555,6 +616,7 @@ function skipRoster(state, status) {
       tracks: session.tracks || [],
       playlistId: session.listId,
       ownList: false,
+      handedOff,
     };
   }
 
@@ -563,41 +625,25 @@ function skipRoster(state, status) {
       tracks: orderedSessionTracks(session),
       playlistId: isConcreteList(session.listId) ? session.listId : "",
       ownList: true,
+      handedOff,
     };
   }
 
-  const stateList = playlistIdOf(state.playlistId);
+  // No session: the live queue snapshot is the only roster. The browsed
+  // source is display-only and must never leak into playback.
   const concretePlaying = isConcreteList(playingList) ? playingList : "";
-  const concreteState = isConcreteList(stateList) ? stateList : "";
-
-  if (state.source === "playlist" || state.source === "liked" || state.source === "album") {
-    const owned =
-      state.source === "playlist"
-        ? splitPlaylistRows(state.tracks || []).owned
-        : state.tracks || [];
-    const tracks = owned.filter(trackId);
-    if (tracks.length) {
-      return {
-        tracks,
-        playlistId: concreteState || concretePlaying,
-        ownList: false,
-      };
-    }
-  }
-
-  const queued = (
-    state.source === "now" ? state.tracks : state.nowTracks || []
-  ).filter(trackId);
+  const queued = (state.nowTracks || []).filter(trackId);
   if (queued.length) {
-    const radio = Boolean(radioListId(playingList || stateList));
+    const radio = Boolean(radioListId(playingList));
     return {
       tracks: queued,
-      playlistId: radio ? playingList || stateList : concretePlaying,
+      playlistId: radio ? playingList : concretePlaying,
       ownList: !radio && !concretePlaying,
+      handedOff,
     };
   }
 
-  return { tracks: [], playlistId: concretePlaying, ownList: !concretePlaying };
+  return { tracks: [], playlistId: concretePlaying, ownList: !concretePlaying, handedOff };
 }
 
 /**
@@ -605,7 +651,7 @@ function skipRoster(state, status) {
  * player — datasets, an SDK queue, nothing at all — is the host's business.
  */
 function syncSkipRoster(root, state, status) {
-  const { tracks, playlistId, ownList } = skipRoster(state, status);
+  const { tracks, playlistId, ownList, handedOff } = skipRoster(state, status);
   const accepted = MusicHost.syncSkipRoster({
     ids: tracks.map(trackId),
     listId: playlistId,
@@ -616,6 +662,10 @@ function syncSkipRoster(root, state, status) {
   const playingId = status?.trackId || "";
   if (accepted.ids.length > 1 && playingId && accepted.ids.includes(playingId)) {
     state.nowTracks = tracks;
+  }
+  if (handedOff) {
+    state.toast?.(MusicHost.strings.continuationToast || "Similar music will keep playing");
+    state.nowForceRefresh = true;
   }
 }
 
@@ -732,6 +782,47 @@ function sourceIconHtml(name) {
   return `<svg class="ytunes-source-icon" aria-hidden="true"><use href="${sourceIconHref(
     name
   )}"></use></svg>`;
+}
+
+/**
+ * Render the sidebar from the host's sourceGroups descriptor so the shell
+ * stays host-agnostic: groups, labels, icons, order, and which group carries
+ * the dynamic mood/playlist lists all come from hosts-config.
+ */
+function renderSourceList(root) {
+  const list = root.querySelector(".ytunes-source-list");
+  const sprite = list?.querySelector(".ytunes-icon-sprite");
+  if (!list || !sprite) return;
+  const host =
+    (typeof YTunesHosts !== "undefined" && YTunesHosts.byId(MusicHost.id)) || null;
+  const groups = host?.sourceGroups || [];
+  list.querySelectorAll(".ytunes-source-group").forEach((node) => node.remove());
+  const html = groups
+    .map((group) => {
+      const buttons = (group.sources || [])
+        .map(
+          (item) =>
+            `<button type="button" data-source="${escapeHtml(
+              item.source
+            )}">${sourceIconHtml(item.icon)}<span class="ytunes-source-label">${escapeHtml(
+              item.label
+            )}</span></button>`
+        )
+        .join("");
+      const dynamic =
+        group.dynamic === "moods"
+          ? '<div id="ytunes-moods"></div>'
+          : group.dynamic === "playlists"
+            ? '<div id="ytunes-playlists"></div>'
+            : "";
+      return `<details class="ytunes-source-group" data-group="${escapeHtml(
+        group.id
+      )}"${group.open === false ? "" : " open"}><summary>${escapeHtml(
+        group.label
+      )}</summary>${buttons}${dynamic}</details>`;
+    })
+    .join("");
+  sprite.insertAdjacentHTML("afterend", html);
 }
 
 /**
@@ -1221,13 +1312,21 @@ function renderPlayer(root, status, state) {
   }
   const likeVideoId =
     status?.trackId || trackId(state.visibleTracks[state.selectedIndex]) || "";
-  setPressed(root, "shuffle", Boolean(state.session?.shuffle));
+  const hostDrivenShuffle =
+    !state.session?.tracks?.length || state.session.source !== "list";
+  setPressed(
+    root,
+    "shuffle",
+    hostDrivenShuffle ? Boolean(status?.shuffle) : Boolean(state.session?.shuffle)
+  );
   setRepeatUi(root, status?.repeat || "off");
   setPressed(root, "like", isTrackLiked(state, likeVideoId, status?.liked));
   setPressed(root, "lyrics", Boolean(state.lyricsOn));
   renderSidebarWell(root, idle ? null : status, state);
   syncSkipRoster(root, state, status);
   syncRowLikes(root, state);
+  markPlayingSource(root, state);
+  syncNowJump(root, state, status);
 }
 
 function renderStatusMeta(root, state, tracks) {
@@ -1335,10 +1434,13 @@ function virtualRowHtml(state, row, parity, selected, playingId) {
     )}</td></tr>`;
   }
   const track = row.track;
+  const browse =
+    Boolean(state.browseCover) &&
+    YTunesList.trackMatchesCover(track, state.browseCover);
   return trackRowHtml(state, track, row.index, selected, {
     suggested: row.suggested,
     playing: Boolean(trackId(track) && playingId && trackId(track) === playingId),
-    browse: Boolean(state.browseCover && YTunesList.trackMatchesCover(track, state.browseCover)),
+    browse,
     parity,
   });
 }
@@ -1349,6 +1451,14 @@ function paintVirtualTracks(root, state, opts = {}) {
   if (!body || !wrap) return;
   const rows = state.listRows || [];
   if (!rows.length) return;
+  // Drop a stale browseCover that now matches the whole list (album open /
+  // album preview) so zebra striping is never replaced by a solid tint.
+  if (
+    state.browseCover &&
+    !YTunesList.browseHighlightActive(state.visibleTracks, state.browseCover)
+  ) {
+    state.browseCover = null;
+  }
   const rowHeight = listRowHeight(root);
   const win = YTunesList.virtualWindow({
     count: rows.length,
@@ -1440,7 +1550,9 @@ function renderTracks(root, state, tracks, emptyMessage) {
   }
   const listOwned = playlist ? owned : visible;
   const listSuggested = playlist ? suggested : [];
-  const sectioned = isMixedStorefront(state) && listOwned.some((track) => track.shelf);
+  const sectioned =
+    (isMixedStorefront(state) || state.source === "now") &&
+    listOwned.some((track) => track.shelf);
   state.listRows = YTunesList.flattenListRows({
     owned: listOwned,
     suggested: listSuggested,
@@ -1527,11 +1639,15 @@ function showCovers(state, covers, selectedId) {
 }
 
 function highlightCoverRows(root, state, cover, opts = {}) {
-  state.browseCover = cover || null;
+  // Only keep browseCover when it marks a proper subset of the visible list.
+  // Full-list matches (opened album / album preview) must not override zebra.
+  state.browseCover = YTunesList.browseHighlightActive(state.visibleTracks, cover)
+    ? cover
+    : null;
   let first = -1;
   const tracks = state.visibleTracks || [];
   for (let i = 0; i < tracks.length; i += 1) {
-    if (YTunesList.trackMatchesCover(tracks[i], cover)) {
+    if (cover && YTunesList.trackMatchesCover(tracks[i], cover)) {
       first = i;
       break;
     }
@@ -1723,6 +1839,7 @@ function applyParsed(root, state, parsed, emptyMessage, options = {}) {
 }
 
 function bindShell(root) {
+  renderSourceList(root);
   applyHostChrome(root);
   retargetSourceIcons(root);
   bindMarquees(root);
@@ -1735,6 +1852,7 @@ function bindShell(root) {
   const menu = root.querySelector("#ytunes-menu");
   const toast = bindToast(root);
   const state = {
+    toast: toast.show,
     draggingVolume: false,
     volumeLock: { value: null, until: 0 },
     draggingSeek: false,
@@ -1831,7 +1949,12 @@ function bindShell(root) {
       }
     }
     if (cover.tracks?.[0]) {
-      playStateTrack(state, cover.tracks[0], { cover, tracks: cover.tracks });
+      // In Now Playing covers group by album; the live queue stays the context.
+      const inNow = state.source === "now";
+      playStateTrack(state, cover.tracks[0], {
+        cover,
+        tracks: inNow ? undefined : cover.tracks,
+      });
       return;
     }
     if (cover.browseId) {
@@ -1882,6 +2005,13 @@ function bindShell(root) {
       if (q && !label.toLowerCase().includes(q)) return;
       items.push({ kind: "track", id: String(index), label });
     });
+    if (state.source !== "now") {
+      (state.nowTracks || []).forEach((track, index) => {
+        const label = `${track.title} — ${track.artist || ""}`;
+        if (q && !label.toLowerCase().includes(q)) return;
+        items.push({ kind: "queue", id: String(index), label });
+      });
+    }
     (state.covers || []).forEach((cover) => {
       const label = cover.title || "";
       if (q && !label.toLowerCase().includes(q)) return;
@@ -1908,6 +2038,13 @@ function bindShell(root) {
     }
     if (kind === "track") {
       selectTrackRow(root, state, Number(id), true);
+      return;
+    }
+    if (kind === "queue") {
+      const track = state.nowTracks?.[Number(id)];
+      if (track) {
+        playStateTrack(state, track, { source: "now", tracks: state.nowTracks });
+      }
       return;
     }
     if (kind === "cover") {
@@ -1942,33 +2079,95 @@ function bindShell(root) {
   }
 
   async function refreshNowPlayingList(status, force) {
-    if (state.source !== "now") return;
+    if (state.nowForceRefresh) {
+      force = true;
+      state.nowForceRefresh = false;
+    }
+    // Throttle, don't debounce: refreshUi polls every 200ms, and a debounce
+    // that resets on each poll never fires — which left Home/radio skips
+    // without a live roster even while Now Playing looked full.
+    if (state.nowTimer && !force) return;
     const videoId = status?.trackId || "";
-    const thin = (state.tracks || []).length <= 1;
-    if (!force && videoId && videoId === state.nowVideoId && !thin) return;
+    const viewingNow = state.source === "now";
     window.clearTimeout(state.nowTimer);
     state.nowTimer = window.setTimeout(async () => {
+      state.nowTimer = 0;
       try {
-        if (state.source !== "now") return;
-        const videoChanged = Boolean(videoId && videoId !== state.nowVideoId);
-        const stillThin = (state.tracks || []).length <= 1;
-        let queued = { tracks: [], playlistId: "", lyricsId: "" };
-        if ((force || videoChanged) && (videoId || status?.playlistId)) {
-          queued = await MusicHost.queue(videoId, status?.playlistId || "");
+        // Overlay-owned roster: the session is the truth. Only paint when
+        // viewing Now Playing — but always keep nowTracks in sync for skips.
+        if (state.session?.source === "list" && state.session.tracks?.length) {
+          const ordered = orderedSessionTracks(state.session);
+          state.nowTracks = ordered;
+          if (!viewingNow) return;
+          const videoChanged = Boolean(videoId && videoId !== state.nowVideoId);
           if (videoId) state.nowVideoId = videoId;
-        } else if (stillThin) {
-          queued = await MusicHost.playerQueue();
-        } else {
+          const stillThin = (state.tracks || []).length <= 1;
+          if (
+            force ||
+            videoChanged ||
+            queueFingerprint(ordered) !== queueFingerprint(state.tracks)
+          ) {
+            applyNowPlaying(root, state, ordered, status, {
+              keepSelection: true,
+              resetCovers: stillThin && ordered.length > 1,
+              scroll: false,
+            });
+          }
           return;
         }
-        if (state.source !== "now") return;
+        let queued = { tracks: [], playlistId: "", lyricsId: "" };
+        if (videoId || status?.playlistId) {
+          // Cached host-side: the MAIN world invalidates on real queue
+          // changes, so polling here is cheap and the list can never go
+          // stale under an unchanged video id.
+          queued = await MusicHost.queue(videoId, status?.playlistId || "");
+        } else if (viewingNow) {
+          queued = await MusicHost.playerQueue();
+        } else {
+          // Not viewing Now Playing and nothing is playing — nothing to sync.
+          return;
+        }
         let tracks = queued.tracks || [];
         if (!tracks.length) {
-          if ((state.tracks || []).length) return;
+          if (viewingNow && (state.tracks || []).length) return;
           const seed = nowPlayingSeed(status, state.prefs);
           if (seed) tracks = [seed];
         }
         if (!tracks.length) return;
+
+        const videoChanged = Boolean(videoId && videoId !== state.nowVideoId);
+        const playable = playableSessionTracks(tracks);
+        // Always keep the skip roster's live snapshot fresh — even while
+        // browsing Home — so next/prev can fall back when native skip fails.
+        state.nowTracks = playable.length ? playable : tracks.filter(trackId);
+        if (videoId) state.nowVideoId = videoId;
+
+        if (state.session?.source === "radio" || state.session?.source === "queue") {
+          const prevTracks = state.session.tracks || [];
+          state.session.listId = queued.playlistId || state.session.listId;
+          state.session.tracks = playable;
+          if (state.session.shuffle && state.session.order) {
+            state.session.order = YTunesPlayback.shuffleOrderStable(
+              state.session.order,
+              prevTracks,
+              state.session.tracks
+            );
+          }
+        } else if (!state.session?.tracks?.length && tracks.length > 1) {
+          beginSession(state, {
+            source: radioListId(queued.playlistId) ? "radio" : "queue",
+            listId: queued.playlistId,
+            tracks,
+          });
+        }
+
+        // Publish the fresh roster to MAIN immediately so next/prev work
+        // without waiting for the next renderPlayer tick.
+        syncSkipRoster(root, state, status);
+
+        if (!viewingNow) return;
+
+        const stillThin = (state.tracks || []).length <= 1;
         if (
           !force &&
           !videoChanged &&
@@ -1983,19 +2182,6 @@ function bindShell(root) {
           resetCovers: stillThin && tracks.length > 1,
           scroll: false,
         });
-        if (state.session?.source === "radio" || state.session?.source === "queue") {
-          state.session.listId = queued.playlistId || state.session.listId;
-          state.session.tracks = playableSessionTracks(tracks);
-          if (state.session.shuffle) {
-            state.session.order = shuffledOrder(state.session.tracks.length);
-          }
-        } else if (!state.session?.tracks?.length) {
-          beginSession(state, {
-            source: radioListId(queued.playlistId) ? "radio" : "queue",
-            listId: queued.playlistId,
-            tracks,
-          });
-        }
       } catch {
         /* keep current table */
       }
@@ -2075,15 +2261,27 @@ function bindShell(root) {
         return;
       }
       if (action === "shuffle") {
-        const session = state.session || beginSession(state, { tracks: sessionTracksForPlay(state) });
-        session.shuffle = !session.shuffle;
-        session.order = session.shuffle ? shuffledOrder((session.tracks || []).length) : null;
-        state.session = session;
-        setPressed(root, "shuffle", session.shuffle);
-        if (session.source === "queue" || session.source === "radio") {
-          MusicHost.setShuffle(session.shuffle);
+        const session = state.session;
+        const hostDriven =
+          !session?.tracks?.length ||
+          session.source === "queue" ||
+          session.source === "radio";
+        if (hostDriven) {
+          // The host shuffles its own queue; the LCD mirrors what it reports.
+          const live = hostStatus();
+          MusicHost.setShuffle(!live?.shuffle);
+          window.setTimeout(() => refreshUi(), 250);
+          return;
         }
+        // Overlay-owned roster: the overlay shuffles, and Now Playing renders
+        // the shuffled order so what you see is what plays.
+        session.shuffle = !session.shuffle;
+        session.order = session.shuffle
+          ? shuffledOrder((session.tracks || []).length)
+          : null;
+        setPressed(root, "shuffle", session.shuffle);
         syncSkipRoster(root, state, hostStatus());
+        if (state.source === "now") refreshNowPlayingList(hostStatus(), true);
         return;
       }
       if (action === "repeat") {
@@ -2276,6 +2474,9 @@ function bindShell(root) {
   }
 
   root.querySelector("#ytunes-sidebar-well-main")?.addEventListener("click", () => {
+    openNowPlaying();
+  });
+  root.querySelector("#ytunes-now-jump")?.addEventListener("click", () => {
     openNowPlaying();
   });
   root.querySelector("#ytunes-sidebar-well-like")?.addEventListener("click", (event) => {
@@ -2570,6 +2771,45 @@ function bindShell(root) {
     });
     renderTracks(root, state, sortTracks(state), "No tracks yet.");
     persistChrome();
+  });
+
+  // Column picker: Year / Plays / Last Played are optional stat columns.
+  state.hiddenCols = new Set();
+  const colMenu = root.querySelector("#ytunes-col-menu");
+  const colPop = root.querySelector("#ytunes-col-pop");
+  const applyHiddenColumns = () => {
+    const table = root.querySelector(".ytunes-table");
+    if (table) table.dataset.hide = [...state.hiddenCols].join(" ");
+    colPop?.querySelectorAll("[data-col]").forEach((btn) => {
+      const on = !state.hiddenCols.has(btn.dataset.col);
+      btn.classList.toggle("is-off", !on);
+      btn.setAttribute("aria-pressed", String(on));
+    });
+  };
+  colMenu?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!colPop) return;
+    if (colPop.hidden) {
+      const rect = colMenu.getBoundingClientRect();
+      colPop.style.left = `${rect.left}px`;
+      colPop.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+    }
+    colPop.hidden = !colPop.hidden;
+    colMenu.setAttribute("aria-expanded", String(!colPop.hidden));
+  });
+  colPop?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-col]");
+    if (!btn) return;
+    const col = btn.dataset.col;
+    if (state.hiddenCols.has(col)) state.hiddenCols.delete(col);
+    else state.hiddenCols.add(col);
+    applyHiddenColumns();
+  });
+  document.addEventListener("click", (event) => {
+    if (!colPop || colPop.hidden) return;
+    if (event.target.closest?.("#ytunes-col-pop, #ytunes-col-menu")) return;
+    colPop.hidden = true;
+    colMenu?.setAttribute("aria-expanded", "false");
   });
 
   root.querySelector("#ytunes-grid").addEventListener("mouseover", (event) => {
@@ -3638,7 +3878,15 @@ function pushHistoryFor(root, state, source) {
 async function loadPlaylists(root, state) {
   const host = root.querySelector("#ytunes-playlists");
   try {
-    state.playlists = await MusicHost.playlists();
+    const playlists = await MusicHost.playlists();
+    // Drop lists that duplicate a built-in sidebar source (e.g. the liked
+    // songs playlist is already the Liked Songs source).
+    const aliases = new Set(
+      Object.values(MusicHost.builtinLists?.() || {}).map((id) => playlistIdOf(id))
+    );
+    state.playlists = (playlists || []).filter(
+      (item) => !aliases.has(playlistIdOf(item.playlistId))
+    );
     host.innerHTML = state.playlists
       .map(
         (item) =>
@@ -3710,8 +3958,14 @@ async function loadMoods(root, state) {
   } catch {
     chips = [];
   }
-  host.innerHTML = chips.length
-    ? moodButtonsHtml(chips)
+  // Cap the sidebar list; the full mood catalog lives under Explore.
+  const cap =
+    (typeof YTunesHosts !== "undefined" &&
+      YTunesHosts.byId(MusicHost.id)?.moodCap) ||
+    6;
+  const shown = chips.slice(0, cap);
+  host.innerHTML = shown.length
+    ? moodButtonsHtml(shown)
     : `<p class="ytunes-source-empty">No stations</p>`;
   setSidebarSelection(root, state.lastSource);
   refreshMarquees(root);
@@ -3874,6 +4128,15 @@ async function loadSource(root, state, source, options = {}) {
       const videoId = status.trackId || stored?.videoId || "";
       const playlistId =
         source.playlistId || status.playlistId || stored?.playlistId || "";
+      // Overlay-owned roster: the session is the truth, not the host queue.
+      if (state.session?.source === "list" && state.session.tracks?.length) {
+        state.nowVideoId = videoId;
+        applyNowPlaying(root, state, orderedSessionTracks(state.session), overlayStatus(status, state), {
+          resetCovers: true,
+          scroll: true,
+        });
+        return;
+      }
       let tracks = [];
       let lyricsId = "";
       let queuedPlaylist = "";

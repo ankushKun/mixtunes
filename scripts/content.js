@@ -200,51 +200,9 @@ function placeLaunchButton() {
   for (const node of slot.watch || []) watchLaunchNode(node);
 }
 
-/**
- * With the overlay off, the site shows its own player. If it comes up empty,
- * cue the track yTunes last played so the tab is not silent.
- */
-async function restoreLastNativeBar() {
-  if (await readOverlayEnabled()) return;
-  let last = null;
-  try {
-    const prefs = await loadPrefs();
-    last = sanitizeNowPlaying(prefs?.nowPlaying);
-  } catch {
-    last = null;
-  }
-  const storedTrackId = YTunesPlayback.trackId(last);
-  if (!storedTrackId) return;
-  const ready = await MusicHost.waitUntilReady();
-  if (!ready || (await readOverlayEnabled())) return;
-
-  const barHasSong = () =>
-    YTunesPlayback.nativeBarHasSong({ title: MusicHost.probe().title });
-  const deadline = Date.now() + 3500;
-  while (Date.now() < deadline) {
-    if (await readOverlayEnabled()) return;
-    if (barHasSong()) return;
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
-  }
-
-  if (await readOverlayEnabled()) return;
-  const cue = YTunesPlayback.shouldCueStoredTrack({
-    overlayOn: false,
-    barHasSong: barHasSong(),
-    storedTrackId,
-  });
-  if (!cue) return;
-  try {
-    await MusicHost.cue(last);
-  } catch {
-    /* the site's own restore may still win */
-  }
-}
-
 function startLauncher() {
   injectSheet(STYLE_IDS.host, "scripts/content.css");
   placeLaunchButton();
-  restoreLastNativeBar();
   if (launchPageWatch) return;
   launchPageWatch = new MutationObserver(() => scheduleLaunchPlace());
   launchPageWatch.observe(document.documentElement, { childList: true, subtree: true });

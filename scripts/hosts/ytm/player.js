@@ -757,6 +757,7 @@ globalThis.MusicHost = (() => {
       playlistEdit: true,
       signedIn: true,
       radio: true,
+      automix: true,
       shuffle: true,
       repeat: true,
       seek: true,
@@ -801,6 +802,16 @@ globalThis.MusicHost = (() => {
     artistOf: YtmCatalog.artistOf,
     signedIn: YtmCatalog.signedIn,
     lyrics: YtmCatalog.lyrics,
+
+    /**
+     * List ids that duplicate a built-in sidebar source, so the dynamic
+     * playlist list can drop them (e.g. the liked-songs playlist is already
+     * the Liked Songs source). Values are host list ids; the shell compares
+     * canonically.
+     */
+    builtinLists() {
+      return { liked: "VLLM", listenLater: "VLLL" };
+    },
 
     // --- playback ---------------------------------------------------------
 

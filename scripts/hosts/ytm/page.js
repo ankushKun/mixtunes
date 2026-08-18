@@ -433,6 +433,7 @@ function trackFromPanel(panel) {
     duration: runsJoin(panel.lengthText),
     artwork: thumbs.length ? thumbs[thumbs.length - 1].url || "" : "",
     videoId,
+    setVideoId: String(panel.setVideoId || "").trim(),
     playlistId: watch.playlistId || "",
     endpoint: { watchEndpoint: watch.videoId ? watch : { videoId } },
   };
@@ -440,6 +441,8 @@ function trackFromPanel(panel) {
 
 function trackFromQueueItem(item) {
   const data = item.data || item.__data?.data || item.__data || {};
+  // The automix preview row is a link to a continuation playlist, not a track.
+  if (data.automixPreviewVideoRenderer) return null;
   const panel =
     data.playlistPanelVideoRenderer ||
     data.primaryRenderer?.playlistPanelVideoRenderer ||
@@ -477,6 +480,7 @@ function trackFromQueueItem(item) {
       "",
     artwork: fromPanel?.artwork || "",
     videoId,
+    setVideoId: fromPanel?.setVideoId || String(data.setVideoId || "").trim(),
     playlistId: fromPanel?.playlistId || "",
     endpoint: fromPanel?.endpoint || {
       watchEndpoint: { videoId },
@@ -559,18 +563,25 @@ function tracksFromQueueData(root) {
   const tracks = [];
   const seen = new Set();
   const seenNodes = new WeakSet();
+  let automix = false;
   const remember = (track) => {
     if (!track) return;
     const key = String(track.videoId || "").trim();
-    if (!isVideoId(key) || seen.has(key)) return;
-    seen.add(key);
+    if (!isVideoId(key)) return;
+    // setVideoId-first: the same video may legitimately appear twice in a queue.
+    const row = YTunesPageCore.rowKey(track) || key;
+    if (seen.has(row)) return;
+    seen.add(row);
     tracks.push(track);
   };
   const walk = (node, depth) => {
     if (!node || typeof node !== "object" || depth > 14) return;
     if (seenNodes.has(node)) return;
     seenNodes.add(node);
-    if (node.automixPreviewVideoRenderer) return;
+    if (node.automixPreviewVideoRenderer) {
+      automix = true;
+      return;
+    }
     if (node.playlistPanelVideoRenderer) {
       remember(trackFromPanel(node.playlistPanelVideoRenderer));
       return;
@@ -589,7 +600,7 @@ function tracksFromQueueData(root) {
     }
   };
   walk(root, 0);
-  return tracks;
+  return { tracks, automix };
 }
 
 function uniqueQueueTracks(parts) {
@@ -597,8 +608,10 @@ function uniqueQueueTracks(parts) {
   const seen = new Set();
   for (const track of parts) {
     const key = String(track.videoId || "").trim();
-    if (!isVideoId(key) || seen.has(key)) continue;
-    seen.add(key);
+    if (!isVideoId(key)) continue;
+    const row = YTunesPageCore.rowKey(track) || key;
+    if (seen.has(row)) continue;
+    seen.add(row);
     tracks.push({ ...track, videoId: key, id: key });
   }
   return tracks;
@@ -606,13 +619,23 @@ function uniqueQueueTracks(parts) {
 
 function readPlayerQueue() {
   const fromDom = [];
+  let automix = false;
   queueItemNodes().forEach((item) => {
+    const data = item.data || item.__data?.data || item.__data || {};
+    if (
+      data.automixPreviewVideoRenderer ||
+      data.content?.automixPlaylistVideoRenderer
+    ) {
+      automix = true;
+    }
     const track = trackFromQueueItem(item);
     if (track) fromDom.push(track);
   });
   const fromData = [];
   queueDataRoots().forEach((root) => {
-    tracksFromQueueData(root).forEach((track) => fromData.push(track));
+    const parsed = tracksFromQueueData(root);
+    if (parsed.automix) automix = true;
+    parsed.tracks.forEach((track) => fromData.push(track));
   });
   const primary = fromDom.length > 1 ? fromDom : fromData;
   const secondary = fromDom.length > 1 ? fromData : fromDom;
@@ -620,6 +643,7 @@ function readPlayerQueue() {
   return {
     tracks,
     playlistId: tracks.find((track) => track.playlistId)?.playlistId || "",
+    automix,
   };
 }
 
@@ -647,36 +671,13 @@ function overlayHooksActive() {
 }
 
 let autoplayArmed = overlayHooksActive();
-let lastUserGesture = 0;
-let restoreParked = false;
 
 function allowUserPlayback() {
   autoplayArmed = false;
 }
 
-function markGesture() {
-  allowUserPlayback();
-  lastUserGesture = Date.now();
-  document.documentElement.dataset.ytunesGesture = String(lastUserGesture);
-}
-
-function hasRecentUserGesture() {
-  return Date.now() - lastUserGesture < 4000;
-}
-
-function shouldParkRestoreAutoplay() {
-  return YTunesPageCore.shouldParkRestoreAutoplay({
-    hooksActive: overlayHooksActive(),
-    hasGesture: hasRecentUserGesture(),
-    parked: restoreParked,
-  });
-}
-
-function restoredSongLoaded() {
-  return YTunesPageCore.nativeBarHasSong(playerSnapshot());
-}
-
-function parkRestorePlayback() {
+/** Pause every player element; used by the autoplay guard and cue. */
+function pauseAllPlayback() {
   if (callPlayer("getPlayerState") === 1) callPlayer("pauseVideo");
   document.querySelectorAll("video, audio").forEach((media) => {
     try {
@@ -685,23 +686,24 @@ function parkRestorePlayback() {
       /* media element may already be tearing down */
     }
   });
-  if (restoredSongLoaded()) restoreParked = true;
+}
+
+/**
+ * True while the stock site must run untouched. Every side effect that could
+ * touch host playback — media keys, autoplay guard, queue advance — checks
+ * this (or its overlayHooksActive inverse) before acting.
+ */
+function stockSiteUntouched() {
+  return YTunesPageCore.stockSiteUntouched(overlayHookState());
 }
 
 function pauseAutoplay() {
-  if (!overlayHooksActive()) {
+  if (stockSiteUntouched()) {
     autoplayArmed = false;
     return;
   }
   if (!autoplayArmed) return;
-  if (callPlayer("getPlayerState") === 1) callPlayer("pauseVideo");
-  document.querySelectorAll("video, audio").forEach((media) => {
-    try {
-      if (!media.paused) media.pause();
-    } catch {
-      /* media element may already be tearing down */
-    }
-  });
+  pauseAllPlayback();
 }
 
 function bindAutoplayGuard() {
@@ -764,6 +766,15 @@ function clickBarControl(kind) {
     const target = node.matches?.("button, [role='button']")
       ? node
       : node.querySelector?.("button, [role='button']") || node;
+    // A disabled host button swallows the click as a no-op; treat it as
+    // missing so the caller falls back to the roster instead of trusting it.
+    if (
+      target.disabled ||
+      target.hasAttribute?.("disabled") ||
+      target.getAttribute?.("aria-disabled") === "true"
+    ) {
+      continue;
+    }
     allowUserPlayback();
     target.click();
     return true;
@@ -840,11 +851,16 @@ function overlaySkipRoster() {
   const ownList = (transport?.dataset?.ownList || root?.dataset?.ownList) === "1";
   const indexRaw = transport?.dataset?.skipIndex || root?.dataset?.skipIndex || "";
   const skipIndex = Number(indexRaw);
+  const pendingUntil = Number(
+    transport?.dataset?.pendingSkipUntil || root?.dataset?.pendingSkipUntil || 0
+  );
   return {
     ids,
     playlistId: ownList ? "" : watchListId(rawList),
     ownList,
-    skipIndex: Number.isFinite(skipIndex) ? skipIndex : -1,
+    // The index hint is only trustworthy while a pending skip is in flight;
+    // after its window the playing id is the truth again.
+    skipIndex: Date.now() < pendingUntil && Number.isFinite(skipIndex) ? skipIndex : -1,
   };
 }
 
@@ -878,8 +894,124 @@ function stampPendingSkip(videoId, index) {
   });
 }
 
+/** The player reached the pending target: drop the stamp before its window ends. */
+function confirmPendingSkip(snap) {
+  const id = snap?.videoId || "";
+  if (!id) return;
+  const transport = document.querySelector("#ytunes-root .ytunes-transport");
+  const root = document.getElementById("ytunes-root");
+  const pending = transport?.dataset?.pendingSkip || root?.dataset?.pendingSkip || "";
+  if (!pending || pending !== id) return;
+  [transport, root].forEach((node) => {
+    if (!node) return;
+    delete node.dataset.pendingSkip;
+    delete node.dataset.pendingSkipUntil;
+  });
+}
+
 function nativeSkip(kind) {
   return clickBarControl(kind) || (kind === "next" ? ran("nextVideo") : ran("previousVideo"));
+}
+
+/**
+ * Resolve the next/previous target from the one roster: the live queue when
+ * the host drives, else the overlay roster. The index hint only applies to
+ * the roster it was computed from.
+ */
+function rosterAdvanceTarget(kind, auto, ownList, repeat, snap) {
+  const overlay = overlaySkipRoster();
+  const live = ownList ? { ids: [], playlistId: "" } : queueSkipIds();
+  const queued = live.ids.length > 1 ? live : overlay;
+  const ids = queued.ids.length ? queued.ids : overlay.ids;
+  const playlistId = ownList
+    ? ""
+    : queued.playlistId ||
+      overlay.playlistId ||
+      watchListId(snap.playlistId) ||
+      watchListId(document.querySelector("#ytunes-lcd")?.dataset?.playlist);
+  const currentId =
+    snap.videoId || document.querySelector("#ytunes-lcd")?.dataset?.video || "";
+  const wrap = !auto || repeat === "all";
+  const hint = queued === overlay ? overlay.skipIndex : -1;
+  return { next: adjacentInRoster(ids, currentId, kind, wrap, hint), playlistId, currentId };
+}
+
+function playRosterTarget(target, ownList, auto) {
+  if (!target.next.id) return false;
+  stampPendingSkip(target.next.id, target.next.index);
+  const ok = play({
+    ownList,
+    endpoint: {
+      watchEndpoint:
+        target.playlistId && !ownList
+          ? {
+              videoId: target.next.id,
+              playlistId: target.playlistId,
+              index: target.next.index >= 0 ? target.next.index : undefined,
+            }
+          : { videoId: target.next.id },
+    },
+  });
+  if (ok && auto) {
+    window.setTimeout(() => {
+      callPlayer("playVideo");
+      mediaElement()?.play?.().catch(() => {});
+    }, 120);
+  }
+  return Boolean(ok);
+}
+
+/**
+ * A native skip that "succeeded" can still be a no-op (dead queue button /
+ * radio that never advanced). When still on the same video after the grace
+ * window, take over from the roster — re-resolving it if we lacked a target
+ * at click time (live scrape often catches up a beat later).
+ */
+function verifyNativeSkip(snap, target, ownList, kind, repeat) {
+  const fromId = snap.videoId || "";
+  const wantId = target?.next?.id || "";
+  if (wantId) stampPendingSkip(wantId, target.next.index);
+  window.setTimeout(() => {
+    if (!overlayHooksActive()) return;
+    const later = playerSnapshot();
+    if (wantId && later.videoId === wantId) return;
+    // The host moved somewhere else on its own — respect it.
+    if (later.videoId && later.videoId !== fromId) return;
+    // Still stuck on the same video (or idle). Re-resolve in case the live
+    // queue / overlay roster filled in after the click.
+    let advance = target;
+    if (!advance?.next?.id) {
+      advance = rosterAdvanceTarget(kind || "next", false, ownList, repeat || "off", later);
+    }
+    if (!advance.next.id) return;
+    playRosterTarget(advance, ownList, false);
+  }, 700);
+}
+
+/**
+ * Queue/radio mode trusts the host to auto-advance — but only while it
+ * actually does. If the player is still sitting ENDED on the same video
+ * after the grace window, take over from the session roster.
+ */
+let autoWatchdogAt = 0;
+function armAutoAdvanceWatchdog(snap) {
+  const fromId = snap.videoId || "";
+  if (!fromId) return;
+  const stamp = Date.now();
+  autoWatchdogAt = stamp;
+  window.setTimeout(() => {
+    if (autoWatchdogAt !== stamp) return;
+    if (!overlayHooksActive() || autoplayArmed) return;
+    const later = playerSnapshot();
+    const takeOver = YTunesPageCore.shouldTakeOverAutoAdvance({
+      playerState: callPlayer("getPlayerState"),
+      playing: later.playing,
+      videoId: later.videoId,
+      fromId,
+    });
+    if (!takeOver) return;
+    skipPlayback("next", { auto: true, force: true });
+  }, 1500);
 }
 
 function skipPlayback(kind, options = {}) {
@@ -891,6 +1023,7 @@ function skipPlayback(kind, options = {}) {
   skipAt = now;
 
   const snap = playerSnapshot();
+  confirmPendingSkip(snap);
   const overlay = overlaySkipRoster();
   const ownList = Boolean(overlay.ownList);
   const repeat = overlayRepeat();
@@ -907,52 +1040,33 @@ function skipPlayback(kind, options = {}) {
     return { ok: ran("seekTo", 0, true) || ran("seekTo", 0) };
   }
 
-  if (auto && !handleAuto) {
+  if (auto && !handleAuto && !options.force) {
+    armAutoAdvanceWatchdog(snap);
     return { ok: true };
   }
 
   if (!ownList && !auto) {
-    if (nativeSkip(kind)) return { ok: true };
-  }
-
-  const queued = overlay.ids.length > 1 ? overlay : queueSkipIds();
-  const ids = queued.ids.length ? queued.ids : overlay.ids;
-  const playlistId = ownList
-    ? ""
-    : queued.playlistId ||
-      overlay.playlistId ||
-      watchListId(snap.playlistId) ||
-      watchListId(document.querySelector("#ytunes-lcd")?.dataset?.playlist);
-  const currentId =
-    snap.videoId || document.querySelector("#ytunes-lcd")?.dataset?.video || "";
-  const wrap = !auto || repeat === "all";
-  const next = adjacentInRoster(ids, currentId, kind, wrap, overlay.skipIndex);
-  if (next.id) {
-    if (auto && snap.videoId === next.id) return { ok: true };
-    stampPendingSkip(next.id, next.index);
-    const ok = play({
-      ownList,
-      endpoint: {
-        watchEndpoint:
-          playlistId && !ownList
-            ? {
-                videoId: next.id,
-                playlistId,
-                index: next.index >= 0 ? next.index : undefined,
-              }
-            : { videoId: next.id },
-      },
-    });
-    if (auto) {
-      window.setTimeout(() => {
-        callPlayer("playVideo");
-        mediaElement()?.play?.().catch(() => {});
-      }, 120);
+    const target = rosterAdvanceTarget(kind, false, ownList, repeat, snap);
+    if (nativeSkip(kind)) {
+      // Always verify: radio/Home next often reports success while the player
+      // stays put. The verifier re-scrapes if the roster was empty at click.
+      verifyNativeSkip(snap, target, ownList, kind, repeat);
+      return { ok: true };
     }
-    return { ok: Boolean(ok) };
+    if (playRosterTarget(target, ownList, false)) return { ok: true };
+    // Native failed and roster was empty — one more live scrape attempt.
+    const retry = rosterAdvanceTarget(kind, false, ownList, repeat, snap);
+    if (playRosterTarget(retry, ownList, false)) return { ok: true };
+    return { ok: false };
   }
 
-  const radio = auto && ownList ? YTunesPageCore.radioFor(currentId) : "";
+  const target = rosterAdvanceTarget(kind, auto, ownList, repeat, snap);
+  if (target.next.id) {
+    if (auto && snap.videoId === target.next.id) return { ok: true };
+    return { ok: playRosterTarget(target, ownList, auto) };
+  }
+
+  const radio = auto && ownList ? YTunesPageCore.radioFor(target.currentId) : "";
   if (radio) {
     const transport = document.querySelector("#ytunes-root .ytunes-transport");
     const root = document.getElementById("ytunes-root");
@@ -962,11 +1076,11 @@ function skipPlayback(kind, options = {}) {
       node.dataset.skipPlaylist = radio;
       node.dataset.sessionMode = "radio";
     });
-    stampPendingSkip(currentId, -1);
-    const ok = tryNavigate({ watchEndpoint: { playlistId: radio, videoId: currentId } });
+    stampPendingSkip(target.currentId, -1);
+    const ok = tryNavigate({ watchEndpoint: { playlistId: radio, videoId: target.currentId } });
     window.setTimeout(() => {
       const later = playerSnapshot();
-      if (!later.playing || later.videoId === currentId) nativeSkip("next");
+      if (!later.playing || later.videoId === target.currentId) nativeSkip("next");
     }, 1100);
     return { ok: Boolean(ok) };
   }
@@ -986,24 +1100,50 @@ function bindMediaKeys() {
       nexttrack: () => skip("next"),
       previoustrack: () => skip("previous"),
     };
-    session.setActionHandler = (action, handler) => {
-      if (overlayHooksActive() && ours[action]) return nativeSet(action, ours[action]);
-      return nativeSet(action, handler);
-    };
-    if (overlayHooksActive()) {
+    // The site's own handlers, remembered while we intercept so the stock
+    // player gets them back the moment the overlay turns off.
+    const theirs = {};
+    let wrapped = false;
+    const wrap = () => {
+      if (wrapped) return;
+      wrapped = true;
+      session.setActionHandler = (action, handler) => {
+        if (ours[action]) theirs[action] = handler;
+        if (ours[action] && !stockSiteUntouched()) {
+          return nativeSet(action, ours[action]);
+        }
+        return nativeSet(action, handler);
+      };
       try {
         nativeSet("nexttrack", ours.nexttrack);
         nativeSet("previoustrack", ours.previoustrack);
       } catch {
         /* some browsers reject media session actions */
       }
-    }
+    };
+    const unwrap = () => {
+      if (!wrapped) return;
+      wrapped = false;
+      session.setActionHandler = nativeSet;
+      for (const action of Object.keys(ours)) {
+        try {
+          nativeSet(action, theirs[action] || null);
+        } catch {
+          /* some browsers reject media session actions */
+        }
+      }
+    };
+    if (overlayHooksActive()) wrap();
+    document.addEventListener("ytunes-overlay-pref", () => {
+      if (stockSiteUntouched()) unwrap();
+      else wrap();
+    });
   }
 
   document.addEventListener(
     "keydown",
     (event) => {
-      if (!overlayHooksActive()) return;
+      if (stockSiteUntouched()) return;
       const name = `${event.key || ""} ${event.code || ""}`.toLowerCase();
       if (name.includes("mediatracknext")) {
         event.preventDefault();
@@ -1023,6 +1163,61 @@ function isSignedIn() {
   return Boolean(cookie("SAPISID") || cookie("__Secure-3PAPISID"));
 }
 
+/**
+ * The live queue is the single source of truth, so every change to it must
+ * reach the ISOLATED world immediately instead of expiring on a blind TTL.
+ * Fires on: a new video id, SPA navigation, queue DOM mutations, enqueue.
+ */
+const QUEUE_CHANGED_EVENT = "ytunes-queue-changed";
+let queueChangeTimer = 0;
+let lastQueueVideoId = "";
+
+function scheduleQueueChanged() {
+  if (queueChangeTimer) return;
+  queueChangeTimer = window.setTimeout(() => {
+    queueChangeTimer = 0;
+    document.dispatchEvent(new CustomEvent(QUEUE_CHANGED_EVENT));
+  }, 400);
+}
+
+function bindQueueChangeEvents() {
+  const hookPlayer = () => {
+    const player = moviePlayer();
+    if (!player || player.__ytunesQueueWatch) return;
+    player.__ytunesQueueWatch = true;
+    try {
+      player.addEventListener("onStateChange", () => {
+        const snap = playerSnapshot();
+        confirmPendingSkip(snap);
+        const id = snap.videoId || "";
+        if (id && id !== lastQueueVideoId) {
+          lastQueueVideoId = id;
+          scheduleQueueChanged();
+        }
+      });
+    } catch {
+      /* player may not expose YT event listeners yet */
+    }
+  };
+  hookPlayer();
+  window.setInterval(hookPlayer, 1500);
+
+  document.addEventListener("yt-navigate-finish", () => scheduleQueueChanged());
+
+  const observe = () => {
+    playerQueueElements().forEach((queue) => {
+      if (queue.__ytunesQueueObserved) return;
+      queue.__ytunesQueueObserved = true;
+      new MutationObserver(() => scheduleQueueChanged()).observe(queue, {
+        childList: true,
+        subtree: true,
+      });
+    });
+  };
+  observe();
+  window.setInterval(observe, 2000);
+}
+
 function queueAdd(payload) {
   const videoId = payload?.videoId;
   if (!videoId) return false;
@@ -1030,12 +1225,14 @@ function queueAdd(payload) {
     payload?.position === "next"
       ? "INSERT_AFTER_CURRENT_VIDEO"
       : "INSERT_AT_END";
-  return tryNavigate({
+  const ok = tryNavigate({
     queueAddEndpoint: {
       queueTarget: { videoId },
       queueInsertPosition: position,
     },
   });
+  if (ok) scheduleQueueChanged();
+  return ok;
 }
 
 function tryHandleCommand(endpoint) {
@@ -1144,68 +1341,12 @@ function cueLcdWatch() {
   return Boolean(watch && play({ endpoint: { watchEndpoint: watch } }));
 }
 
-function bindRestorePark() {
-  document.addEventListener(
-    "pointerdown",
-    () => {
-      lastUserGesture = Date.now();
-    },
-    true
-  );
-  document.addEventListener(
-    "keydown",
-    (event) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      lastUserGesture = Date.now();
-    },
-    true
-  );
-  document.addEventListener(
-    "playing",
-    (event) => {
-      if (!(event.target instanceof HTMLMediaElement)) return;
-      if (!shouldParkRestoreAutoplay()) {
-        if (!overlayHooksActive() && restoredSongLoaded()) restoreParked = true;
-        return;
-      }
-      try {
-        event.target.pause();
-      } catch {
-        /* ignore */
-      }
-      parkRestorePlayback();
-    },
-    true
-  );
-  const hookPlayer = () => {
-    const player = moviePlayer();
-    if (!player || player.__ytunesRestorePark) return;
-    player.__ytunesRestorePark = true;
-    try {
-      player.addEventListener("onStateChange", (state) => {
-        if (state === 1 && shouldParkRestoreAutoplay()) parkRestorePlayback();
-      });
-    } catch {
-      /* player may not expose YT event listeners yet */
-    }
-  };
-  hookPlayer();
-  const timer = window.setInterval(() => {
-    if (restoreParked || overlayHooksActive()) {
-      clearInterval(timer);
-      return;
-    }
-    hookPlayer();
-  }, 400);
-}
-
 function cueWatch(watch) {
   const videoId = watch?.videoId;
   if (!isVideoId(videoId)) return false;
-  restoreParked = false;
   const snap = playerSnapshot();
   if (snap.videoId === videoId) {
-    parkRestorePlayback();
+    pauseAllPlayback();
     return true;
   }
   const playlistId = String(watch?.playlistId || "").replace(/^VL/, "");
@@ -1213,7 +1354,7 @@ function cueWatch(watch) {
     watchEndpoint: playlistId ? { videoId, playlistId } : { videoId },
   };
   if (tryNavigate(command)) {
-    window.setTimeout(() => parkRestorePlayback(), 160);
+    window.setTimeout(() => pauseAllPlayback(), 160);
     return true;
   }
   const player = moviePlayer();
@@ -1221,7 +1362,7 @@ function cueWatch(watch) {
   try {
     if (typeof player.cueVideoById === "function") {
       player.cueVideoById({ videoId, startSeconds: 0 });
-      window.setTimeout(() => parkRestorePlayback(), 80);
+      window.setTimeout(() => pauseAllPlayback(), 80);
       return true;
     }
   } catch {
@@ -1230,7 +1371,7 @@ function cueWatch(watch) {
   try {
     if (typeof player.loadVideoById === "function") {
       player.loadVideoById({ videoId, startSeconds: 0 });
-      window.setTimeout(() => parkRestorePlayback(), 80);
+      window.setTimeout(() => pauseAllPlayback(), 80);
       return true;
     }
   } catch {
@@ -1249,7 +1390,7 @@ function bindOverlayPlayGesture() {
       const playish = event.target.closest(
         "[data-action='playPause'], [data-action='play'], [data-action='next'], [data-action='previous'], #ytunes-tracks tr[data-index], .ytunes-cf-cover, .ytunes-tile"
       );
-      if (playish) markGesture();
+      if (playish) allowUserPlayback();
     },
     true
   );
@@ -1257,7 +1398,7 @@ function bindOverlayPlayGesture() {
   document.addEventListener(
     "dblclick",
     (event) => {
-      if (inRoot(event.target)) markGesture();
+      if (inRoot(event.target)) allowUserPlayback();
     },
     true
   );
@@ -1270,7 +1411,7 @@ function bindOverlayPlayGesture() {
       if (!btn) return;
       const action = btn.dataset.action;
       if (!["playPause", "play", "next", "previous"].includes(action)) return;
-      markGesture();
+      allowUserPlayback();
     },
     true
   );
@@ -1282,7 +1423,7 @@ function bindOverlayPlayGesture() {
       if (!document.getElementById("ytunes-root")) return;
       const typing = event.target?.closest?.("input, textarea, [contenteditable]");
       if (typing) return;
-      markGesture();
+      allowUserPlayback();
     },
     true
   );
@@ -1460,6 +1601,6 @@ document.addEventListener("ytunes-overlay-pref", (event) => {
 
 bindMediaKeys();
 if (autoplayArmed) bindAutoplayGuard();
-bindRestorePark();
 bindOverlayPlayGesture();
 bindQueueAdvance();
+bindQueueChangeEvents();

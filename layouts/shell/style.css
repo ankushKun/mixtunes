@@ -16,6 +16,8 @@
   --yt-row-even: #f2f2f2;
   --yt-row-hover: #dcdcdc;
   --yt-row-browse: #e8e8e8;
+  --yt-row-browse-odd: #e8ece8;
+  --yt-row-browse-even: #dce4dc;
   --yt-row-selected: linear-gradient(180deg, #6aa8e8 0%, #3a7ec8 100%);
   -webkit-tap-highlight-color: transparent;
 }
@@ -910,6 +912,46 @@
   background: var(--yt-row-even);
 }
 
+/* Equalizer glyph on the sidebar item that owns the playing session. */
+#ytunes-root .ytunes-source-list button.is-playing-source::after {
+  content: "";
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 10px;
+  background-image:
+    linear-gradient(to top, currentColor, currentColor),
+    linear-gradient(to top, currentColor, currentColor),
+    linear-gradient(to top, currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%, 5px 100%, 10px 100%;
+  background-size: 2px 45%, 2px 100%, 2px 65%;
+  animation: ytunes-eq 900ms ease-in-out infinite alternate;
+}
+
+@keyframes ytunes-eq {
+  from {
+    background-size: 2px 45%, 2px 100%, 2px 65%;
+  }
+  to {
+    background-size: 2px 90%, 2px 40%, 2px 100%;
+  }
+}
+
+.ytunes-now-jump {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0 6px;
+  text-decoration: underline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40vw;
+}
+
 #ytunes-root .ytunes-source-list button:hover:not(.is-selected):not([aria-current="true"]) {
   background: var(--yt-row-hover);
 }
@@ -1451,12 +1493,20 @@
   width: 64px;
 }
 
-.ytunes-table tbody tr[data-parity="odd"]:not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr[data-parity="odd"]:not(.is-selected) {
   background: var(--yt-row-odd);
 }
 
-.ytunes-table tbody tr[data-parity="even"]:not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr[data-parity="even"]:not(.is-selected) {
   background: var(--yt-row-even);
+}
+
+.ytunes-table tbody tr.is-browse[data-parity="odd"]:not(.is-selected) {
+  background: var(--yt-row-browse-odd);
+}
+
+.ytunes-table tbody tr.is-browse[data-parity="even"]:not(.is-selected) {
+  background: var(--yt-row-browse-even);
 }
 
 .ytunes-table tbody tr[data-index],
@@ -1479,10 +1529,6 @@
 
 .ytunes-table tbody tr:not(.is-empty):hover:not(.is-selected) {
   background: var(--yt-row-hover);
-}
-
-.ytunes-table tbody tr.is-browse:not(.is-selected) {
-  background: var(--yt-row-browse);
 }
 
 .ytunes-table tbody tr.is-selected {
@@ -1631,12 +1677,12 @@
   padding: 4px 10px;
 }
 
-.ytunes-table tbody tr.is-suggested[data-parity="odd"]:not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr.is-suggested[data-parity="odd"]:not(.is-selected) {
   background: #e6ebe6;
   color: #3a3a3a;
 }
 
-.ytunes-table tbody tr.is-suggested[data-parity="even"]:not(.is-selected):not(.is-browse) {
+.ytunes-table tbody tr.is-suggested[data-parity="even"]:not(.is-selected) {
   background: #dde4dd;
   color: #3a3a3a;
 }
@@ -1813,6 +1859,26 @@
 .ytunes-menu button:disabled {
   opacity: 0.45;
   pointer-events: none;
+}
+
+/* Column picker: hides the optional stat columns without touching the DOM. */
+#ytunes-root .ytunes-table[data-hide~="year"] th[data-sort="year"],
+#ytunes-root .ytunes-table[data-hide~="year"] td:nth-child(6),
+#ytunes-root .ytunes-table[data-hide~="plays"] th[data-sort="plays"],
+#ytunes-root .ytunes-table[data-hide~="plays"] td:nth-child(7),
+#ytunes-root .ytunes-table[data-hide~="lastPlayed"] th[data-sort="lastPlayed"],
+#ytunes-root .ytunes-table[data-hide~="lastPlayed"] td:nth-child(8) {
+  display: none;
+}
+
+.ytunes-col-pop button::before {
+  content: "✓";
+  display: inline-block;
+  width: 14px;
+}
+
+.ytunes-col-pop button.is-off::before {
+  content: "";
 }
 
 .ytunes-dialog {
@@ -2575,10 +2641,12 @@
   color: #e6e6e6;
   background: #3a3a3a;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --yt-row-odd: #1e1e1e;
-  --yt-row-even: #262626;
+  --yt-row-odd: #1a1a1a;
+  --yt-row-even: #282828;
   --yt-row-hover: #333333;
   --yt-row-browse: #2e2e2e;
+  --yt-row-browse-odd: #2a2e2a;
+  --yt-row-browse-even: #343834;
 }
 
 .ytunes-app.is-graphite .ytunes-top,
@@ -2843,12 +2911,12 @@
   border-bottom-color: #1a1a1a;
 }
 
-#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested[data-parity="odd"]:not(.is-selected):not(.is-browse) {
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested[data-parity="odd"]:not(.is-selected) {
   background: #232823;
   color: #c8c8c8;
 }
 
-#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested[data-parity="even"]:not(.is-selected):not(.is-browse) {
+#ytunes-root .ytunes-app.is-graphite .ytunes-table tbody tr.is-suggested[data-parity="even"]:not(.is-selected) {
   background: #1d221d;
   color: #c8c8c8;
 }

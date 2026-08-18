@@ -109,37 +109,7 @@
           <symbol id="ytunes-icon-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></symbol>
           <symbol id="ytunes-icon-mood" viewBox="0 0 16 16"><path d="M8 1.6 9 5l3.4.3-2.6 2.3.8 3.3L8 8.9 5.4 10.9l.8-3.3L3.6 5.3 7 5z"/></symbol>
         </svg>
-
-        <details class="ytunes-source-group" data-group="store" open>
-          <summary>Store</summary>
-          <button type="button" class="is-selected" data-source="home" aria-current="true"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-home"></use></svg><span class="ytunes-source-label">Home</span></button>
-          <button type="button" data-source="explore"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-explore"></use></svg><span class="ytunes-source-label">Explore</span></button>
-          <button type="button" data-source="charts"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-chart"></use></svg><span class="ytunes-source-label">Charts</span></button>
-        </details>
-
-        <details class="ytunes-source-group" data-group="library" open>
-          <summary>Library</summary>
-          <button type="button" data-source="songs"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-note"></use></svg><span class="ytunes-source-label">Music</span></button>
-          <button type="button" data-source="liked"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-heart"></use></svg><span class="ytunes-source-label">Liked Songs</span></button>
-          <button type="button" data-source="videos"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-video"></use></svg><span class="ytunes-source-label">Videos</span></button>
-          <button type="button" data-source="podcasts"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-podcast"></use></svg><span class="ytunes-source-label">Podcasts</span></button>
-          <button type="button" data-source="albums"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-album"></use></svg><span class="ytunes-source-label">Albums</span></button>
-          <button type="button" data-source="artists"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-artist"></use></svg><span class="ytunes-source-label">Artists</span></button>
-          <button type="button" data-source="recents"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-clock"></use></svg><span class="ytunes-source-label">Recents</span></button>
-        </details>
-
-        <details class="ytunes-source-group" data-group="genius">
-          <summary>Genius</summary>
-          <button type="button" data-source="radio"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-radio"></use></svg><span class="ytunes-source-label">Radio</span></button>
-          <button type="button" data-source="mixes"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-mix"></use></svg><span class="ytunes-source-label">Mixes</span></button>
-          <div id="ytunes-moods"></div>
-        </details>
-
-        <details class="ytunes-source-group" data-group="playlists" open>
-          <summary>Playlists</summary>
-          <button type="button" data-source="now"><svg class="ytunes-source-icon" aria-hidden="true"><use href="#ytunes-icon-speaker"></use></svg><span class="ytunes-source-label">Now Playing</span></button>
-          <div id="ytunes-playlists"></div>
-        </details>
+        <!-- Source groups render from the host's sourceGroups descriptor. -->
       </div>
       <div class="ytunes-sidebar-well" id="ytunes-sidebar-well" hidden>
         <button type="button" class="ytunes-sidebar-well-main" id="ytunes-sidebar-well-main" aria-label="Now Playing">
@@ -222,11 +192,18 @@
     <div class="ytunes-status-start">
       <div class="ytunes-status-tools">
         <button type="button" id="ytunes-new-playlist" title="New playlist" aria-label="New playlist">+</button>
+        <button type="button" id="ytunes-col-menu" title="Choose columns" aria-label="Choose columns" aria-haspopup="true" aria-expanded="false">☰</button>
+      </div>
+      <div class="ytunes-menu ytunes-col-pop" id="ytunes-col-pop" hidden>
+        <button type="button" data-col="year" aria-pressed="true">Year</button>
+        <button type="button" data-col="plays" aria-pressed="true">Plays</button>
+        <button type="button" data-col="lastPlayed" aria-pressed="true">Last Played</button>
       </div>
     </div>
     <div class="ytunes-status-meta">
       <span id="ytunes-status-spin" class="ytunes-spinner" hidden aria-hidden="true"></span>
       <span id="ytunes-status-center">0 items</span>
+      <button type="button" id="ytunes-now-jump" class="ytunes-now-jump" hidden></button>
       <span id="ytunes-sleep-label" hidden></span>
       <span id="ytunes-toast" hidden></span>
     </div>

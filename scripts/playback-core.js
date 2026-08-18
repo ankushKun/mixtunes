@@ -149,6 +149,18 @@
   }
 
   /**
+   * After a track ends in host-driven mode, decide whether the host failed to
+   * advance and the overlay must take over: the same video is still loaded and
+   * the player is ENDED (state 0) — not merely paused by the user (state 2).
+   */
+  function shouldTakeOverAutoAdvance({ playerState, playing, videoId, fromId } = {}) {
+    if (!fromId || !videoId || videoId !== fromId) return false;
+    const state = Number(playerState);
+    if (Number.isFinite(state)) return state === 0;
+    return !playing;
+  }
+
+  /**
    * Decide how the host should start a track: an endless radio, the host's own
    * queue for a concrete list, or an overlay-driven roster we advance ourselves.
    *
@@ -303,36 +315,42 @@
     return true;
   }
 
-  function shouldParkRestoreAutoplay({
-    hooksActive = false,
-    hasGesture = false,
-    parked = false,
-  } = {}) {
-    if (hooksActive) return false;
-    if (parked) return false;
-    if (hasGesture) return false;
-    return true;
+  /**
+   * Keep a shuffle order stable across a roster refresh: surviving tracks keep
+   * their relative shuffled positions, new tracks append at the end. Re-rolling
+   * on refresh would desync the shown order from the playback order.
+   */
+  function shuffleOrderStable(prevOrder, prevTracks, nextTracks) {
+    const prevIds = (prevTracks || []).map((track) => trackId(track));
+    const nextIds = (nextTracks || []).map((track) => trackId(track));
+    const nextIndexById = new Map();
+    nextIds.forEach((id, index) => {
+      if (id && !nextIndexById.has(id)) nextIndexById.set(id, index);
+    });
+    const kept = [];
+    const keptIndices = new Set();
+    for (const oldIndex of prevOrder || []) {
+      const id = prevIds[oldIndex];
+      if (!id || !nextIndexById.has(id)) continue;
+      const nextIndex = nextIndexById.get(id);
+      if (keptIndices.has(nextIndex)) continue;
+      keptIndices.add(nextIndex);
+      kept.push(nextIndex);
+    }
+    const appended = [];
+    nextIds.forEach((id, index) => {
+      if (!keptIndices.has(index)) appended.push(index);
+    });
+    return kept.concat(appended);
   }
 
-  /** True when the host's own chrome is showing a real track, not its idle state. */
-  function nativeBarHasSong(info) {
-    if (!info || typeof info !== "object") return false;
-    if (playable(trackId(info))) return true;
-    const title = String(info.title || "").trim();
-    if (!title) return false;
-    if (title === "yTunes") return false;
-    if (ids.idleTitle(title)) return false;
-    return true;
-  }
-
-  function shouldCueStoredTrack({
-    overlayOn = false,
-    barHasSong = false,
-    storedTrackId = "",
-  } = {}) {
-    if (overlayOn) return false;
-    if (barHasSong) return false;
-    return playable(storedTrackId);
+  /**
+   * True when the overlay is off and the stock site must run untouched: no
+   * pausing, no cueing, no media-key interception. Every MAIN-world side effect
+   * that could touch host playback checks this first.
+   */
+  function stockSiteUntouched(hookState) {
+    return !overlayHooksActive(hookState);
   }
 
   return {
@@ -350,10 +368,10 @@
     resolveQueueTracks,
     skipIndexAfterPending,
     shouldHandleAutoAdvance,
+    shouldTakeOverAutoAdvance,
     resolvePlayContext,
     overlayHooksActive,
-    shouldParkRestoreAutoplay,
-    nativeBarHasSong,
-    shouldCueStoredTrack,
+    stockSiteUntouched,
+    shuffleOrderStable,
   };
 });
