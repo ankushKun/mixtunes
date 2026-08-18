@@ -37,17 +37,19 @@
   "content_scripts": [
     {
       "matches": ["https://music.youtube.com/*"],
-      "js": ["scripts/playback-core.js", "scripts/page.js"],
+      "js": ["scripts/hosts/ytm/page-core.js", "scripts/hosts/ytm/page.js"],
       "run_at": "document_idle",
       "world": "MAIN"
     },
     {
       "matches": ["https://music.youtube.com/*"],
       "js": [
-        "scripts/host.js",
+        "scripts/hosts-config.js",
         "scripts/playback-core.js",
         "scripts/list-core.js",
-        "scripts/ytm.js",
+        "scripts/hosts/ytm/ids.js",
+        "scripts/hosts/ytm/catalog.js",
+        "scripts/hosts/ytm/player.js",
         "layouts/shell/prefs.js",
         "layouts/shell/toast.js",
         "layouts/shell/dialog.js",
@@ -64,7 +66,8 @@
       "resources": [
         "layouts/shell/index.html",
         "layouts/shell/style.css",
-        "scripts/content.css"
+        "scripts/content.css",
+        "scripts/hosts/ytm/hide.css"
       ],
       "matches": ["https://music.youtube.com/*"]
     }

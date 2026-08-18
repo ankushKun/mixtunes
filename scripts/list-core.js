@@ -149,13 +149,19 @@
     return -1;
   }
 
+  /** Canonical track identity; hosts may keep a native alias, `id` wins. */
+  function trackId(track) {
+    if (!track) return "";
+    return String(track.id || track.videoId || "").trim();
+  }
+
   function coverIdForTrack(track) {
     if (!track) return "";
     const album = String(track.album || "").trim();
     const artist = String(track.artist || "").trim();
     if (album) return `album:${album}:${artist}`;
     if (track.albumBrowseId) return track.albumBrowseId;
-    return track.videoId || track.id || `t:${track.title}`;
+    return trackId(track) || `t:${track.title}`;
   }
 
   function coversFromTracks(tracks) {
@@ -180,6 +186,7 @@
         artist: track.artist,
         album: track.album || "",
         kind: track.album && group.length > 1 ? "album" : "song",
+        trackId: group.length === 1 ? trackId(track) : "",
         videoId: group.length === 1 ? track.videoId || "" : "",
         artwork: track.artwork,
         tracks: group,
@@ -190,7 +197,8 @@
 
   function trackMatchesCover(track, cover) {
     if (!track || !cover) return false;
-    if (cover.tracks?.some((item) => item.videoId && item.videoId === track.videoId)) {
+    const id = trackId(track);
+    if (id && cover.tracks?.some((item) => trackId(item) === id)) {
       return true;
     }
     if (cover.id && cover.id === coverIdForTrack(track)) return true;
@@ -216,6 +224,7 @@
     scrollToRowIndex,
     flattenListRows,
     flattenIndexForTrack,
+    trackId,
     coverIdForTrack,
     coversFromTracks,
     trackMatchesCover,

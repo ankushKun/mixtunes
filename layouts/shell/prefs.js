@@ -1,8 +1,18 @@
 const PREFS_KEY = "ytunesPrefs";
-const PREFS_VERSION = 3;
+const PREFS_VERSION = 4;
 const THEME_VALUES = ["auto", "light", "graphite"];
 
 const SOURCE_GROUP_KEYS = ["library", "store", "genius", "playlists"];
+
+// Chrome and view preferences are shared; anything keyed by a track or list id is
+// per-host, because a second host's ids would otherwise collide with these.
+let prefsHostId = YTunesHosts.primary().id;
+
+/** Point per-host prefs at the host that owns this page. */
+function configurePrefs(hostId) {
+  prefsHostId = hostId || YTunesHosts.primary().id;
+  return prefsHostId;
+}
 
 const PREFS_DEFAULTS = {
   version: PREFS_VERSION,
@@ -22,9 +32,9 @@ const PREFS_DEFAULTS = {
 function sanitizeNowPlaying(value) {
   if (!value || typeof value !== "object") return null;
   const title = String(value.title || "").trim();
-  const videoId = String(value.videoId || "").trim();
+  const videoId = String(value.id || value.videoId || "").trim();
   if (!title && !videoId) return null;
-  if (title === "yTunes" || /^youtube music$/i.test(title)) return null;
+  if (title === "yTunes") return null;
   return {
     videoId,
     title,
@@ -74,6 +84,42 @@ function clonePrefs(value) {
   };
 }
 
+function statRow(value) {
+  return Boolean(value) && typeof value === "object" && "count" in value;
+}
+
+/** Pre-v4 prefs kept one flat play-count map, written by the only host there was. */
+function isLegacyPlayCounts(counts) {
+  const values = Object.values(counts || {});
+  return values.length > 0 && values.some(statRow);
+}
+
+/**
+ * Per-host slices, keyed by host id. Track and list ids only mean something to
+ * the host that issued them, so `playCounts` and `nowPlaying` live in here.
+ * Existing YouTube Music play-count keys move across untouched.
+ */
+function migrateHostSlices(raw) {
+  const hosts = {};
+  const stored = raw?.hosts && typeof raw.hosts === "object" ? raw.hosts : {};
+  for (const [id, slice] of Object.entries(stored)) {
+    hosts[id] = {
+      playCounts: { ...(slice?.playCounts || {}) },
+      nowPlaying: sanitizeNowPlaying(slice?.nowPlaying),
+    };
+  }
+  const legacyId = YTunesHosts.primary().id;
+  if (!raw?.hosts) {
+    const counts = isLegacyPlayCounts(raw?.playCounts) ? { ...raw.playCounts } : {};
+    const playing = sanitizeNowPlaying(raw?.nowPlaying);
+    if (Object.keys(counts).length || playing) {
+      hosts[legacyId] = { playCounts: counts, nowPlaying: playing };
+    }
+  }
+  if (!hosts[prefsHostId]) hosts[prefsHostId] = { playCounts: {}, nowPlaying: null };
+  return hosts;
+}
+
 function migratePrefs(raw) {
   const next = clonePrefs(raw && typeof raw === "object" ? raw : {});
   next.version = PREFS_VERSION;
@@ -95,7 +141,7 @@ function migratePrefs(raw) {
     next.theme = "auto";
   }
   next.graphite = resolveGraphite(next.theme);
-  if (!next.playCounts || typeof next.playCounts !== "object") next.playCounts = {};
+  next.hosts = migrateHostSlices(raw && typeof raw === "object" ? raw : {});
   const groups = {};
   for (const key of SOURCE_GROUP_KEYS) {
     groups[key] =
@@ -104,7 +150,11 @@ function migratePrefs(raw) {
         : next.sourceGroups?.[key] !== false;
   }
   next.sourceGroups = groups;
-  next.nowPlaying = sanitizeNowPlaying(next.nowPlaying);
+  // Read-only view of the active host's slice, so callers can keep saying
+  // prefs.nowPlaying. Writes go through savePrefs, which knows the host.
+  const slice = next.hosts[prefsHostId];
+  next.nowPlaying = slice.nowPlaying;
+  next.playCounts = slice.playCounts;
   return next;
 }
 
@@ -117,20 +167,36 @@ async function loadPrefs() {
   }
 }
 
+/**
+ * `nowPlaying` and `playCounts` in the partial are for the active host and land in
+ * its slice; everything else is shared chrome state.
+ */
 async function savePrefs(partial) {
   const current = await loadPrefs();
-  const next = migratePrefs({ ...current, ...partial });
+  const merged = { ...current, ...partial, hosts: { ...current.hosts } };
+  const slice = { ...merged.hosts[prefsHostId] };
+  if (partial && "nowPlaying" in partial) {
+    slice.nowPlaying = sanitizeNowPlaying(partial.nowPlaying);
+  }
+  if (partial?.playCounts && typeof partial.playCounts === "object") {
+    slice.playCounts = { ...partial.playCounts };
+  }
+  merged.hosts[prefsHostId] = slice;
+  const next = migratePrefs(merged);
+  // The flat mirrors are rebuilt per host on load; storing them too would leave a
+  // stale copy of whichever host happened to save last.
+  const { nowPlaying, playCounts, ...stored } = next;
   try {
-    await chrome.storage.local.set({ [PREFS_KEY]: next });
+    await chrome.storage.local.set({ [PREFS_KEY]: stored });
   } catch {
     /* storage can be unavailable in tests */
   }
   return next;
 }
 
-function playStat(prefs, videoId) {
-  if (!videoId) return { count: "", lastPlayed: "" };
-  const row = prefs?.playCounts?.[videoId];
+function playStat(prefs, id) {
+  if (!id) return { count: "", lastPlayed: "" };
+  const row = prefs?.hosts?.[prefsHostId]?.playCounts?.[id];
   if (!row) return { count: "", lastPlayed: "" };
   const count = Number(row.count) || 0;
   const last = Number(row.lastPlayed) || 0;
@@ -155,36 +221,35 @@ function formatLastPlayed(stamp) {
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-async function recordPlay(videoId) {
-  if (!videoId) return loadPrefs();
+async function recordPlay(id) {
+  if (!id) return loadPrefs();
   const current = await loadPrefs();
-  const prev = current.playCounts[videoId] || { count: 0, lastPlayed: 0 };
-  current.playCounts[videoId] = {
-    count: (Number(prev.count) || 0) + 1,
-    lastPlayed: Date.now(),
-  };
-  return savePrefs({ playCounts: current.playCounts });
+  const counts = { ...current.playCounts };
+  const prev = counts[id] || { count: 0, lastPlayed: 0 };
+  counts[id] = { count: (Number(prev.count) || 0) + 1, lastPlayed: Date.now() };
+  return savePrefs({ playCounts: counts });
 }
 
+/** A play counts once it has been heard for 15 seconds or half the track. */
 function createPlayCounter(onRecorded) {
-  let armedVideo = "";
-  let countedVideo = "";
+  let armed = "";
+  let counted = "";
   let startedAt = 0;
 
   return {
     note(status) {
-      const videoId = status?.videoId || "";
-      if (!videoId || !status?.playing) return;
-      if (videoId !== armedVideo) {
-        armedVideo = videoId;
+      const id = status?.trackId || "";
+      if (!id || !status?.playing) return;
+      if (id !== armed) {
+        armed = id;
         startedAt = Date.now();
       }
-      if (countedVideo === videoId) return;
+      if (counted === id) return;
       const elapsed = (Date.now() - startedAt) / 1000;
       const ratio = Number(status?.progress?.ratio) || 0;
       if (elapsed < 15 && ratio < 0.5) return;
-      countedVideo = videoId;
-      recordPlay(videoId).then((prefs) => onRecorded?.(prefs));
+      counted = id;
+      recordPlay(id).then((prefs) => onRecorded?.(prefs));
     },
   };
 }

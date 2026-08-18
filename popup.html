@@ -33,21 +33,18 @@
         <input type="checkbox" id="overlay-enabled" />
         Show yTunes overlay
       </label>
-      <p id="overlay-hint" class="status">
-        Off uses stock YouTube Music. Reloads the tab.
-      </p>
+      <p id="overlay-hint" class="status"></p>
     </main>
     <main id="off-ytm" hidden>
       <div class="lcd idle">
         <div class="lcd-meta">
           <div id="off-title">yTunes</div>
-          <p>This only works on YouTube Music.</p>
+          <p id="off-hint"></p>
         </div>
       </div>
-      <a id="open-ytm" href="https://music.youtube.com">
-        Open YouTube Music
-      </a>
+      <a id="open-ytm" href="#"></a>
     </main>
+    <script src="scripts/hosts-config.js"></script>
     <script src="layouts/shell/prefs.js"></script>
     <script src="popup.js"></script>
   </body>

@@ -1,4 +1,5 @@
-const YTM_ORIGIN = "https://music.youtube.com";
+/** Host owning the active tab, or null when the popup opened off-host. */
+let activeHost = null;
 
 function paintPopupTheme(theme) {
   const mode = sanitizeTheme(theme);
@@ -29,17 +30,8 @@ try {
   /* matchMedia can be missing */
 }
 
-function isYouTubeMusic(url) {
-  if (!url) return false;
-  try {
-    return new URL(url).origin === YTM_ORIGIN;
-  } catch {
-    return false;
-  }
-}
-
-async function openYouTubeMusic() {
-  const tabs = await chrome.tabs.query({ url: `${YTM_ORIGIN}/*` });
+async function openHost(host) {
+  const tabs = await chrome.tabs.query({ url: `${host.origin}/*` });
   const current = await chrome.windows.getCurrent();
   const sameWindow = tabs.filter((tab) => tab.windowId === current?.id);
   const pool = sameWindow.length ? sameWindow : tabs;
@@ -53,7 +45,7 @@ async function openYouTubeMusic() {
     }
     return;
   }
-  await chrome.tabs.create({ url: YTM_ORIGIN });
+  await chrome.tabs.create({ url: host.origin });
 }
 
 async function sendToTab(tabId, message) {
@@ -64,13 +56,9 @@ async function sendToTab(tabId, message) {
   }
 }
 
-const artwork = document.getElementById("artwork");
-artwork?.addEventListener("error", () => {
-  const src = artwork.getAttribute("src") || "";
-  const next = src
-    .replace("/hq720.", "/hqdefault.")
-    .replace("/maxresdefault.", "/hqdefault.");
-  if (next !== src) artwork.src = next;
+document.getElementById("artwork")?.addEventListener("error", (event) => {
+  event.target.removeAttribute("src");
+  document.querySelector(".artwork").hidden = true;
 });
 
 function renderStatus(status) {
@@ -81,8 +69,8 @@ function renderStatus(status) {
   const artwork = document.getElementById("artwork");
 
   if (!status?.hostAlive) {
-    nowPlaying.textContent = "Player bar not found. Start a song, then reload.";
-    hostStatus.textContent = "Host: missing";
+    nowPlaying.textContent = "Player not found. Start a song, then reload.";
+    hostStatus.textContent = `${activeHost?.name || "Host"}: missing`;
     playPause.classList.remove("is-playing");
     playPause.setAttribute("aria-label", "Play");
     artwork.removeAttribute("src");
@@ -91,10 +79,10 @@ function renderStatus(status) {
   }
 
   const line = [status.title, status.subtitle].filter(Boolean).join(" — ");
-  nowPlaying.textContent = line || "YouTube Music player is alive.";
-  hostStatus.textContent = status.hasMoviePlayer
-    ? "Host: player bar + movie player"
-    : "Host: player bar";
+  nowPlaying.textContent = line || activeHost?.strings.popupAlive || "Player is alive.";
+  hostStatus.textContent = `${activeHost?.name || "Host"}: ${
+    status.hasMoviePlayer ? "player ready" : "controls only"
+  }`;
   playPause.classList.toggle("is-playing", Boolean(status.playing));
   playPause.setAttribute("aria-label", status.playing ? "Pause" : "Play");
 
@@ -124,22 +112,38 @@ async function syncOverlayToggle() {
   });
 }
 
-document.getElementById("open-ytm")?.addEventListener("click", async (event) => {
-  event.preventDefault();
-  try {
-    await openYouTubeMusic();
-  } catch {
-    window.open(YTM_ORIGIN, "_blank", "noopener,noreferrer");
-  }
-  window.close();
-});
+function paintOffHost() {
+  const fallback = YTunesHosts.primary();
+  const names = YTunesHosts.list.map((host) => host.name).join(", ");
+  const link = document.getElementById("open-ytm");
+  document.getElementById("off-hint").textContent = `This only works on ${names}.`;
+  if (!link) return;
+  link.textContent = fallback.strings.popupOpen;
+  link.href = fallback.origin;
+  link.addEventListener("click", async (event) => {
+    event.preventDefault();
+    try {
+      await openHost(fallback);
+    } catch {
+      window.open(fallback.origin, "_blank", "noopener,noreferrer");
+    }
+    window.close();
+  });
+}
 
 chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
-  const onYtm = isYouTubeMusic(tab?.url);
-  document.getElementById("on-ytm").hidden = !onYtm;
-  document.getElementById("off-ytm").hidden = onYtm;
-  if (!onYtm || tab?.id == null) return;
+  activeHost = YTunesHosts.forUrl(tab?.url);
+  const onHost = Boolean(activeHost);
+  if (onHost) configurePrefs(activeHost.id);
+  document.getElementById("on-ytm").hidden = !onHost;
+  document.getElementById("off-ytm").hidden = onHost;
+  if (!onHost || tab?.id == null) {
+    paintOffHost();
+    return;
+  }
 
+  document.getElementById("overlay-hint").textContent =
+    activeHost.strings.popupOverlayHint;
   await syncOverlayToggle();
   await refresh(tab.id);
 

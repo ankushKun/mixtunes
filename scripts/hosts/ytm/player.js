@@ -466,6 +466,9 @@ function probe() {
     album,
     year,
     author: snapAuthor,
+    // `trackId` is the host-neutral now-playing key. On YouTube Music it is the
+    // video id, so `videoId` stays as an alias for the popup and play counter.
+    trackId: videoId,
     videoId,
     playlistId: snap?.playlistId || "",
     artwork:
@@ -622,3 +625,418 @@ function waitForPlayerBar() {
     timer = setTimeout(() => finish(Boolean(playerBar())), 15000);
   });
 }
+
+/**
+ * The single object the iTunes chrome talks to. Only one adapter is ever loaded —
+ * the manifest picks it by origin — so this is always "the current host".
+ *
+ * The shell must never reach past this object into YouTube Music: no InnerTube
+ * bodies, no browse ids, no `ytmusic-*` selectors, no watch endpoints. Anything
+ * the shell needs that is host-shaped belongs here as a method.
+ *
+ * Adding a host means writing this object for that site: a catalog reader, a real
+ * player, and a boot/probe. It is not a config file. What you get for free is the
+ * entire chrome — Cover Flow, the track table, the LCD, dialogs, and orchestration.
+ */
+// Teach the isolated world's playback-core what a YouTube Music id looks like. The
+// MAIN world cannot share this instance, so page-core.js carries its own copy.
+YTunesPlayback.configure(YTunesYtmIds);
+
+globalThis.MusicHost = (() => {
+  const host = YTunesHosts.byId("ytm");
+
+  function queryIn(node, selector) {
+    if (!node) return null;
+    return node.shadowRoot?.querySelector(selector) || node.querySelector(selector) || null;
+  }
+
+  /**
+   * The nav bar re-renders often and its right side lives in a shadow root, so the
+   * slot is resolved fresh on every placement and reports the nodes worth observing.
+   */
+  function findLaunchSlot() {
+    const bar = document.querySelector("ytmusic-nav-bar");
+    if (!bar) return null;
+    const right = queryIn(bar, "#right-content") || queryIn(bar, ".right-content");
+    const before =
+      queryIn(right || bar, "ytmusic-cast-button") ||
+      queryIn(bar, "ytmusic-cast-button") ||
+      queryIn(right || bar, "ytmusic-settings-button") ||
+      queryIn(bar, "ytmusic-settings-button");
+    const watch = [bar, bar.shadowRoot].filter(Boolean);
+    if (before?.parentNode) return { parent: before.parentNode, before, watch };
+    if (right) return { parent: right, before: right.firstElementChild, watch };
+    return null;
+  }
+
+  function trackId(track) {
+    return YTunesPlayback.trackId(track);
+  }
+
+  /**
+   * Turn a track plus a resolved context into the watch endpoint YouTube Music
+   * navigates to. This is the only place a watch endpoint is built.
+   */
+  function sendPlay(track, listId, index, ownList) {
+    const endpoint = track.endpoint ? { ...track.endpoint } : {};
+    const watch = {
+      ...(endpoint.watchEndpoint || {}),
+      videoId: trackId(track) || endpoint.watchEndpoint?.videoId,
+    };
+    if (listId && !ownList) watch.playlistId = YTunesYtmIds.listId(listId);
+    else if (ownList) delete watch.playlistId;
+    if (Number.isFinite(index) && index >= 0) watch.index = index;
+    if (watch.videoId) endpoint.watchEndpoint = watch;
+    if (!endpoint.watchEndpoint && !endpoint.browseEndpoint) {
+      return Promise.reject(new Error("Nothing to play"));
+    }
+    YTM.invalidateQueue();
+    return YTM.play({ endpoint, ownList: Boolean(ownList) });
+  }
+
+  /**
+   * Only send a position when the host is playing its own queue for a list we can
+   * count. Sending one for a radio or an overlay-driven roster makes YTM jump.
+   */
+  function wireIndex(ctx, track, context) {
+    const trusted =
+      !ctx.ownList &&
+      ctx.mode === "queue" &&
+      ["playlist", "liked", "album"].includes(context.source);
+    if (!trusted) return undefined;
+    const id = trackId(track);
+    const at = (ctx.tracks || []).findIndex((item) => trackId(item) === id);
+    return at >= 0 ? at : context.fallbackIndex;
+  }
+
+  function hostStatusShuffle() {
+    return isPressed(controlNode("shuffle"));
+  }
+
+  function rootNodes() {
+    const root = document.getElementById("ytunes-root");
+    return [root, root?.querySelector(".ytunes-transport")].filter(Boolean);
+  }
+
+  return {
+    id: host.id,
+    name: host.name,
+    strings: host.strings,
+    escapeParam: host.escapeParam,
+    hideSheet: "scripts/hosts/ytm/hide.css",
+
+    /**
+     * Sources and actions the chrome may offer. A missing capability hides UI; it
+     * never fakes data. A host without lyrics simply has no lyrics pane.
+     */
+    capabilities: {
+      sources: [
+        "home",
+        "explore",
+        "charts",
+        "songs",
+        "liked",
+        "albums",
+        "artists",
+        "videos",
+        "podcasts",
+        "mixes",
+        "recents",
+        "playlist",
+        "album",
+        "artist",
+        "mood",
+        "search",
+        "now",
+        "radio",
+      ],
+      lyrics: true,
+      like: true,
+      dislike: true,
+      enqueue: true,
+      playlistEdit: true,
+      signedIn: true,
+      radio: true,
+      shuffle: true,
+      repeat: true,
+      seek: true,
+      volume: true,
+    },
+
+    // --- boot -------------------------------------------------------------
+
+    /** Resolves once the host's own player exists and can take commands. */
+    waitUntilReady() {
+      return waitForPlayerBar();
+    },
+
+    /**
+     * Where the launch button goes while the overlay is off.
+     * @returns {{ parent: Node, before: Node|null, watch: Node[] }|null}
+     */
+    launchSlot() {
+      return findLaunchSlot();
+    },
+
+    markReady: markHostReady,
+    markIdle: markHostIdle,
+
+    /** True when the player bar shows the site's own name instead of a track. */
+    isIdleTitle(title) {
+      return YTunesYtmIds.idleTitle(title);
+    },
+
+    // --- catalog ----------------------------------------------------------
+
+    browse: YtmCatalog.browse,
+    search: YtmCatalog.search,
+    suggest: YtmCatalog.suggest,
+    playlists: YtmCatalog.playlists,
+    moods: YtmCatalog.moods,
+    collectionQuery: YtmCatalog.collectionQuery,
+    listIdFor: YtmCatalog.listIdFor,
+    isSongCover: YtmCatalog.isSongCover,
+    trackFromCover: YtmCatalog.trackFromCover,
+    albumOf: YtmCatalog.albumOf,
+    artistOf: YtmCatalog.artistOf,
+    signedIn: YtmCatalog.signedIn,
+    lyrics: YtmCatalog.lyrics,
+
+    // --- playback ---------------------------------------------------------
+
+    /**
+     * Start a track. The host decides whether that means an endless radio, its own
+     * queue for a concrete list, or a roster the overlay advances itself.
+     *
+     * @param {object} args
+     * @param {object} args.track
+     * @param {object} args.context iTunes view state the decision needs:
+     *   `source`, `playlistId`, `session`, `cover`, `sessionTracks`,
+     *   `mixedStorefront`, and `fallbackIndex` (the shell's own row position).
+     * @returns {Promise<{mode: string, listId: string, tracks: object[], ownList: boolean}>}
+     *   the resolved context, so the shell can record the session it just started.
+     */
+    async play({ track, context = {} }) {
+      if (!track) return null;
+      const ctx = YTunesPlayback.resolvePlayContext(
+        {
+          source: context.source,
+          playlistId: context.playlistId,
+          session: context.session,
+        },
+        track,
+        {
+          cover: context.cover,
+          sessionTracks: context.sessionTracks,
+          mixedStorefront: context.mixedStorefront,
+        }
+      );
+      await sendPlay(track, ctx.ownList ? "" : ctx.listId, wireIndex(ctx, track, context), ctx.ownList);
+      return ctx;
+    },
+
+    /** Resume a remembered track without the overlay's session machinery. */
+    resume(track) {
+      const id = trackId(track);
+      if (!id) return Promise.reject(new Error("Nothing to play"));
+      return YTM.play({
+        endpoint: {
+          watchEndpoint: {
+            videoId: id,
+            playlistId: YTunesYtmIds.listId(track?.playlistId) || undefined,
+          },
+        },
+      });
+    },
+
+    /** Load a track into the player without starting playback. */
+    cue(track) {
+      const id = trackId(track);
+      if (!id) return Promise.resolve(null);
+      return YTM.cue({
+        videoId: id,
+        playlistId: YTunesYtmIds.listId(track?.playlistId) || undefined,
+      });
+    },
+
+    /** The station id for a track without starting it, or "" when there is none. */
+    radioListFor(track) {
+      return YTunesYtmIds.radioFor(trackId(track));
+    },
+
+    /**
+     * Play a track's station.
+     * @returns {Promise<{listId: string, trackId: string}|null>} null when this host
+     *   cannot build a station for the track.
+     */
+    async startRadio(track) {
+      const id = trackId(track);
+      const listId = YTunesYtmIds.radioFor(id);
+      if (!listId) return null;
+      try {
+        await YTM.play({
+          endpoint: { watchEndpoint: { videoId: id, playlistId: listId } },
+          ownList: false,
+        });
+      } catch {
+        /* the Now Playing view still opens on the new list */
+      }
+      return { listId, trackId: id };
+    },
+
+    queue(id, listId) {
+      return YTM.queueCached(id, YTunesYtmIds.listId(listId));
+    },
+
+    playerQueue() {
+      return YTM.playerQueue();
+    },
+
+    invalidateQueue() {
+      YTM.invalidateQueue();
+    },
+
+    // --- transport --------------------------------------------------------
+
+    probe,
+
+    /** Re-read the host player so the next probe() is fresh. */
+    refreshStatus(force) {
+      return refreshPlayerSnap(force);
+    },
+
+    control(action) {
+      return controlPlayback(action);
+    },
+
+    seek(ratio) {
+      return seekToRatio(ratio);
+    },
+
+    volume(ratio) {
+      return setVolumeRatio(ratio);
+    },
+
+    /**
+     * Shuffle the host's own queue. The overlay shuffles its own roster itself, so
+     * this only matters while YouTube Music is driving playback.
+     */
+    setShuffle(on) {
+      if (Boolean(on) === Boolean(hostStatusShuffle())) return false;
+      return clickControl("shuffle");
+    },
+
+    /**
+     * YouTube Music has no "set repeat" API, only a three-state button, so cycle it
+     * until it lands. The shell must not know that.
+     * @returns {Promise<string>} the mode actually reached.
+     */
+    async setRepeat(mode) {
+      const want = mode === "one" || mode === "all" ? mode : "off";
+      for (let i = 0; i < 3; i += 1) {
+        clickControl("repeat");
+        await refreshPlayerSnap();
+        if ((probe().repeat || "off") === want) break;
+      }
+      return probe().repeat || "off";
+    },
+
+    /**
+     * Publish the roster the MAIN world reads when it advances tracks. Ids travel as
+     * a comma-joined string, which is safe for YouTube Music's ids; a host with
+     * comma-bearing ids must encode them here, not in the shell.
+     *
+     * @param {{ids: string[], listId: string, ownList: boolean, mode: string,
+     *   playingId: string}} roster
+     * @returns {{ids: string[], index: number}} the accepted roster and the position
+     *   the host believes is playing, accounting for an in-flight skip.
+     */
+    syncSkipRoster({ ids, listId, ownList, mode, playingId } = {}) {
+      const roster = (ids || []).map(String).filter((id) => YTunesYtmIds.playable(id));
+      const list = YTunesYtmIds.listId(listId);
+      const skipList = ownList ? (YTunesYtmIds.isConcreteList(list) ? list : "") : list;
+      const nodes = rootNodes();
+      const pendingId = nodes.map((node) => node.dataset.pendingSkip).find(Boolean) || "";
+      const pendingUntil = Number(
+        nodes.map((node) => node.dataset.pendingSkipUntil).find(Boolean) || 0
+      );
+      const index = YTunesPlayback.skipIndexAfterPending(
+        roster,
+        playingId || "",
+        pendingId,
+        pendingUntil,
+        Date.now()
+      );
+      const expired = Boolean(pendingId) && Date.now() >= pendingUntil;
+      for (const node of nodes) {
+        if (expired) {
+          delete node.dataset.pendingSkip;
+          delete node.dataset.pendingSkipUntil;
+        }
+        if (roster.length) node.dataset.skipIds = roster.join(",");
+        else delete node.dataset.skipIds;
+        if (skipList) node.dataset.skipPlaylist = skipList;
+        else delete node.dataset.skipPlaylist;
+        if (ownList) node.dataset.ownList = "1";
+        else delete node.dataset.ownList;
+        const session = mode || (ownList ? "list" : "queue");
+        if (session) node.dataset.sessionMode = session;
+        else delete node.dataset.sessionMode;
+        if (index >= 0) node.dataset.skipIndex = String(index);
+        else delete node.dataset.skipIndex;
+      }
+      return { ids: roster, index };
+    },
+
+    /** The host may switch itself to a station when an overlay roster runs out. */
+    forcedSessionMode() {
+      return document.getElementById("ytunes-root")?.dataset?.sessionMode || "";
+    },
+
+    // --- library writes ---------------------------------------------------
+
+    /**
+     * Rate a track. When the API call fails for the track that is playing, fall
+     * back to the player bar's own button so the rating still lands.
+     */
+    async like(track, rating) {
+      const id = trackId(track);
+      if (!id) throw new Error("No track");
+      try {
+        return await YTM.like(id, rating);
+      } catch (error) {
+        if (probe().trackId === id) {
+          clickControl(rating === "dislike" ? "dislike" : "like");
+        }
+        throw error;
+      }
+    },
+
+    enqueue(track, position) {
+      const id = trackId(track);
+      if (!id) return Promise.reject(new Error("No track"));
+      return YTM.enqueue(id, position);
+    },
+
+    async createPlaylist(title) {
+      const result = await YTM.createPlaylist(title);
+      YtmCatalog.forgetPlaylists();
+      return YTunesYtmIds.listId(result?.playlistId || result?.id);
+    },
+
+    async addToPlaylist(playlistId, track) {
+      const id = trackId(track);
+      if (!id) return Promise.reject(new Error("No track"));
+      return YTM.addToPlaylist(YTunesYtmIds.listId(playlistId), id);
+    },
+
+    /** `setVideoId` is a YouTube Music row handle; the shell never sees it. */
+    removeFromPlaylist(playlistId, track) {
+      return YTM.removeFromPlaylist(
+        YTunesYtmIds.listId(playlistId),
+        track?.setVideoId,
+        trackId(track)
+      );
+    },
+  };
+})();

@@ -1,61 +1,94 @@
+/**
+ * Host-agnostic playback logic: roster math, queue merging, and the iTunes
+ * play-context decision. Nothing here may assume a particular host's id format.
+ *
+ * Identifier rules come from an injected strategy — see scripts/hosts/ytm/ids.js.
+ * Each world configures it once at boot (MAIN: page.js, isolated: the adapter).
+ * Left unconfigured, ids are treated as opaque strings with no radio support.
+ */
 (function (root, factory) {
   const api = factory();
   root.YTunesPlayback = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  function watchListId(id) {
-    return String(id || "").replace(/^VL/, "");
+  /** @typedef {{ playable(id: string): boolean, listId(raw: string): string,
+   *   radioListId(raw: string): string, isConcreteList(raw: string): boolean,
+   *   radioFor(id: string): string, rowKey(track: object): string,
+   *   idleTitle(title: string): boolean }} HostIds */
+
+  /** @type {HostIds} */
+  const OPAQUE_IDS = {
+    playable: (id) => Boolean(String(id ?? "").trim()),
+    listId: (raw) => String(raw ?? "").trim(),
+    radioListId: () => "",
+    isConcreteList: (raw) => Boolean(String(raw ?? "").trim()),
+    radioFor: () => "",
+    rowKey: (track) => trackId(track),
+    idleTitle: () => false,
+  };
+
+  let ids = OPAQUE_IDS;
+
+  /** @param {Partial<HostIds>} hostIds */
+  function configure(hostIds) {
+    ids = { ...OPAQUE_IDS, ...(hostIds || {}) };
+    return ids;
   }
 
-  function isPlayableVideoId(id) {
-    return /^[\w-]{11}$/.test(String(id || ""));
+  /** Canonical track identity. Hosts may keep a native alias, `id` wins. */
+  function trackId(track) {
+    if (!track) return "";
+    return String(track.id || track.videoId || "").trim();
   }
 
-  function isConcretePlaylist(id) {
-    const value = watchListId(id);
-    return Boolean(value) && !value.startsWith("RD");
+  function playable(id) {
+    return ids.playable(id);
   }
 
-  function radioListId(id) {
-    const list = watchListId(id);
-    return list.startsWith("RD") ? list : "";
+  function listId(raw) {
+    return ids.listId(raw);
   }
 
-  function radioId(videoId) {
-    return isPlayableVideoId(videoId) ? `RDAMVM${videoId}` : "";
+  function radioListId(raw) {
+    return ids.radioListId(raw);
+  }
+
+  function isConcreteList(raw) {
+    return ids.isConcreteList(raw);
+  }
+
+  function radioFor(id) {
+    return ids.radioFor(id);
   }
 
   function playableTracks(tracks) {
-    return (tracks || []).filter((track) => isPlayableVideoId(track?.videoId));
+    return (tracks || []).filter((track) => playable(trackId(track)));
   }
 
-  function adjacentInRoster(ids, currentId, kind, wrap, hintIndex) {
-    const list = ids || [];
-    if (!list.length) return { videoId: "", index: -1 };
+  function adjacentInRoster(roster, currentId, kind, wrap, hintIndex) {
+    const list = roster || [];
+    if (!list.length) return { id: "", index: -1 };
     const hinted = hintIndex >= 0 && hintIndex < list.length ? hintIndex : -1;
     const index = hinted >= 0 ? hinted : currentId ? list.indexOf(currentId) : -1;
     if (kind === "next") {
-      if (index < 0) return { videoId: list[0], index: 0 };
-      if (index + 1 < list.length) return { videoId: list[index + 1], index: index + 1 };
-      if (wrap) return { videoId: list[0], index: 0 };
-      return { videoId: "", index: -1 };
+      if (index < 0) return { id: list[0], index: 0 };
+      if (index + 1 < list.length) return { id: list[index + 1], index: index + 1 };
+      if (wrap) return { id: list[0], index: 0 };
+      return { id: "", index: -1 };
     }
-    if (index < 0) return { videoId: list[list.length - 1], index: list.length - 1 };
-    if (index > 0) return { videoId: list[index - 1], index: index - 1 };
-    if (wrap) return { videoId: list[list.length - 1], index: list.length - 1 };
-    return { videoId: "", index: -1 };
+    if (index < 0) return { id: list[list.length - 1], index: list.length - 1 };
+    if (index > 0) return { id: list[index - 1], index: index - 1 };
+    if (wrap) return { id: list[list.length - 1], index: list.length - 1 };
+    return { id: "", index: -1 };
   }
 
-  function hostQueueMatches(host, videoId, playlistId) {
-    const hostList = watchListId(host?.playlistId);
-    const wantList = watchListId(playlistId);
+  function hostQueueMatches(host, currentId, playlistId) {
+    const hostList = listId(host?.playlistId);
+    const wantList = listId(playlistId);
     const tracks = playableTracks(host?.tracks);
     if (wantList && hostList && hostList !== wantList) return false;
     if (wantList && !hostList) return false;
-    if (videoId && tracks.length && !tracks.some((track) => track.videoId === videoId)) {
-      return false;
-    }
-    if (!wantList && videoId && tracks.length && !tracks.some((track) => track.videoId === videoId)) {
+    if (currentId && tracks.length && !tracks.some((track) => trackId(track) === currentId)) {
       return false;
     }
     return Boolean(tracks.length || hostList);
@@ -65,17 +98,17 @@
     const host = playableTracks(hostTracks);
     const next = playableTracks(nextTracks);
     const extras = new Map();
-    for (const track of next) extras.set(track.videoId, track);
+    for (const track of next) extras.set(trackId(track), track);
     const out = [];
     const seen = new Set();
     const push = (track) => {
-      const key = track.setVideoId || track.videoId;
+      const key = ids.rowKey(track);
       if (!key || seen.has(key)) return;
       seen.add(key);
       out.push(track);
     };
     for (const track of host) {
-      const extra = extras.get(track.videoId);
+      const extra = extras.get(trackId(track));
       push(
         extra
           ? {
@@ -93,16 +126,16 @@
     return out;
   }
 
-  function resolveQueueTracks(host, nextTracks, videoId, playlistId) {
+  function resolveQueueTracks(host, nextTracks, currentId, playlistId) {
     const parsed = playableTracks(nextTracks);
-    if (!hostQueueMatches(host, videoId, playlistId)) {
+    if (!hostQueueMatches(host, currentId, playlistId)) {
       return parsed;
     }
     return mergeQueueTracks(host?.tracks, parsed);
   }
 
-  function skipIndexAfterPending(ids, playingId, pendingId, pendingUntil, now) {
-    const list = ids || [];
+  function skipIndexAfterPending(roster, playingId, pendingId, pendingUntil, now) {
+    const list = roster || [];
     const pendingAt =
       pendingId && now < pendingUntil && list.includes(pendingId) ? list.indexOf(pendingId) : -1;
     const playAt = playingId && list.includes(playingId) ? list.indexOf(playingId) : -1;
@@ -115,26 +148,33 @@
     return Boolean(ownList);
   }
 
+  /**
+   * Decide how the host should start a track: an endless radio, the host's own
+   * queue for a concrete list, or an overlay-driven roster we advance ourselves.
+   *
+   * Called by the host adapter, not by the shell — the returned `listId` is a
+   * host id, and building it needs host rules.
+   */
   function resolvePlayContext(state, track, extras) {
     const opts = extras || {};
-    const videoId = track?.videoId || track?.endpoint?.watchEndpoint?.videoId || "";
+    const currentId = trackId(track) || track?.endpoint?.watchEndpoint?.videoId || "";
     const session = state?.session || {};
     const source = String(state?.source || "");
     const cover = opts.cover || null;
     const mixed = Boolean(opts.mixedStorefront);
     const sessionTracks = opts.sessionTracks || (track ? [track] : []);
-    const watchList = watchListId(track?.endpoint?.watchEndpoint?.playlistId);
-    const trackList = watchListId(track?.playlistId);
-    const stateList = watchListId(state?.playlistId);
-    const coverList = watchListId(
+    const watchList = listId(track?.endpoint?.watchEndpoint?.playlistId);
+    const trackList = listId(track?.playlistId);
+    const stateList = listId(state?.playlistId);
+    const coverList = listId(
       cover?.playlistId || cover?.endpoint?.watchEndpoint?.playlistId
     );
-    const sessionList = watchListId(session.listId);
+    const sessionList = listId(session.listId);
 
-    if (track?.suggested && videoId) {
+    if (track?.suggested && currentId) {
       return {
         mode: "radio",
-        listId: radioId(videoId) || radioListId(watchList),
+        listId: radioFor(currentId) || radioListId(watchList),
         tracks: [track],
         ownList: false,
       };
@@ -143,7 +183,7 @@
     if (session.source === "radio" && source === "now") {
       return {
         mode: "radio",
-        listId: sessionList || radioId(videoId),
+        listId: sessionList || radioFor(currentId),
         tracks: session.tracks?.length ? session.tracks : [track],
         ownList: false,
       };
@@ -158,10 +198,10 @@
           ownList: false,
         };
       }
-      if (session.source === "queue" || isConcretePlaylist(sessionList) || isConcretePlaylist(stateList)) {
+      if (session.source === "queue" || isConcreteList(sessionList) || isConcreteList(stateList)) {
         return {
           mode: "queue",
-          listId: (isConcretePlaylist(sessionList) && sessionList) || (isConcretePlaylist(stateList) && stateList) || "",
+          listId: (isConcreteList(sessionList) && sessionList) || (isConcreteList(stateList) && stateList) || "",
           tracks: session.tracks?.length ? session.tracks : sessionTracks,
           ownList: false,
         };
@@ -169,14 +209,14 @@
       if (session.source === "list" || sessionTracks.length > 1) {
         return {
           mode: "list",
-          listId: isConcretePlaylist(sessionList) ? sessionList : "",
+          listId: isConcreteList(sessionList) ? sessionList : "",
           tracks: session.tracks?.length ? session.tracks : sessionTracks,
           ownList: true,
         };
       }
     }
 
-    if (cover && (cover.tracks?.length || 0) > 1 && (isConcretePlaylist(coverList) || radioListId(coverList))) {
+    if (cover && (cover.tracks?.length || 0) > 1 && (isConcreteList(coverList) || radioListId(coverList))) {
       return {
         mode: radioListId(coverList) ? "radio" : "queue",
         listId: coverList,
@@ -186,25 +226,25 @@
     }
 
     if (source === "playlist" || source === "liked" || source === "album") {
-      const listId =
+      const list =
         radioListId(stateList) ||
         radioListId(trackList) ||
         radioListId(watchList) ||
-        (isConcretePlaylist(stateList) ? stateList : "") ||
-        (isConcretePlaylist(trackList) ? trackList : "") ||
-        (isConcretePlaylist(watchList) ? watchList : "");
-      if (radioListId(listId)) {
+        (isConcreteList(stateList) ? stateList : "") ||
+        (isConcreteList(trackList) ? trackList : "") ||
+        (isConcreteList(watchList) ? watchList : "");
+      if (radioListId(list)) {
         return {
           mode: "radio",
-          listId: radioListId(listId),
+          listId: radioListId(list),
           tracks: sessionTracks,
           ownList: false,
         };
       }
-      if (isConcretePlaylist(listId)) {
+      if (isConcreteList(list)) {
         return {
           mode: "queue",
-          listId,
+          listId: list,
           tracks: sessionTracks.length > 1 ? sessionTracks : track ? [track] : [],
           ownList: false,
         };
@@ -224,7 +264,7 @@
     if (mixed || source === "search") {
       return {
         mode: "radio",
-        listId: radioId(videoId),
+        listId: radioFor(currentId),
         tracks: track ? [track] : [],
         ownList: false,
       };
@@ -233,16 +273,16 @@
     if (sessionTracks.length > 1) {
       return {
         mode: "list",
-        listId: isConcretePlaylist(stateList) ? stateList : "",
+        listId: isConcreteList(stateList) ? stateList : "",
         tracks: sessionTracks,
         ownList: true,
       };
     }
 
-    if (videoId) {
+    if (currentId) {
       return {
         mode: "radio",
-        listId: radioId(videoId),
+        listId: radioFor(currentId),
         tracks: [track],
         ownList: false,
       };
@@ -274,31 +314,35 @@
     return true;
   }
 
+  /** True when the host's own chrome is showing a real track, not its idle state. */
   function nativeBarHasSong(info) {
     if (!info || typeof info !== "object") return false;
-    if (isPlayableVideoId(info.videoId)) return true;
+    if (playable(trackId(info))) return true;
     const title = String(info.title || "").trim();
     if (!title) return false;
-    if (title === "yTunes" || /^youtube music$/i.test(title)) return false;
+    if (title === "yTunes") return false;
+    if (ids.idleTitle(title)) return false;
     return true;
   }
 
   function shouldCueStoredTrack({
     overlayOn = false,
     barHasSong = false,
-    storedVideoId = "",
+    storedTrackId = "",
   } = {}) {
     if (overlayOn) return false;
     if (barHasSong) return false;
-    return isPlayableVideoId(storedVideoId);
+    return playable(storedTrackId);
   }
 
   return {
-    watchListId,
-    isPlayableVideoId,
-    isConcretePlaylist,
+    configure,
+    trackId,
+    playable,
+    listId,
     radioListId,
-    radioId,
+    isConcreteList,
+    radioFor,
     playableTracks,
     adjacentInRoster,
     hostQueueMatches,

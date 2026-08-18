@@ -117,12 +117,11 @@ function browseFromRuns(runs) {
 }
 
 function isPlayableVideoId(id) {
-  return /^[\w-]{11}$/.test(String(id || ""));
+  return YTunesYtmIds.playable(id);
 }
 
 function isConcretePlaylist(id) {
-  const value = String(id || "").replace(/^VL/, "");
-  return Boolean(value) && !value.startsWith("RD");
+  return YTunesYtmIds.isConcreteList(id);
 }
 
 function musicVideoType(node) {
@@ -1234,3 +1233,530 @@ const YTM = {
     });
   },
 };
+
+/**
+ * Catalog half of the MusicHost contract: everything the iTunes chrome needs to
+ * read, expressed in iTunes source types instead of InnerTube browse ids.
+ *
+ * Wrapped so the browse-id table and YouTube Music's content heuristics stay
+ * private to this adapter. scripts/hosts/ytm/player.js assembles the final
+ * MusicHost object from this and the player half.
+ */
+const YtmCatalog = (() => {
+  const BROWSE_IDS = {
+    songs: "FEmusic_liked_videos",
+    liked: "VLLM",
+    albums: "FEmusic_liked_albums",
+    artists: "FEmusic_library_corpus_track_artists",
+    recents: "FEmusic_history",
+    home: "FEmusic_home",
+    explore: "FEmusic_explore",
+    charts: "FEmusic_charts",
+    podcasts: "FEmusic_podcasts",
+    moods: "FEmusic_moods_and_genres",
+    playlists: "FEmusic_liked_playlists",
+  };
+
+  // Pages to follow when the caller does not ask for a specific budget.
+  // Storefronts are shallow on purpose; libraries page until exhausted.
+  const DEFAULT_PAGES = {
+    explore: 2,
+    charts: 2,
+    podcasts: 3,
+    mood: 3,
+    collection: "all",
+    videos: "all",
+    playlists: 2,
+    moods: 1,
+  };
+
+  const MEMO_MS = 120000;
+  const memo = new Map();
+
+  const MOOD_NAMES = [
+    "Relax",
+    "Sleep",
+    "Feel good",
+    "Sad",
+    "Romance",
+    "Energise",
+    "Party",
+    "Commute",
+    "Work out",
+    "Focus",
+  ];
+
+  async function memoized(key, load) {
+    const hit = memo.get(key);
+    if (hit && Date.now() - hit.at < MEMO_MS) return hit.value;
+    const value = await load();
+    memo.set(key, { at: Date.now(), value });
+    return value;
+  }
+
+  function emptyParsed() {
+    return { tracks: [], collections: [], shelves: [], chips: [], lyricsId: "" };
+  }
+
+  function uniqueTracks(tracks) {
+    const seen = new Set();
+    const out = [];
+    for (const track of tracks || []) {
+      const key =
+        track.videoId ||
+        (track.title
+          ? `n:${track.title}:${track.artist || ""}:${track.duration || ""}`
+          : track.id || "");
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(track);
+    }
+    return out;
+  }
+
+  /** Playlist and album ids need a `VL` prefix to be browsable. */
+  function vlBrowseId(id) {
+    const value = String(id || "");
+    if (!value) return "";
+    return value.startsWith("VL") ? value : `VL${value}`;
+  }
+
+  function browsableId(id) {
+    const value = String(id || "");
+    if (!value || value.startsWith("VL")) return value;
+    return /^(PL|RD|OLAK|LM)/.test(value) ? `VL${value}` : value;
+  }
+
+  function pagesFor(type) {
+    if (type in DEFAULT_PAGES) return DEFAULT_PAGES[type];
+    return YTunesList.libraryBrowsePages(type);
+  }
+
+  /** Caller opts win; the host only fills in a page budget it knows better. */
+  function followOpts(type, opts = {}) {
+    return {
+      pages: opts.pages ?? pagesFor(type),
+      onProgress: opts.onProgress || null,
+      shouldStop: opts.shouldStop || null,
+    };
+  }
+
+  function stopped(opts) {
+    return Boolean(opts.shouldStop && opts.shouldStop());
+  }
+
+  function browseBody(source, type) {
+    const params = source.params ? { params: source.params } : {};
+    const explicit = browsableId(source.browseId);
+    if (explicit) return { browseId: explicit, ...params };
+    if (source.playlistId && (type === "playlist" || type === "album" || type === "liked")) {
+      return { browseId: vlBrowseId(source.playlistId), ...params };
+    }
+    const mapped = BROWSE_IDS[type];
+    return mapped ? { browseId: mapped, ...params } : null;
+  }
+
+  /**
+   * The playable list id backing a source, so the shell can queue and write to it
+   * without knowing that Liked Songs is `LM` here.
+   */
+  function listIdFor(source) {
+    if (!source) return "";
+    if (source.playlistId) return YTunesYtmIds.listId(source.playlistId);
+    if (source.type === "liked") return YTunesYtmIds.listId(BROWSE_IDS.liked);
+    return "";
+  }
+
+  function isLibraryShelf(item) {
+    return /from your library/i.test(item?.shelf || "");
+  }
+
+  function isPodcastish(item) {
+    const hay = `${item?.shelf || ""} ${item?.kind || ""} ${item?.subtitle || ""} ${item?.title || ""}`;
+    return /podcast/i.test(hay) || String(item?.browseId || "").startsWith("MPSP");
+  }
+
+  function isVideoish(item) {
+    const hay = `${item?.shelf || ""} ${item?.title || ""} ${item?.kind || ""}`;
+    if (/podcast/i.test(hay)) return false;
+    const type = String(item?.musicVideoType || "").toUpperCase();
+    if (type.includes("OMV") || type.includes("UGC") || type.includes("LIVE")) return true;
+    return /video/i.test(hay);
+  }
+
+  /** An endless station rather than a fixed list. `RDAMVM` is a song radio, not a mix. */
+  function isMixCollection(item) {
+    if (isLibraryShelf(item) || isPodcastish(item)) return false;
+    const list = YTunesYtmIds.listId(item?.playlistId || item?.browseId);
+    if (list.startsWith("RD") && !list.startsWith("RDAMVM")) return true;
+    const hay = `${item?.title || ""} ${item?.subtitle || ""} ${item?.shelf || ""}`.toLowerCase();
+    return /\b(mix|supermix|radio|station)\b/.test(hay);
+  }
+
+  function isMoodChip(chip) {
+    const title = String(chip?.title || "").toLowerCase();
+    if (!title) return false;
+    if (/^podcasts?$/.test(title)) return false;
+    if (/^new releases?$/.test(title)) return false;
+    if (/^charts?$/.test(title)) return false;
+    if (/moods? (and|&) genres/.test(title)) return false;
+    if (/^play all$/.test(title) || /^more$/.test(title)) return false;
+    return true;
+  }
+
+  function uniqueChips(chips) {
+    const seen = new Set();
+    const out = [];
+    for (const chip of chips || []) {
+      const title = String(chip.title || "").trim();
+      if (!title) continue;
+      const key = title.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ ...chip, title });
+    }
+    return out;
+  }
+
+  /** Prefer the classic named moods; fall back to whatever the page offers. */
+  function pickMoodChips(chips) {
+    const moodish = uniqueChips(chips).filter(isMoodChip);
+    const named = moodish.filter((chip) =>
+      MOOD_NAMES.some(
+        (name) =>
+          name.toLowerCase() === chip.title.toLowerCase() ||
+          (name === "Energise" && /^energize$/i.test(chip.title))
+      )
+    );
+    const pool = named.length ? named : moodish;
+    return pool.filter((chip) => chip.browseId || chip.params);
+  }
+
+  function isSongShelfCollection(item) {
+    const title = String(item?.title || "").toLowerCase();
+    return /^(songs|tracks|top songs|popular|singles)$/i.test(title) || /\bsongs\b/.test(title);
+  }
+
+  /**
+   * Artist and some album pages list sub-collections instead of songs. Follow a few
+   * of them so a Cover Flow preview has rows to show.
+   */
+  async function drillForTracks(parsed, query, opts) {
+    let tracks = uniqueTracks(parsed.tracks);
+    if (tracks.length) return tracks;
+    const nested = (parsed.collections || []).filter((item) => {
+      if (!collectionBody(item)) return false;
+      if (query.selfBrowseId && item.browseId === query.selfBrowseId) return false;
+      if (query.selfId && item.id === query.selfId) return false;
+      return true;
+    });
+    const preferred = nested.filter(isSongShelfCollection);
+    const rest = nested.filter((item) => !isSongShelfCollection(item) && item.kind !== "artist");
+    for (const item of [...preferred, ...rest].slice(0, 3)) {
+      if (stopped(opts)) return tracks;
+      try {
+        const next = await YTM.browseParsed(collectionBody(item), 2);
+        tracks = uniqueTracks(tracks.concat(next.tracks || []));
+        if (tracks.length >= 250) break;
+      } catch {
+        /* skip a nested album that fails */
+      }
+    }
+    return tracks;
+  }
+
+  /**
+   * One song versus a collection of songs. The parser labels most covers, but
+   * storefront shelves often omit `kind`, so fall back to the browse-id family:
+   * `MPRE` album, `UC` artist, `MPLA` playlist, `VL` list.
+   */
+  function isSongCover(cover) {
+    if (!cover) return false;
+    if (cover.kind === "song" || cover.kind === "video") return true;
+    if (
+      cover.kind === "artist" ||
+      cover.kind === "podcast" ||
+      cover.kind === "album" ||
+      cover.kind === "playlist"
+    ) {
+      return false;
+    }
+    const browseId = String(cover.browseId || "");
+    if (browseId.startsWith("MPRE") || browseId.startsWith("UC") || browseId.startsWith("MPLA")) {
+      return false;
+    }
+    const hay = `${cover.subtitle || ""} ${cover.kind || ""}`;
+    if (/\bplaylist\b/i.test(hay) || /\balbum\b/i.test(hay)) return false;
+    if (/\bsong\b/i.test(hay) || /\bvideo\b/i.test(hay)) return true;
+    const videoId =
+      cover.videoId ||
+      cover.endpoint?.watchEndpoint?.videoId ||
+      (cover.tracks?.length === 1 ? cover.tracks[0].videoId : "");
+    if (browseId.startsWith("VL")) return false;
+    if (!cover.kind && cover.tracks?.length && !browseId && !cover.playlistId) return true;
+    if (videoId && (cover.tracks?.length || 1) <= 1) return true;
+    return false;
+  }
+
+  /** Synthesize a playable track from a song cover that carries no track rows. */
+  function trackFromCover(cover) {
+    const videoId = cover?.videoId || cover?.endpoint?.watchEndpoint?.videoId || "";
+    return {
+      id: videoId || cover?.id,
+      title: cover?.title,
+      artist: cover?.artist || "",
+      album: cover?.album || "",
+      artwork: cover?.artwork,
+      videoId,
+      playlistId: collectionPlaylistId(cover),
+      browseId: cover?.browseId,
+      endpoint: cover?.endpoint,
+      shelf: cover?.shelf,
+    };
+  }
+
+  /** The album this track belongs to, as a cover the shell can open. */
+  function albumOf(track) {
+    if (!track) return null;
+    const id = String(track.albumBrowseId || "");
+    const browseId = String(track.browseId || "");
+    const target =
+      id || (browseId.startsWith("MPRE") || !browseId.startsWith("UC") ? browseId : "");
+    if (!target) return null;
+    return { id: target, browseId: target, playlistId: track.playlistId, kind: "album" };
+  }
+
+  /** The artist behind this track, as a cover the shell can open. */
+  function artistOf(track) {
+    if (!track) return null;
+    const target =
+      String(track.artistBrowseId || "") ||
+      (String(track.browseId || "").startsWith("UC") ? track.browseId : "");
+    if (!target) return null;
+    return { id: target, browseId: target, kind: "artist" };
+  }
+
+  function collectionPlaylistId(cover) {
+    return (
+      cover?.playlistId ||
+      cover?.endpoint?.watchEndpoint?.playlistId ||
+      cover?.endpoint?.watchPlaylistEndpoint?.playlistId ||
+      ""
+    );
+  }
+
+  function collectionBody(cover) {
+    if (!cover) return null;
+    const browseId = browsableId(cover.browseId);
+    if (browseId) return { browseId };
+    const playlistId = collectionPlaylistId(cover);
+    return playlistId ? { browseId: vlBrowseId(playlistId) } : null;
+  }
+
+  /**
+   * An opaque handle for "the songs behind this cover". The shell passes it straight
+   * back to browse(); it must not read the fields.
+   */
+  function collectionQuery(cover) {
+    const body = collectionBody(cover);
+    if (!body) return null;
+    return {
+      type: "collection",
+      body,
+      playlistId: collectionPlaylistId(cover),
+      selfBrowseId: cover.browseId || "",
+      selfId: cover.id || "",
+    };
+  }
+
+  async function browseCollection(query, opts) {
+    const follow = followOpts("collection", opts);
+    let parsed = await YTM.browseParsed(query.body, follow);
+    if (!opts.tracksOnly || stopped(follow)) return parsed;
+
+    let tracks = await drillForTracks(parsed, query, follow);
+    const alt = vlBrowseId(query.playlistId);
+    if (!tracks.length && alt && alt !== query.body.browseId && !stopped(follow)) {
+      parsed = await YTM.browseParsed({ browseId: alt }, follow);
+      tracks = await drillForTracks(parsed, query, follow);
+    }
+    return { ...parsed, tracks, playlistId: query.playlistId };
+  }
+
+  function home() {
+    return memoized("home", () => YTM.browseParsed({ browseId: BROWSE_IDS.home }, 4));
+  }
+
+  async function browseVideos(opts) {
+    const library = await YTM.browseParsed(
+      { browseId: BROWSE_IDS.songs },
+      followOpts("videos", opts)
+    );
+    return {
+      ...library,
+      tracks: (library.tracks || []).filter(isVideoish),
+      collections: (library.collections || []).filter(isVideoish),
+    };
+  }
+
+  /** Stations, plus any radio playlists the user saved. */
+  async function browseMixes() {
+    const page = await home();
+    const seen = new Set();
+    const collections = [];
+    const add = (item) => {
+      const key = item.id || item.playlistId || item.browseId || item.title;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      collections.push(item);
+    };
+    (page.collections || []).filter(isMixCollection).forEach(add);
+    for (const item of await playlists()) {
+      const list = YTunesYtmIds.listId(item.playlistId);
+      if (!list.startsWith("RD")) continue;
+      add({
+        id: list,
+        title: item.title,
+        playlistId: list,
+        browseId: vlBrowseId(list),
+        kind: "playlist",
+      });
+    }
+    return { ...emptyParsed(), collections, lyricsId: page.lyricsId };
+  }
+
+  /**
+   * The podcasts browse id is not enabled on every account, so fall back to the
+   * Home podcasts chip and finally to filtering Home itself.
+   */
+  async function browsePodcasts(source, opts) {
+    const body = browseBody(source, "podcasts");
+    let parsed = emptyParsed();
+    try {
+      parsed = await YTM.browseParsed(body, followOpts("podcasts", opts));
+    } catch {
+      parsed = emptyParsed();
+    }
+    if (parsed.collections?.length || parsed.tracks?.length) return parsed;
+
+    const page = await home();
+    const chip = (page.chips || []).find((item) => /^podcasts?$/i.test(item.title));
+    if (chip?.browseId) {
+      try {
+        return await YTM.browseParsed(
+          { browseId: chip.browseId, ...(chip.params ? { params: chip.params } : {}) },
+          followOpts("podcasts", opts)
+        );
+      } catch {
+        /* fall through to filtering Home */
+      }
+    }
+    return {
+      ...emptyParsed(),
+      collections: (page.collections || []).filter(isPodcastish),
+      tracks: (page.tracks || []).filter(isPodcastish),
+      lyricsId: page.lyricsId,
+      chips: page.chips,
+    };
+  }
+
+  async function browseMood(source, opts) {
+    if (source.browseId) {
+      return YTM.browseParsed(browseBody(source, "mood"), followOpts("mood", opts));
+    }
+    if (source.title) return YTM.searchParsed(source.title);
+    return YTM.browseParsed({ browseId: BROWSE_IDS.moods }, followOpts("mood", opts));
+  }
+
+  /**
+   * Read a source the iTunes chrome asked for.
+   *
+   * @param {{type: string, browseId?: string, playlistId?: string, params?: string,
+   *   title?: string, query?: string}} source iTunes source, or a collectionQuery handle.
+   * @param {{pages?: number|"all", onProgress?: Function, shouldStop?: Function,
+   *   tracksOnly?: boolean}} [opts] `onProgress` is what keeps the library painting
+   *   as pages arrive; `tracksOnly` follows nested collections to find songs.
+   * @returns {Promise<{tracks, collections, shelves, chips, lyricsId}|null>} null when
+   *   this host cannot serve the source at all.
+   */
+  async function browse(source, opts = {}) {
+    const type = source?.type || "songs";
+    if (type === "collection") return browseCollection(source, opts);
+    if (type === "search") return search(source.query || source.title || "");
+    if (type === "videos") return browseVideos(opts);
+    if (type === "mixes") return browseMixes();
+    if (type === "podcasts") return browsePodcasts(source, opts);
+    if (type === "mood") return browseMood(source, opts);
+
+    const body = browseBody(source, type);
+    if (!body) return null;
+    const parsed = await YTM.browseParsed(body, followOpts(type, opts));
+    if (type === "home") memo.set("home", { at: Date.now(), value: parsed });
+    return parsed;
+  }
+
+  function search(query) {
+    return query ? YTM.searchParsed(query) : Promise.resolve(emptyParsed());
+  }
+
+  function suggest(query) {
+    return YTM.suggest(query);
+  }
+
+  /** Saved and created playlists for the sidebar. */
+  function playlists() {
+    return memoized("playlists", async () => {
+      const parsed = await YTM.browseParsed(
+        { browseId: BROWSE_IDS.playlists },
+        followOpts("playlists")
+      );
+      return (parsed.collections || [])
+        .filter((item) => item.playlistId || String(item.browseId || "").startsWith("VL"))
+        .map((item) => ({
+          title: item.title,
+          playlistId: YTunesYtmIds.listId(item.playlistId || item.browseId),
+        }));
+    });
+  }
+
+  /** Mood and genre stations for the sidebar. */
+  async function moods() {
+    let chips = [];
+    try {
+      chips = pickMoodChips((await home()).chips);
+    } catch {
+      chips = [];
+    }
+    if (chips.length) return chips;
+    try {
+      const page = await YTM.browseParsed(
+        { browseId: BROWSE_IDS.moods },
+        followOpts("moods")
+      );
+      return pickMoodChips(page.chips);
+    } catch {
+      return [];
+    }
+  }
+
+  function forgetPlaylists() {
+    memo.delete("playlists");
+  }
+
+  return {
+    browse,
+    search,
+    suggest,
+    playlists,
+    moods,
+    collectionQuery,
+    listIdFor,
+    forgetPlaylists,
+    isSongCover,
+    trackFromCover,
+    albumOf,
+    artistOf,
+    signedIn: () => YTM.signedIn(),
+    lyrics: (id) => YTM.lyricsParsed(id),
+  };
+})();

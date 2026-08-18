@@ -1,21 +1,28 @@
+configurePrefs(MusicHost.id);
+
 const OVERLAY_KEY = "overlayEnabled";
 const OVERLAY_PREF_KEY = "ytunes-overlay";
 const LAUNCH_ID = "ytunes-launch";
 const STYLE_IDS = {
   host: "ytunes-css-host",
+  hide: "ytunes-css-hide",
   shell: "ytunes-css-shell",
 };
 
+/** The query flag that means "leave this tab alone", e.g. `?newytm=true`. */
+function escapeParam() {
+  return MusicHost.escapeParam;
+}
+
 function overlayParamOff() {
-  const params = new URLSearchParams(location.search);
-  const flag = params.get("newytm");
+  const flag = new URLSearchParams(location.search).get(escapeParam());
   return flag === "true" || flag === "1";
 }
 
 function stripOverlayParam() {
   const url = new URL(location.href);
-  if (!url.searchParams.has("newytm")) return;
-  url.searchParams.delete("newytm");
+  if (!url.searchParams.has(escapeParam())) return;
+  url.searchParams.delete(escapeParam());
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -32,6 +39,8 @@ function persistOverlayPref(enabled) {
   );
 }
 
+// One boolean, because only one host origin ships today. A second host will need
+// per-origin keys: this listener reloads every tab that is listening.
 async function readOverlayEnabled() {
   if (overlayParamOff()) {
     stripOverlayParam();
@@ -59,6 +68,7 @@ function injectSheet(id, file) {
 
 function injectOverlayStyles() {
   injectSheet(STYLE_IDS.host, "scripts/content.css");
+  injectSheet(STYLE_IDS.hide, MusicHost.hideSheet);
   injectSheet(STYLE_IDS.shell, "layouts/shell/style.css");
 }
 
@@ -71,8 +81,7 @@ function removeOverlayStyles() {
 function teardownOverlay() {
   document.getElementById("ytunes-root")?.remove();
   removeOverlayStyles();
-  if (typeof markHostIdle === "function") markHostIdle();
-  else delete document.documentElement.dataset.ytunesHost;
+  MusicHost.markIdle();
 }
 
 function bindBootFail(root) {
@@ -99,19 +108,22 @@ function injectBootFail() {
         <div class="ytunes-lcd">
           <div class="ytunes-lcd-meta">
             <div id="ytunes-lcd-title">yTunes</div>
-            <div id="ytunes-lcd-sub">YouTube Music didn’t become ready</div>
+            <div id="ytunes-lcd-sub"></div>
           </div>
         </div>
       </header>
       <div class="ytunes-boot-body">
-        <p>The player bar never appeared. Audio may still work in the tab after you retry.</p>
+        <p>The player never appeared. Audio may still work in the tab after you retry.</p>
         <div class="ytunes-dialog-actions">
           <button type="button" id="ytunes-boot-retry">Retry</button>
-          <button type="button" id="ytunes-boot-original">Original YouTube Music</button>
+          <button type="button" id="ytunes-boot-original"></button>
         </div>
       </div>
     </div>
   `;
+  root.querySelector("#ytunes-lcd-sub").textContent = MusicHost.strings.bootFail;
+  root.querySelector("#ytunes-boot-original").textContent =
+    MusicHost.strings.originalLabel;
   (document.body || document.documentElement).appendChild(root);
   bindBootFail(root);
 }
@@ -126,25 +138,6 @@ async function injectShell() {
   root.innerHTML = html;
   (document.body || document.documentElement).appendChild(root);
   bindShell(root);
-}
-
-function queryIn(host, selector) {
-  if (!host) return null;
-  return host.shadowRoot?.querySelector(selector) || host.querySelector(selector) || null;
-}
-
-function findLaunchSlot() {
-  const bar = document.querySelector("ytmusic-nav-bar");
-  if (!bar) return null;
-  const right = queryIn(bar, "#right-content") || queryIn(bar, ".right-content");
-  const before =
-    queryIn(right || bar, "ytmusic-cast-button") ||
-    queryIn(bar, "ytmusic-cast-button") ||
-    queryIn(right || bar, "ytmusic-settings-button") ||
-    queryIn(bar, "ytmusic-settings-button");
-  if (before?.parentNode) return { parent: before.parentNode, before };
-  if (right) return { parent: right, before: right.firstElementChild };
-  return null;
 }
 
 function launchInPlace(button, slot) {
@@ -186,7 +179,7 @@ function placeLaunchButton() {
     document.getElementById(LAUNCH_ID)?.remove();
     return;
   }
-  const slot = findLaunchSlot();
+  const slot = MusicHost.launchSlot();
   if (!slot) return;
   const existing = document.getElementById(LAUNCH_ID);
   if (existing) {
@@ -204,54 +197,29 @@ function placeLaunchButton() {
   bindLaunchButton(button);
   slot.parent.insertBefore(button, slot.before);
   watchLaunchNode(slot.parent);
-  const bar = document.querySelector("ytmusic-nav-bar");
-  if (bar) {
-    watchLaunchNode(bar);
-    if (bar.shadowRoot) watchLaunchNode(bar.shadowRoot);
-  }
+  for (const node of slot.watch || []) watchLaunchNode(node);
 }
 
-function nativeBarTitle() {
-  const bar = typeof playerBar === "function" ? playerBar() : document.querySelector("ytmusic-player-bar");
-  if (!bar) return "";
-  const node =
-    typeof firstMatch === "function" && typeof SELECTORS !== "undefined"
-      ? firstMatch(bar, SELECTORS.title)
-      : bar.querySelector(".title");
-  return typeof textOf === "function"
-    ? textOf(node)
-    : node?.textContent?.replace(/\s+/g, " ").trim() || "";
-}
-
-function nativeBarHasSong(info) {
-  if (typeof YTunesPlayback !== "undefined" && YTunesPlayback.nativeBarHasSong) {
-    return YTunesPlayback.nativeBarHasSong(info);
-  }
-  const title = String(info?.title || "").trim();
-  return Boolean(title) && title !== "yTunes" && !/^youtube music$/i.test(title);
-}
-
-function shouldCueStoredTrack(opts) {
-  if (typeof YTunesPlayback !== "undefined" && YTunesPlayback.shouldCueStoredTrack) {
-    return YTunesPlayback.shouldCueStoredTrack(opts);
-  }
-  return !opts?.overlayOn && !opts?.barHasSong && Boolean(opts?.storedVideoId);
-}
-
+/**
+ * With the overlay off, the site shows its own player. If it comes up empty,
+ * cue the track yTunes last played so the tab is not silent.
+ */
 async function restoreLastNativeBar() {
   if (await readOverlayEnabled()) return;
   let last = null;
   try {
-    const prefs = typeof loadPrefs === "function" ? await loadPrefs() : null;
-    last = typeof sanitizeNowPlaying === "function" ? sanitizeNowPlaying(prefs?.nowPlaying) : null;
+    const prefs = await loadPrefs();
+    last = sanitizeNowPlaying(prefs?.nowPlaying);
   } catch {
     last = null;
   }
-  if (!last?.videoId) return;
-  const ready = await waitForPlayerBar();
+  const storedTrackId = YTunesPlayback.trackId(last);
+  if (!storedTrackId) return;
+  const ready = await MusicHost.waitUntilReady();
   if (!ready || (await readOverlayEnabled())) return;
 
-  const barHasSong = () => nativeBarHasSong({ title: nativeBarTitle() });
+  const barHasSong = () =>
+    YTunesPlayback.nativeBarHasSong({ title: MusicHost.probe().title });
   const deadline = Date.now() + 3500;
   while (Date.now() < deadline) {
     if (await readOverlayEnabled()) return;
@@ -260,20 +228,16 @@ async function restoreLastNativeBar() {
   }
 
   if (await readOverlayEnabled()) return;
-  if (
-    !shouldCueStoredTrack({
-      overlayOn: false,
-      barHasSong: barHasSong(),
-      storedVideoId: last.videoId,
-    })
-  ) {
-    return;
-  }
-  if (typeof YTM?.cue !== "function") return;
+  const cue = YTunesPlayback.shouldCueStoredTrack({
+    overlayOn: false,
+    barHasSong: barHasSong(),
+    storedTrackId,
+  });
+  if (!cue) return;
   try {
-    await YTM.cue({ videoId: last.videoId, playlistId: last.playlistId || undefined });
+    await MusicHost.cue(last);
   } catch {
-    /* native restore may still win */
+    /* the site's own restore may still win */
   }
 }
 
@@ -282,16 +246,15 @@ function startLauncher() {
   placeLaunchButton();
   restoreLastNativeBar();
   if (launchPageWatch) return;
-  const root = document.querySelector("ytmusic-app") || document.documentElement;
   launchPageWatch = new MutationObserver(() => scheduleLaunchPlace());
-  launchPageWatch.observe(root, { childList: true, subtree: true });
+  launchPageWatch.observe(document.documentElement, { childList: true, subtree: true });
 }
 
 async function startOverlay() {
   injectOverlayStyles();
-  markHostReady();
+  MusicHost.markReady();
   try {
-    const ok = await waitForPlayerBar();
+    const ok = await MusicHost.waitUntilReady();
     if (!(await readOverlayEnabled())) {
       teardownOverlay();
       startLauncher();
@@ -304,7 +267,7 @@ async function startOverlay() {
     await injectShell();
   } catch {
     injectOverlayStyles();
-    markHostReady();
+    MusicHost.markReady();
     injectBootFail();
   }
 }
@@ -319,11 +282,11 @@ async function boot() {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "ytunes.probe") {
-    sendResponse(probe());
+    sendResponse(MusicHost.probe());
     return;
   }
   if (message?.type === "ytunes.control") {
-    controlPlayback(message.action).then((ok) => sendResponse({ ok }));
+    MusicHost.control(message.action).then((ok) => sendResponse({ ok }));
     return true;
   }
   if (message?.type === "ytunes.getEnabled") {

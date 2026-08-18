@@ -1,35 +1,12 @@
+/*
+ * Host-agnostic overlay chrome. Anything that names a host's own elements belongs in
+ * that host's hide sheet, e.g. scripts/hosts/ytm/hide.css.
+ */
+
 html[data-ytunes-host="ready"],
 html[data-ytunes-host="ready"] body {
   height: 100% !important;
   overflow: hidden !important;
-}
-
-html[data-ytunes-host="ready"] ytmusic-app,
-html[data-ytunes-host="ready"] ytmusic-nav-bar,
-html[data-ytunes-host="ready"] ytmusic-app-layout,
-html[data-ytunes-host="ready"] #nav-bar-background,
-html[data-ytunes-host="ready"] #guide-wrapper,
-html[data-ytunes-host="ready"] #mini-guide-background,
-html[data-ytunes-host="ready"] ytmusic-guide-renderer,
-html[data-ytunes-host="ready"] #content,
-html[data-ytunes-host="ready"] yt-chip-cloud-renderer,
-html[data-ytunes-host="ready"] ytmusic-chip-cloud-renderer {
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-html[data-ytunes-host="ready"] ytmusic-player-bar,
-html[data-ytunes-host="ready"] ytmusic-player-page,
-html[data-ytunes-host="ready"] ytmusic-player,
-html[data-ytunes-host="ready"] #movie_player,
-html[data-ytunes-host="ready"] #player-bar-background,
-html[data-ytunes-host="ready"] #player-page {
-  position: fixed !important;
-  left: -100vw !important;
-  top: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  z-index: 0 !important;
 }
 
 #ytunes-launch {

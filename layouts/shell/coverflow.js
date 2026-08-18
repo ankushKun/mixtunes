@@ -44,19 +44,27 @@ function captionBit(value) {
   return String(value || "").trim();
 }
 
+// A cover's own `id` is its grouping key (`album:Title:Artist`, a browse id), not a
+// track id, so only the explicit track fields count here.
+function coverTrackId(cover) {
+  if (!cover) return "";
+  return captionBit(cover.trackId || cover.videoId);
+}
+
 function trackFitsCover(cover, track) {
   if (!cover || !track) return false;
-  const videoId = captionBit(track.videoId);
-  if (videoId) {
-    if (cover.videoId === videoId) return true;
-    if (cover.tracks?.some((item) => item.videoId === videoId)) return true;
+  const id = captionBit(track.id || track.videoId);
+  const coverId = coverTrackId(cover);
+  if (id) {
+    if (coverId === id) return true;
+    if (cover.tracks?.some((item) => captionBit(item.id || item.videoId) === id)) return true;
   }
   const songCover =
     cover.kind === "song" ||
     cover.kind === "video" ||
-    Boolean(cover.videoId && (cover.tracks?.length || 1) <= 1);
+    Boolean(coverId && (cover.tracks?.length || 1) <= 1);
   if (songCover) {
-    if (videoId && cover.videoId && cover.videoId !== videoId) return false;
+    if (id && coverId && coverId !== id) return false;
     return (
       captionBit(cover.title) === captionBit(track.title) &&
       captionBit(cover.artist || cover.subtitle) === captionBit(track.artist)
@@ -274,10 +282,11 @@ function CoverFlow(root, handlers) {
     const cover = document.createElement("div");
     cover.className = "ytunes-cf-cover";
     cover.dataset.id = item.id;
-    const videoId = item.videoId || item.tracks?.[0]?.videoId || "";
-    const playlistId = String(
-      item.playlistId || item.tracks?.[0]?.playlistId || ""
-    ).replace(/^VL/, "");
+    const videoId =
+      coverTrackId(item) || YTunesPlayback.trackId(item.tracks?.[0]);
+    const playlistId = YTunesPlayback.listId(
+      item.playlistId || item.tracks?.[0]?.playlistId
+    );
     if (videoId) cover.dataset.video = videoId;
     else delete cover.dataset.video;
     if (playlistId) cover.dataset.playlist = playlistId;

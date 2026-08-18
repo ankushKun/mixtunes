@@ -1,6 +1,12 @@
 const REQ = "ytunes-page-req";
 const RES = "ytunes-page-res";
 
+// page-core.js carries this world's copy of the id and playback rules; the
+// isolated world's playback-core cannot be shared across the world boundary.
+function isVideoId(id) {
+  return YTunesPageCore.playable(id);
+}
+
 function readDetail(event) {
   const detail = event.detail;
   if (typeof detail === "string") return JSON.parse(detail);
@@ -412,7 +418,7 @@ function trackFromPanel(panel) {
   const watch = watchFrom(panel) || {};
   const videoId = String(watch.videoId || "").trim();
   const title = runsJoin(panel.title);
-  if (!/^[\w-]{11}$/.test(videoId)) return null;
+  if (!isVideoId(videoId)) return null;
   const byline = runsJoin(panel.longBylineText || panel.shortBylineText);
   const bits = byline.split("•").map((part) => part.trim()).filter(Boolean);
   const thumbs =
@@ -450,7 +456,7 @@ function trackFromQueueItem(item) {
     ]) ||
     fromPanel?.title ||
     "";
-  if (!/^[\w-]{11}$/.test(videoId)) return null;
+  if (!isVideoId(videoId)) return null;
   const byline = queueItemText(item, [
     ".byline",
     ".subtitle",
@@ -556,7 +562,7 @@ function tracksFromQueueData(root) {
   const remember = (track) => {
     if (!track) return;
     const key = String(track.videoId || "").trim();
-    if (!/^[\w-]{11}$/.test(key) || seen.has(key)) return;
+    if (!isVideoId(key) || seen.has(key)) return;
     seen.add(key);
     tracks.push(track);
   };
@@ -591,7 +597,7 @@ function uniqueQueueTracks(parts) {
   const seen = new Set();
   for (const track of parts) {
     const key = String(track.videoId || "").trim();
-    if (!/^[\w-]{11}$/.test(key) || seen.has(key)) continue;
+    if (!isVideoId(key) || seen.has(key)) continue;
     seen.add(key);
     tracks.push({ ...track, videoId: key, id: key });
   }
@@ -637,9 +643,7 @@ function overlayHookState() {
 }
 
 function overlayHooksActive() {
-  const api = playback();
-  if (api?.overlayHooksActive) return api.overlayHooksActive(overlayHookState());
-  return overlayHookState().pref !== "0";
+  return YTunesPageCore.overlayHooksActive(overlayHookState());
 }
 
 let autoplayArmed = overlayHooksActive();
@@ -661,22 +665,15 @@ function hasRecentUserGesture() {
 }
 
 function shouldParkRestoreAutoplay() {
-  const api = playback();
-  if (api?.shouldParkRestoreAutoplay) {
-    return api.shouldParkRestoreAutoplay({
-      hooksActive: overlayHooksActive(),
-      hasGesture: hasRecentUserGesture(),
-      parked: restoreParked,
-    });
-  }
-  return !overlayHooksActive() && !restoreParked && !hasRecentUserGesture();
+  return YTunesPageCore.shouldParkRestoreAutoplay({
+    hooksActive: overlayHooksActive(),
+    hasGesture: hasRecentUserGesture(),
+    parked: restoreParked,
+  });
 }
 
 function restoredSongLoaded() {
-  const snap = playerSnapshot();
-  const api = playback();
-  if (api?.nativeBarHasSong) return api.nativeBarHasSong(snap);
-  return Boolean(snap.videoId);
+  return YTunesPageCore.nativeBarHasSong(playerSnapshot());
 }
 
 function parkRestorePlayback() {
@@ -824,13 +821,11 @@ function overlayRepeat() {
 }
 
 function watchListId(id) {
-  return String(id || "").replace(/^VL/, "");
+  return YTunesPageCore.listId(id);
 }
 
 function concreteListId(id) {
-  const list = watchListId(id);
-  if (!list || list.startsWith("RD")) return "";
-  return list;
+  return YTunesPageCore.isConcreteList(id) ? YTunesPageCore.listId(id) : "";
 }
 
 function overlaySkipRoster() {
@@ -840,7 +835,7 @@ function overlaySkipRoster() {
   const ids = raw
     .split(",")
     .map((id) => id.trim())
-    .filter((id) => /^[\w-]{11}$/.test(id));
+    .filter(isVideoId);
   const rawList = transport?.dataset?.skipPlaylist || root?.dataset?.skipPlaylist || "";
   const ownList = (transport?.dataset?.ownList || root?.dataset?.ownList) === "1";
   const indexRaw = transport?.dataset?.skipIndex || root?.dataset?.skipIndex || "";
@@ -857,7 +852,7 @@ function queueSkipIds() {
   const queued = readPlayerQueue();
   const ids = (queued.tracks || [])
     .map((track) => track.videoId)
-    .filter((id) => /^[\w-]{11}$/.test(id));
+    .filter(isVideoId);
   const snap = playerSnapshot();
   const playerIds = Array.isArray(snap.playlistIds) ? snap.playlistIds.filter(Boolean) : [];
   return {
@@ -866,27 +861,8 @@ function queueSkipIds() {
   };
 }
 
-function playback() {
-  return typeof YTunesPlayback !== "undefined" ? YTunesPlayback : null;
-}
-
 function adjacentInRoster(ids, currentId, kind, wrap = true, hintIndex = -1) {
-  const api = playback();
-  if (api?.adjacentInRoster) {
-    return api.adjacentInRoster(ids, currentId, kind, wrap, hintIndex);
-  }
-  if (!ids.length) return { videoId: "", index: -1 };
-  const index = currentId ? ids.indexOf(currentId) : -1;
-  if (kind === "next") {
-    if (index < 0) return { videoId: ids[0], index: 0 };
-    if (index + 1 < ids.length) return { videoId: ids[index + 1], index: index + 1 };
-    if (wrap) return { videoId: ids[0], index: 0 };
-    return { videoId: "", index: -1 };
-  }
-  if (index < 0) return { videoId: ids[ids.length - 1], index: ids.length - 1 };
-  if (index > 0) return { videoId: ids[index - 1], index: index - 1 };
-  if (wrap) return { videoId: ids[ids.length - 1], index: ids.length - 1 };
-  return { videoId: "", index: -1 };
+  return YTunesPageCore.adjacentInRoster(ids, currentId, kind, wrap, hintIndex);
 }
 
 function stampPendingSkip(videoId, index) {
@@ -918,9 +894,7 @@ function skipPlayback(kind, options = {}) {
   const overlay = overlaySkipRoster();
   const ownList = Boolean(overlay.ownList);
   const repeat = overlayRepeat();
-  const handleAuto = playback()?.shouldHandleAutoAdvance
-    ? playback().shouldHandleAutoAdvance(ownList)
-    : ownList;
+  const handleAuto = YTunesPageCore.shouldHandleAutoAdvance(ownList);
 
   if (auto && kind === "next" && repeat === "one") {
     if (!handleAuto) return { ok: true };
@@ -953,20 +927,20 @@ function skipPlayback(kind, options = {}) {
     snap.videoId || document.querySelector("#ytunes-lcd")?.dataset?.video || "";
   const wrap = !auto || repeat === "all";
   const next = adjacentInRoster(ids, currentId, kind, wrap, overlay.skipIndex);
-  if (next.videoId) {
-    if (auto && snap.videoId === next.videoId) return { ok: true };
-    stampPendingSkip(next.videoId, next.index);
+  if (next.id) {
+    if (auto && snap.videoId === next.id) return { ok: true };
+    stampPendingSkip(next.id, next.index);
     const ok = play({
       ownList,
       endpoint: {
         watchEndpoint:
           playlistId && !ownList
             ? {
-                videoId: next.videoId,
+                videoId: next.id,
                 playlistId,
                 index: next.index >= 0 ? next.index : undefined,
               }
-            : { videoId: next.videoId },
+            : { videoId: next.id },
       },
     });
     if (auto) {
@@ -978,8 +952,8 @@ function skipPlayback(kind, options = {}) {
     return { ok: Boolean(ok) };
   }
 
-  if (auto && ownList && currentId) {
-    const radio = playback()?.radioId?.(currentId) || `RDAMVM${currentId}`;
+  const radio = auto && ownList ? YTunesPageCore.radioFor(currentId) : "";
+  if (radio) {
     const transport = document.querySelector("#ytunes-root .ytunes-transport");
     const root = document.getElementById("ytunes-root");
     [transport, root].forEach((node) => {
@@ -1064,21 +1038,25 @@ function queueAdd(payload) {
   });
 }
 
+function tryHandleCommand(endpoint) {
+  const app = document.querySelector("ytmusic-app");
+  if (!endpoint || typeof app?.handleCommand !== "function") return false;
+  try {
+    app.handleCommand({
+      clickTrackingParams: "",
+      command: endpoint,
+      ...endpoint,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function tryNavigate(endpoint) {
+  if (tryHandleCommand(endpoint)) return true;
   const app = document.querySelector("ytmusic-app");
   if (!endpoint || !app) return false;
-  try {
-    if (typeof app.handleCommand === "function") {
-      app.handleCommand({
-        clickTrackingParams: "",
-        command: endpoint,
-        ...endpoint,
-      });
-      return true;
-    }
-  } catch {
-    /* fall through */
-  }
   try {
     if (typeof app.navigate === "function") {
       app.navigate(endpoint);
@@ -1223,7 +1201,7 @@ function bindRestorePark() {
 
 function cueWatch(watch) {
   const videoId = watch?.videoId;
-  if (!/^[\w-]{11}$/.test(String(videoId || ""))) return false;
+  if (!isVideoId(videoId)) return false;
   restoreParked = false;
   const snap = playerSnapshot();
   if (snap.videoId === videoId) {
@@ -1329,33 +1307,38 @@ function play(payload) {
 
   if (ownList) {
     if (loadWatch(watch)) return true;
-    return tryNavigate({ watchEndpoint: { videoId } }) || tryNavigate(command);
+    return tryHandleCommand({ watchEndpoint: { videoId } }) || tryHandleCommand(command);
   }
 
   if (playlistId) {
-    if (tryNavigate(command)) {
+    if (tryHandleCommand(command)) {
       if (videoId && videoId === snap.videoId) {
         ran("seekTo", 0, true) || ran("seekTo", 0);
         ran("playVideo");
       }
       window.setTimeout(() => {
         const now = playerSnapshot();
+        const playerState = Number(callPlayer("getPlayerState"));
         if (videoId && now.videoId === videoId) {
           if (!now.playing) ran("playVideo");
           return;
         }
         if (now.playing && now.videoId && now.videoId !== snap.videoId) return;
-        if (snap.videoId && now.videoId === snap.videoId) loadPlaylistAt(watch);
-      }, 1200);
+        if (playerState === 1 || playerState === 3) return;
+        if (loadWatch(watch) || loadPlaylistAt(watch)) ran("playVideo");
+      }, snap.videoId ? 1200 : 450);
       return true;
     }
-    if (loadPlaylistAt(watch)) return true;
+    if (loadWatch(watch)) return true;
+    if (loadPlaylistAt(watch)) {
+      ran("playVideo");
+      return true;
+    }
     return false;
   }
 
-  if (tryNavigate(command)) return true;
-  if (loadWatch(watch)) return true;
-  return false;
+  if (tryHandleCommand(command)) return true;
+  return loadWatch(watch);
 }
 
 function reply(id, ok, result, error) {

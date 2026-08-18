@@ -197,7 +197,28 @@ function testCoversFromTracksGroupsAlbums() {
   assert.strictEqual(covers[0].videoId, "");
   assert.strictEqual(covers[1].kind, "song");
   assert.strictEqual(covers[1].videoId, "ccccccccccc");
+  assert.strictEqual(covers[1].trackId, "ccccccccccc");
   assert.strictEqual(covers[1].tracks.length, 1);
+}
+
+// A second host names its ids `id` with no `videoId` alias. Grouping and matching
+// must key off the canonical id either way.
+function testCoversWorkWithoutVideoIdAlias() {
+  const tracks = [
+    { id: "spotify:track:1", title: "River", artist: "Joni", album: "Blue" },
+    { id: "spotify:track:2", title: "Carey", artist: "Joni", album: "Blue" },
+    { id: "spotify:track:3", title: "Single", artist: "Solo", album: "" },
+  ];
+  const covers = L.coversFromTracks(tracks);
+  assert.strictEqual(covers.length, 2);
+  assert.strictEqual(covers[1].id, "spotify:track:3");
+  assert.strictEqual(covers[1].trackId, "spotify:track:3");
+  assert.strictEqual(L.trackMatchesCover(tracks[0], covers[0]), true);
+  assert.strictEqual(L.trackMatchesCover(tracks[2], covers[0]), false);
+  assert.strictEqual(L.trackMatchesCover(tracks[2], covers[1]), true);
+  assert.strictEqual(L.trackId(tracks[0]), "spotify:track:1");
+  assert.strictEqual(L.trackId({ videoId: "aaaaaaaaaaa" }), "aaaaaaaaaaa");
+  assert.strictEqual(L.trackId(null), "");
 }
 
 function testCoversFromTracksIsLinear() {
@@ -290,6 +311,7 @@ const tests = [
   testFlattenEmptyOwnedNotice,
   testCoversFromTracksGroupsAlbums,
   testCoversFromTracksIsLinear,
+  testCoversWorkWithoutVideoIdAlias,
   testTrackMatchesCover,
   testBrowsePageCount,
   testLibraryUpdatePlan,

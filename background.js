@@ -1,19 +1,25 @@
-const YTM_ORIGIN = "https://music.youtube.com";
+/**
+ * Origins and the off-host title are duplicated from scripts/hosts-config.js.
+ * The service worker cannot importScripts that file — Chrome throws
+ * NetworkError on reload, which aborts the whole extension update — and
+ * tests/hosts-config.test.js fails if these copies drift.
+ */
+const HOST_ORIGINS = ["https://music.youtube.com"];
+const OFF_HOST_TITLE = "yTunes only works on a supported music site";
 
-function isYouTubeMusic(url) {
+function hostOwnsUrl(url) {
   if (!url) return false;
   try {
-    return new URL(url).origin === YTM_ORIGIN;
+    return HOST_ORIGINS.includes(new URL(url).origin);
   } catch {
     return false;
   }
 }
 
 function syncAction(tabId, url) {
-  const onYtm = isYouTubeMusic(url);
   chrome.action.setTitle({
     tabId,
-    title: onYtm ? "yTunes" : "yTunes only works on YouTube Music",
+    title: hostOwnsUrl(url) ? "yTunes" : OFF_HOST_TITLE,
   });
 }
 
