@@ -46,6 +46,7 @@ function copyExtension(dest) {
     if (IGNORE_TOP.has(name)) continue;
     fs.cpSync(path.join(ROOT, name), path.join(dest, name), {
       recursive: true,
+      filter: (src) => !src.includes(`${path.sep}icons${path.sep}src`),
     });
   }
 }

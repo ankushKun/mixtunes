@@ -1,0 +1,55 @@
+/*
+ * document_start paint shield for YouTube Music.
+ *
+ * Selectors use :not([data-ytunes-overlay="off"]) so chrome is covered as soon as
+ * this sheet is injected — even before boot.js runs. boot.js only flips the
+ * attribute to "off" when the overlay is disabled (or ?newytm=).
+ */
+
+html:not([data-ytunes-overlay="off"])::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  background: #12141a;
+}
+
+html:not([data-ytunes-overlay="off"]):has(#ytunes-root)::before {
+  display: none;
+}
+
+html:not([data-ytunes-overlay="off"]),
+html:not([data-ytunes-overlay="off"]) body {
+  height: 100% !important;
+  overflow: hidden !important;
+  background: #12141a !important;
+}
+
+html:not([data-ytunes-overlay="off"]) ytmusic-app,
+html:not([data-ytunes-overlay="off"]) ytmusic-nav-bar,
+html:not([data-ytunes-overlay="off"]) ytmusic-app-layout,
+html:not([data-ytunes-overlay="off"]) #nav-bar-background,
+html:not([data-ytunes-overlay="off"]) #guide-wrapper,
+html:not([data-ytunes-overlay="off"]) #mini-guide-background,
+html:not([data-ytunes-overlay="off"]) ytmusic-guide-renderer,
+html:not([data-ytunes-overlay="off"]) #content,
+html:not([data-ytunes-overlay="off"]) yt-chip-cloud-renderer,
+html:not([data-ytunes-overlay="off"]) ytmusic-chip-cloud-renderer {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html:not([data-ytunes-overlay="off"]) ytmusic-player-bar,
+html:not([data-ytunes-overlay="off"]) ytmusic-player-page,
+html:not([data-ytunes-overlay="off"]) ytmusic-player,
+html:not([data-ytunes-overlay="off"]) #movie_player,
+html:not([data-ytunes-overlay="off"]) #player-bar-background,
+html:not([data-ytunes-overlay="off"]) #player-page {
+  position: fixed !important;
+  left: -100vw !important;
+  top: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+}

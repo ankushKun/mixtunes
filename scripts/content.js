@@ -34,6 +34,7 @@ function persistOverlayPref(enabled) {
     /* storage can be blocked */
   }
   document.documentElement.dataset.ytunesOverlay = on ? "on" : "off";
+  if (!on) delete document.documentElement.dataset.ytunesBoot;
   document.dispatchEvent(
     new CustomEvent("ytunes-overlay-pref", { detail: on ? "1" : "0" })
   );
@@ -125,6 +126,7 @@ function injectBootFail() {
   root.querySelector("#ytunes-boot-original").textContent =
     MusicHost.strings.originalLabel;
   (document.body || document.documentElement).appendChild(root);
+  delete document.documentElement.dataset.ytunesBoot;
   bindBootFail(root);
 }
 
@@ -137,6 +139,7 @@ async function injectShell() {
   root.id = "ytunes-root";
   root.innerHTML = html;
   (document.body || document.documentElement).appendChild(root);
+  delete document.documentElement.dataset.ytunesBoot;
   bindShell(root);
 }
 
