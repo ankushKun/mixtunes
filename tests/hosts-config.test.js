@@ -202,6 +202,17 @@ function testPackExcludesStoreAndZips() {
   assert.ok(!listing.split("\n").some((line) => line.startsWith("store/")));
   assert.ok(!listing.split("\n").some((line) => line.startsWith("docs/")));
   assert.ok(!listing.includes("pack.js"));
+  assert.ok(
+    !listing.split("\n").some((line) => /(^|\/)\.DS_Store$/.test(line) || line.includes("__MACOSX")),
+    "extension zip must not include Finder junk (.DS_Store / __MACOSX)"
+  );
+  const ffListing = execFileSync("zipinfo", ["-1", firefoxZip], {
+    encoding: "utf8",
+  });
+  assert.ok(
+    !ffListing.split("\n").some((line) => /(^|\/)\.DS_Store$/.test(line) || line.includes("__MACOSX")),
+    "firefox zip must not include Finder junk (.DS_Store / __MACOSX)"
+  );
   const ff = JSON.parse(
     execFileSync("unzip", ["-p", firefoxZip, "manifest.json"], {
       encoding: "utf8",

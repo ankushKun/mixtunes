@@ -40,13 +40,23 @@ const IGNORE_TOP = new Set([
   "LICENSE",
 ]);
 
+/** Skip Finder junk that AMO's linter flags (nested .DS_Store, AppleDouble, etc.). */
+function shouldCopy(src) {
+  const base = path.basename(src);
+  if (base === ".DS_Store" || base === "__MACOSX" || base.startsWith("._")) {
+    return false;
+  }
+  if (src.includes(`${path.sep}icons${path.sep}src`)) return false;
+  return true;
+}
+
 function copyExtension(dest) {
   fs.mkdirSync(dest, { recursive: true });
   for (const name of fs.readdirSync(ROOT)) {
     if (IGNORE_TOP.has(name)) continue;
     fs.cpSync(path.join(ROOT, name), path.join(dest, name), {
       recursive: true,
-      filter: (src) => !src.includes(`${path.sep}icons${path.sep}src`),
+      filter: shouldCopy,
     });
   }
 }
@@ -83,7 +93,12 @@ patchFirefox(FIREFOX_DIR);
 
 function zipDir(dir, zipPath) {
   fs.rmSync(zipPath, { force: true });
-  execFileSync("zip", ["-r", "-X", "-q", zipPath, "."], { cwd: dir });
+  // -X drops macOS extra fields; -x keeps Finder junk out even if it sneaks in.
+  execFileSync(
+    "zip",
+    ["-r", "-X", "-q", zipPath, ".", "-x", "*.DS_Store", "-x", "**/.DS_Store", "-x", "__MACOSX/*", "-x", "*/__MACOSX/*", "-x", "*/._*"],
+    { cwd: dir }
+  );
 }
 
 const chromiumZip = path.join(BUILD, "chromium.zip");
