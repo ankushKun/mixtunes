@@ -1,7 +1,7 @@
 {
   "name": "Mixtunes",
   "short_name": "Mixtunes",
-  "description": "Classic iTunes-style theme for streaming music sites. Works on YouTube Music today.",
+  "description": "Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music",
   "start_url": "./",
   "scope": "./",
   "display": "browser",

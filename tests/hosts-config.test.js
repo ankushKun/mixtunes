@@ -7,6 +7,9 @@ const hosts = require("../scripts/hosts-config");
 const manifest = JSON.parse(
   fs.readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8")
 );
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8")
+);
 
 const sorted = (list) => [...new Set(list)].sort();
 
@@ -164,9 +167,15 @@ function testManifestStoreReady() {
     manifest.description.length > 0 && manifest.description.length <= 132,
     "Chrome short description must be 1–132 characters"
   );
-  assert.ok(
-    !/itunes/i.test(manifest.description),
-    "store-facing description must not use the iTunes trademark"
+  assert.strictEqual(
+    manifest.description,
+    "Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music",
+    "store description must match the product summary"
+  );
+  assert.strictEqual(
+    pkg.description,
+    manifest.description,
+    "package.json description must match manifest"
   );
   assert.ok(
     !/itunes/i.test(manifest.name),

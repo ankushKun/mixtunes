@@ -102,7 +102,7 @@ function bindDialogs(root, handlers) {
   function closeJump() {
     if (!jump || jump.hidden) return;
     jump.hidden = true;
-    if (jumpList) jumpList.innerHTML = "";
+    clearHtml(jumpList);
     lastFocus?.focus?.({ preventScroll: true });
   }
 
@@ -154,15 +154,18 @@ function bindDialogs(root, handlers) {
 
   function renderJump(items) {
     if (!jumpList) return;
-    jumpList.innerHTML = items
-      .slice(0, 12)
-      .map(
-        (item, index) =>
-          `<li><button type="button" class="${index === 0 ? "is-active" : ""}" data-jump="${escapeHtml(
-            item.kind
-          )}" data-jump-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button></li>`
-      )
-      .join("");
+    setHtml(
+      jumpList,
+      items
+        .slice(0, 12)
+        .map(
+          (item, index) =>
+            `<li><button type="button" class="${index === 0 ? "is-active" : ""}" data-jump="${escapeHtml(
+              item.kind
+            )}" data-jump-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button></li>`
+        )
+        .join("")
+    );
   }
 
   function closePick(value) {
@@ -170,7 +173,7 @@ function bindDialogs(root, handlers) {
     const finish = pickFinish;
     pickFinish = null;
     if (pick) pick.hidden = true;
-    if (pickList) pickList.innerHTML = "";
+    clearHtml(pickList);
     finish(value);
     lastFocus?.focus?.({ preventScroll: true });
   }
@@ -192,16 +195,19 @@ function bindDialogs(root, handlers) {
     if (pickTitle) pickTitle.textContent = title;
     const list = (items || []).filter((item) => item?.playlistId);
     if (pickList) {
-      pickList.innerHTML = list.length
-        ? list
-            .map(
-              (item, index) =>
-                `<li><button type="button" class="${index === 0 ? "is-active" : ""}" data-playlist="${escapeHtml(
-                  item.playlistId
-                )}">${escapeHtml(item.title)}</button></li>`
-            )
-            .join("")
-        : `<li class="ytunes-pick-empty">No playlists yet.</li>`;
+      setHtml(
+        pickList,
+        list.length
+          ? list
+              .map(
+                (item, index) =>
+                  `<li><button type="button" class="${index === 0 ? "is-active" : ""}" data-playlist="${escapeHtml(
+                    item.playlistId
+                  )}">${escapeHtml(item.title)}</button></li>`
+              )
+              .join("")
+          : `<li class="ytunes-pick-empty">No playlists yet.</li>`
+      );
     }
     pick.hidden = false;
     (pickList?.querySelector("button") || root.querySelector("#ytunes-pick-new"))?.focus();

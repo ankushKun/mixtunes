@@ -110,7 +110,7 @@
       }
     }
 
-    // min is the *engine* version Mixtunes needs (manifest: Chrome/Firefox 121+),
+    // min is the *engine* version Mixtunes needs (manifest: Chrome 121+, Firefox 142+),
     // which for a fork is its underlying Chromium, not its own version number.
     var BROWSERS = {
       chrome: { name: "Chrome", icon: "chrome", store: "chrome", showVersion: true },
@@ -123,7 +123,11 @@
       safari: { name: "Safari", icon: "safari", store: null, note: "There is no Safari version yet. Use Chrome or Firefox instead." }
     };
 
-    var MIN = 121;
+    var MIN = { chrome: 121, firefox: 142 };
+
+    function minFor(id) {
+      return id === "firefox" ? MIN.firefox : MIN.chrome;
+    }
 
     function detect() {
       var ua = navigator.userAgent;
@@ -203,12 +207,13 @@
       applyCtas(found, info, false);
 
       var store = STORES[info.store];
-      var tooOld = found.version && found.version < MIN;
+      var need = minFor(found.id);
+      var tooOld = found.version && found.version < need;
       if (tooOld) {
         var seen = info.name + (info.showVersion ? " " + found.version : "");
         say(
           iconFor(info.icon),
-          "You have <b>" + seen + "</b>. Mixtunes needs " + store.name + " " + MIN +
+          "You have <b>" + seen + "</b>. Mixtunes needs " + store.name + " " + need +
             " or newer, so update your browser first."
         );
       } else if (!storeReady(store)) {

@@ -164,7 +164,9 @@ function injectBootFail() {
   const root = document.createElement("div");
   root.id = "ytunes-root";
   root.style.background = bootSurface();
-  root.innerHTML = `
+  setHtml(
+    root,
+    `
     <div class="ytunes-app ytunes-boot-fail">
       <header class="ytunes-top">
         <div class="ytunes-lcd">
@@ -182,7 +184,8 @@ function injectBootFail() {
         </div>
       </div>
     </div>
-  `;
+  `
+  );
   root.querySelector("#ytunes-lcd-sub").textContent = MusicHost.strings.bootFail;
   root.querySelector("#ytunes-boot-original").textContent =
     MusicHost.strings.originalLabel;
@@ -202,7 +205,8 @@ async function injectShell() {
   const root = document.createElement("div");
   root.id = "ytunes-root";
   root.style.background = bootSurface();
-  root.innerHTML = html;
+  // Trusted package HTML from web_accessible_resources (layouts/shell/index.html).
+  setHtml(root, html);
   if (document.documentElement.dataset.ytunesTheme === "graphite") {
     root.querySelector(".ytunes-app")?.classList.add("is-graphite");
   }
@@ -267,8 +271,10 @@ function placeLaunchButton() {
   button.type = "button";
   button.title = "Open Mixtunes";
   button.setAttribute("aria-label", "Open Mixtunes");
-  button.innerHTML =
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+  setHtml(
+    button,
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>'
+  );
   bindLaunchButton(button);
   slot.parent.insertBefore(button, slot.before);
   watchLaunchNode(slot.parent);

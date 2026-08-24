@@ -1,6 +1,6 @@
 # Mixtunes
 
-> Mixtunes is a free, independent browser extension that applies a classic desktop music-library theme (sidebar, track list, Cover Flow) to streaming music sites. It does not stream audio itself; the host site remains the player. Available on YouTube Music today; Spotify, Apple Music, and SoundCloud are planned. Preferences stay on the device. Not affiliated with Apple, Google, Spotify, or SoundCloud.
+> Mixtunes is a free, independent browser extension: a classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music (sidebar, track list, Cover Flow). It does not stream audio itself; the host site remains the player. YouTube Music works today; Spotify, Apple Music, and SoundCloud are under development. Preferences stay on the device. Not affiliated with Apple, Google, Spotify, or SoundCloud.
 
 ## Product
 
@@ -12,8 +12,8 @@
 
 ## What it does
 
-- Themes supported streaming music websites in Chrome 121+ and Firefox 121+ (and Chromium-based browsers via the Chrome Web Store build once listed)
-- Currently runs on music.youtube.com; more hosts are planned
+- Themes Spotify, YouTube Music, SoundCloud and Apple Music in Chrome 121+ and Firefox 142+ (and Chromium-based browsers via the Chrome Web Store build once listed)
+- YouTube Music (music.youtube.com) works today; Spotify, Apple Music, and SoundCloud are under development
 - Shows library sources in a sidebar, songs in a sortable list, and album art in Cover Flow or grid
 - Passes play, pause, skip, and seek through to the host player
 - Themes: Metal, Graphite, or match the system appearance

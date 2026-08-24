@@ -830,7 +830,7 @@ function renderSourceList(root) {
       )}</summary>${buttons}${dynamic}</details>`;
     })
     .join("");
-  sprite.insertAdjacentHTML("afterend", html);
+  insertHtmlAfter(sprite, html);
 }
 
 /**
@@ -1493,7 +1493,7 @@ function paintVirtualTracks(root, state, opts = {}) {
   }
   const bottom = YTunesList.spacerRowHtml(win.padBottom);
   if (bottom) parts.push(bottom);
-  body.innerHTML = parts.join("");
+  setTableHtml(body, parts.join(""));
   fillSpinners(body);
   const table = root.querySelector(".ytunes-table");
   if (table) table.setAttribute("aria-rowcount", String(rows.length + 1));
@@ -1549,9 +1549,12 @@ function renderTracks(root, state, tracks, emptyMessage) {
   state.virtStructKey = "";
   if (!visible.length) {
     state.listRows = [];
-    body.innerHTML = `<tr class="is-empty"><td colspan="8"><span class="ytunes-spinner" aria-hidden="true"></span>${escapeHtml(
-      emptyMessage || "No tracks yet."
-    )}</td></tr>`;
+    setTableHtml(
+      body,
+      `<tr class="is-empty"><td colspan="8"><span class="ytunes-spinner" aria-hidden="true"></span>${escapeHtml(
+        emptyMessage || "No tracks yet."
+      )}</td></tr>`
+    );
     fillSpinners(body);
     renderStatusMeta(root, state, []);
     return;
@@ -1586,23 +1589,25 @@ function renderGrid(root, state) {
   const view = root.querySelector(".ytunes-main")?.dataset.view;
   if (view !== "grid") {
     if (grid.childElementCount > 48) {
-      grid.innerHTML = "";
+      clearHtml(grid);
       delete grid.dataset.painted;
     }
     return;
   }
   if (!state.covers.length) {
-    grid.innerHTML = `<p class="ytunes-source-empty">No albums</p>`;
+    setHtml(grid, `<p class="ytunes-source-empty">No albums</p>`);
     return;
   }
-  grid.innerHTML = state.covers
-    .map((cover) => {
-      const sub =
-        (typeof coverCaptionSub === "function" ? coverCaptionSub(cover) : "") ||
-        cover.artist ||
-        cover.subtitle ||
-        "";
-      return `
+  setHtml(
+    grid,
+    state.covers
+      .map((cover) => {
+        const sub =
+          (typeof coverCaptionSub === "function" ? coverCaptionSub(cover) : "") ||
+          cover.artist ||
+          cover.subtitle ||
+          "";
+        return `
       <button type="button" class="ytunes-tile${
         cover.id === state.selectedCoverId ? " is-selected" : ""
       }" data-cover-id="${escapeHtml(cover.id)}" data-video="${escapeHtml(
@@ -1620,8 +1625,9 @@ function renderGrid(root, state) {
         ${marqueeHtml(cover.title, "ytunes-tile-title")}
         ${marqueeHtml(sub, "ytunes-tile-sub")}
       </button>`;
-    })
-    .join("");
+      })
+      .join("")
+  );
   grid.dataset.painted = "1";
 }
 
@@ -2520,7 +2526,7 @@ function bindShell(root) {
   function hideSuggest() {
     window.clearTimeout(suggestBlurTimer);
     suggest.hidden = true;
-    suggest.innerHTML = "";
+    clearHtml(suggest);
     search?.setAttribute("aria-expanded", "false");
   }
 
@@ -2531,15 +2537,18 @@ function bindShell(root) {
       return;
     }
     const prev = suggest.querySelector("button.is-active")?.dataset.query || "";
-    suggest.innerHTML = items
-      .slice(0, 8)
-      .map(
-        (item, index) =>
-          `<li><button type="button" role="option" id="ytunes-suggest-${index}" data-query="${escapeHtml(
-            item
-          )}" class="${item === prev ? "is-active" : ""}">${escapeHtml(item)}</button></li>`
-      )
-      .join("");
+    setHtml(
+      suggest,
+      items
+        .slice(0, 8)
+        .map(
+          (item, index) =>
+            `<li><button type="button" role="option" id="ytunes-suggest-${index}" data-query="${escapeHtml(
+              item
+            )}" class="${item === prev ? "is-active" : ""}">${escapeHtml(item)}</button></li>`
+        )
+        .join("")
+    );
     suggest.hidden = false;
     search.setAttribute("aria-expanded", "true");
   }
@@ -2885,7 +2894,7 @@ function bindShell(root) {
 
   function hideMenu() {
     menu.hidden = true;
-    menu.innerHTML = "";
+    clearHtml(menu);
     state.menuTrack = null;
     root.querySelector("#ytunes-sidebar-well-more")?.setAttribute("aria-expanded", "false");
   }
@@ -2942,7 +2951,7 @@ function bindShell(root) {
     if (extra.canAddHere) items.push(menuItem("add-here", "Add to this Playlist"));
     items.push(menuItem("add", "Add to Playlist…"));
     if (extra.canRemove) items.push(menuItem("remove", "Remove from Playlist"));
-    menu.innerHTML = items.join("");
+    setHtml(menu, items.join(""));
     menu.hidden = false;
     positionMenu(at);
     at?.anchor?.setAttribute("aria-expanded", "true");
@@ -3422,7 +3431,7 @@ function bindShell(root) {
       .join("\n");
     if (pre.dataset.active !== String(active)) {
       pre.dataset.active = String(active);
-      pre.innerHTML = html;
+      setHtml(pre, html);
       pre.querySelector(".is-current")?.scrollIntoView({ block: "nearest" });
     }
   }
@@ -3895,19 +3904,22 @@ async function loadPlaylists(root, state) {
     state.playlists = (playlists || []).filter(
       (item) => !aliases.has(playlistIdOf(item.playlistId))
     );
-    host.innerHTML = state.playlists
-      .map(
-        (item) =>
-          `<button type="button" data-playlist="${escapeHtml(item.playlistId)}">${sourceIconHtml(
-            "playlist"
-          )}<span class="ytunes-source-label">${escapeHtml(item.title)}</span></button>`
-      )
-      .join("");
+    setHtml(
+      host,
+      state.playlists
+        .map(
+          (item) =>
+            `<button type="button" data-playlist="${escapeHtml(item.playlistId)}">${sourceIconHtml(
+              "playlist"
+            )}<span class="ytunes-source-label">${escapeHtml(item.title)}</span></button>`
+        )
+        .join("")
+    );
     if (!state.playlists.length) {
-      host.innerHTML = `<p class="ytunes-source-empty">No playlists</p>`;
+      setHtml(host, `<p class="ytunes-source-empty">No playlists</p>`);
     }
   } catch {
-    host.innerHTML = `<p class="ytunes-source-empty">Could not load playlists</p>`;
+    setHtml(host, `<p class="ytunes-source-empty">Could not load playlists</p>`);
   }
   setSidebarSelection(root, state.lastSource);
   refreshMarquees(root);
@@ -3959,7 +3971,7 @@ function moodButtonsHtml(chips) {
 async function loadMoods(root, state) {
   const host = root.querySelector("#ytunes-moods");
   if (!host) return;
-  host.innerHTML = "";
+  clearHtml(host);
   let chips = [];
   try {
     chips = await MusicHost.moods();
@@ -3972,9 +3984,10 @@ async function loadMoods(root, state) {
       YTunesHosts.byId(MusicHost.id)?.moodCap) ||
     6;
   const shown = chips.slice(0, cap);
-  host.innerHTML = shown.length
-    ? moodButtonsHtml(shown)
-    : `<p class="ytunes-source-empty">No stations</p>`;
+  setHtml(
+    host,
+    shown.length ? moodButtonsHtml(shown) : `<p class="ytunes-source-empty">No stations</p>`
+  );
   setSidebarSelection(root, state.lastSource);
   refreshMarquees(root);
 }

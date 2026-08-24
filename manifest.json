@@ -2,13 +2,13 @@
   "manifest_version": 3,
   "name": "Mixtunes",
   "version": "0.1.0",
-  "description": "Classic music-library theme for streaming sites",
+  "description": "Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music",
   "homepage_url": "https://ankush.one/mixtunes/",
   "minimum_chrome_version": "121",
   "browser_specific_settings": {
     "gecko": {
       "id": "mixtunes@ankush.one",
-      "strict_min_version": "121.0",
+      "strict_min_version": "142.0",
       "data_collection_permissions": {
         "required": ["none"]
       }
@@ -51,6 +51,7 @@
         "scripts/hosts-config.js",
         "scripts/playback-core.js",
         "scripts/list-core.js",
+        "scripts/dom-html.js",
         "scripts/hosts/ytm/ids.js",
         "scripts/hosts/ytm/catalog.js",
         "scripts/hosts/ytm/player.js",

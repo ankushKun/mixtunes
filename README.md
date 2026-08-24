@@ -1,10 +1,10 @@
 # Mixtunes
 
-**A classic iTunes theme for streaming music.**
+**Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music.**
 
 A free browser extension that themes the streaming sites you already use with a classic desktop music-library UI: sidebar sources, a sortable track list, Cover Flow, and transport controls. The host site stays the player. Your preferences stay on your device.
 
-**Works on YouTube Music today.** Spotify, Apple Music, and SoundCloud are planned.
+**YouTube Music works today.** Spotify, Apple Music, and SoundCloud are under development.
 
 [Website](https://ankush.one/mixtunes/) · [Releases](https://github.com/ankushKun/mixtunes/releases) · [Privacy](https://ankush.one/mixtunes/privacy.html)
 
@@ -20,7 +20,7 @@ A free browser extension that themes the streaming sites you already use with a 
 - **Themes** - Metal, Graphite, or match the system appearance
 - **Local only** - no Mixtunes account; the extension does not phone home
 
-Works on **Chrome 121+**, **Firefox 121+**, and Chromium-based browsers (Edge, Brave, Arc, Vivaldi, Opera, Zen). Not on Safari or mobile yet.
+Works on **Chrome 121+**, **Firefox 142+**, and Chromium-based browsers (Edge, Brave, Arc, Vivaldi, Opera, Zen). Not on Safari or mobile yet.
 
 ## Install
 

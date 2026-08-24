@@ -1,9 +1,9 @@
 {
   "name": "mixtunes",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "license": "GPL-3.0-only",
-  "description": "Classic music-library theme for streaming sites",
+  "description": "Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music",
   "scripts": {
     "pack": "node pack.js",
     "test": "node tests/playback-core.test.js && node tests/list-core.test.js && node tests/hosts-config.test.js && node tests/host-contract.test.js"
