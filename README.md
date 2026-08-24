@@ -63,8 +63,6 @@ Marketing site (static): `docs/` - preview with:
 python3 -m http.server 4173 --directory docs
 ```
 
-Store listing copy and publish checklist live in `store/`.
-
 ## Privacy
 
 - **Extension:** preferences in `chrome.storage.local` only; no analytics SDK; player API calls go to the host (YouTube today), not to Mixtunes.

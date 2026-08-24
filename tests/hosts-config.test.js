@@ -172,49 +172,9 @@ function testManifestStoreReady() {
     !/itunes/i.test(manifest.name),
     "extension name must not use the iTunes trademark"
   );
-  const store = path.join(__dirname, "..", "store");
-  for (const file of [
-    "privacy.html",
-    "listing.md",
-    "cws-privacy.md",
-    "reviewer-notes.md",
-    "PUBLISH.md",
-  ]) {
-    assert.ok(
-      fs.existsSync(path.join(store, file)),
-      `missing store listing file: ${file}`
-    );
-  }
   const docs = path.join(__dirname, "..", "docs");
   for (const file of ["index.html", "privacy.html", "css/mixtunes.css", "js/mixtunes.js"]) {
     assert.ok(fs.existsSync(path.join(docs, file)), `missing docs site file: ${file}`);
-  }
-}
-
-function pngSize(file) {
-  const buf = fs.readFileSync(file);
-  assert.strictEqual(buf.slice(0, 8).toString("hex"), "89504e470d0a1a0a");
-  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
-}
-
-function testStoreAssets() {
-  const store = path.join(__dirname, "..", "store");
-  const promo = pngSize(path.join(store, "promo-440x280.png"));
-  assert.deepStrictEqual(promo, { width: 440, height: 280 });
-  const icon128 = pngSize(path.join(store, "icon-128.png"));
-  assert.deepStrictEqual(icon128, { width: 128, height: 128 });
-  const shots = [
-    "01-cover-flow.png",
-    "02-cover-flow-graphite.png",
-    "03-preferences.png",
-  ];
-  for (const name of shots) {
-    const size = pngSize(path.join(store, "screenshots", name));
-    assert.ok(
-      (size.width === 1280 && size.height === 800) ||
-        (size.width === 640 && size.height === 400),
-      `${name} must be 1280×800 or 640×400, got ${size.width}×${size.height}`
-    );
   }
 }
 
@@ -248,7 +208,6 @@ testManifestOriginsMatch();
 testBackgroundOriginsMatch();
 testManifestReferencesRealFiles();
 testManifestStoreReady();
-testStoreAssets();
 testPackExcludesStoreAndZips();
 
-console.log("hosts-config: 8 groups passed");
+console.log("hosts-config: 7 groups passed");
