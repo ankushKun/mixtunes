@@ -750,6 +750,14 @@ function applyTheme(root, prefs) {
     prefs.graphite = graphite;
   }
   applyGraphite(root, graphite);
+  const bootTheme = graphite ? "graphite" : "light";
+  document.documentElement.dataset.ytunesTheme = bootTheme;
+  try {
+    localStorage.setItem("ytunes-boot-theme", bootTheme);
+  } catch {
+    /* ignore */
+  }
+  root.style.background = graphite ? "#3a3a3a" : "#cfcfcf";
   root.querySelectorAll('input[name="ytunes-pref-theme"]').forEach((node) => {
     node.checked = node.value === theme;
   });

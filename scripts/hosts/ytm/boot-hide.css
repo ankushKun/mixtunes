@@ -1,29 +1,34 @@
 /*
  * document_start paint shield for YouTube Music.
  *
- * Selectors use :not([data-ytunes-overlay="off"]) so chrome is covered as soon as
- * this sheet is injected — even before boot.js runs. boot.js only flips the
- * attribute to "off" when the overlay is disabled (or ?newytm=).
+ * - Hide stock chrome whenever overlay is not explicitly off.
+ * - Keep a theme-matched veil until html[data-ytunes-shell="1"] (styles + root ready).
+ *   Removing the veil on mere #ytunes-root presence caused a white flash while
+ *   layouts/shell/style.css was still loading.
  */
 
-html:not([data-ytunes-overlay="off"])::before {
+html {
+  --ytunes-boot-bg: #cfcfcf;
+}
+
+html[data-ytunes-theme="graphite"] {
+  --ytunes-boot-bg: #3a3a3a;
+}
+
+html:not([data-ytunes-overlay="off"]):not([data-ytunes-shell="1"])::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 2147483000;
+  z-index: 2147483646;
   pointer-events: none;
-  background: #12141a;
-}
-
-html:not([data-ytunes-overlay="off"]):has(#ytunes-root)::before {
-  display: none;
+  background: var(--ytunes-boot-bg);
 }
 
 html:not([data-ytunes-overlay="off"]),
 html:not([data-ytunes-overlay="off"]) body {
   height: 100% !important;
   overflow: hidden !important;
-  background: #12141a !important;
+  background: var(--ytunes-boot-bg) !important;
 }
 
 html:not([data-ytunes-overlay="off"]) ytmusic-app,

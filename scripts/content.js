@@ -33,8 +33,13 @@ function persistOverlayPref(enabled) {
   } catch {
     /* storage can be blocked */
   }
-  document.documentElement.dataset.ytunesOverlay = on ? "on" : "off";
-  if (!on) delete document.documentElement.dataset.ytunesBoot;
+  const root = document.documentElement;
+  root.dataset.ytunesOverlay = on ? "on" : "off";
+  if (!on) {
+    delete root.dataset.ytunesBoot;
+    delete root.dataset.ytunesShell;
+    document.getElementById("ytunes-boot-inline")?.remove();
+  }
   document.dispatchEvent(
     new CustomEvent("ytunes-overlay-pref", { detail: on ? "1" : "0" })
   );
@@ -59,18 +64,59 @@ async function writeOverlayEnabled(enabled) {
 }
 
 function injectSheet(id, file) {
-  if (document.getElementById(id)) return;
-  const link = document.createElement("link");
+  const href = chrome.runtime.getURL(file);
+  let link = document.getElementById(id);
+  if (link) return link;
+  link = [...document.querySelectorAll('link[rel="stylesheet"]')].find(
+    (node) => node.href === href
+  );
+  if (link) {
+    link.id = id;
+    return link;
+  }
+  link = document.createElement("link");
   link.id = id;
   link.rel = "stylesheet";
-  link.href = chrome.runtime.getURL(file);
+  link.href = href;
   (document.head || document.documentElement).appendChild(link);
+  return link;
 }
 
-function injectOverlayStyles() {
-  injectSheet(STYLE_IDS.host, "scripts/content.css");
-  injectSheet(STYLE_IDS.hide, MusicHost.hideSheet);
-  injectSheet(STYLE_IDS.shell, "layouts/shell/style.css");
+function whenSheetReady(link) {
+  if (!link) return Promise.resolve();
+  try {
+    if (link.sheet) return Promise.resolve();
+  } catch {
+    /* ignore */
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    link.addEventListener("load", finish, { once: true });
+    link.addEventListener("error", finish, { once: true });
+    // Cached sheets may already be complete without a load event.
+    requestAnimationFrame(() => {
+      try {
+        if (link.sheet) finish();
+      } catch {
+        /* ignore */
+      }
+    });
+    setTimeout(finish, 1200);
+  });
+}
+
+async function injectOverlayStyles() {
+  const links = [
+    injectSheet(STYLE_IDS.host, "scripts/content.css"),
+    injectSheet(STYLE_IDS.hide, MusicHost.hideSheet),
+    injectSheet(STYLE_IDS.shell, "layouts/shell/style.css"),
+  ];
+  await Promise.all(links.map(whenSheetReady));
 }
 
 function removeOverlayStyles() {
@@ -79,10 +125,24 @@ function removeOverlayStyles() {
   }
 }
 
+function bootSurface() {
+  return document.documentElement.dataset.ytunesTheme === "graphite"
+    ? "#3a3a3a"
+    : "#cfcfcf";
+}
+
+function markShellPainted() {
+  const root = document.documentElement;
+  delete root.dataset.ytunesBoot;
+  root.dataset.ytunesShell = "1";
+  document.getElementById("ytunes-boot-inline")?.remove();
+}
+
 function teardownOverlay() {
   document.getElementById("ytunes-root")?.remove();
   removeOverlayStyles();
   MusicHost.markIdle();
+  delete document.documentElement.dataset.ytunesShell;
 }
 
 function bindBootFail(root) {
@@ -103,6 +163,7 @@ function injectBootFail() {
   if (document.getElementById("ytunes-root")) return;
   const root = document.createElement("div");
   root.id = "ytunes-root";
+  root.style.background = bootSurface();
   root.innerHTML = `
     <div class="ytunes-app ytunes-boot-fail">
       <header class="ytunes-top">
@@ -125,9 +186,12 @@ function injectBootFail() {
   root.querySelector("#ytunes-lcd-sub").textContent = MusicHost.strings.bootFail;
   root.querySelector("#ytunes-boot-original").textContent =
     MusicHost.strings.originalLabel;
+  if (document.documentElement.dataset.ytunesTheme === "graphite") {
+    root.querySelector(".ytunes-app")?.classList.add("is-graphite");
+  }
   (document.body || document.documentElement).appendChild(root);
-  delete document.documentElement.dataset.ytunesBoot;
   bindBootFail(root);
+  markShellPainted();
 }
 
 async function injectShell() {
@@ -137,10 +201,18 @@ async function injectShell() {
   );
   const root = document.createElement("div");
   root.id = "ytunes-root";
+  root.style.background = bootSurface();
   root.innerHTML = html;
+  if (document.documentElement.dataset.ytunesTheme === "graphite") {
+    root.querySelector(".ytunes-app")?.classList.add("is-graphite");
+  }
   (document.body || document.documentElement).appendChild(root);
-  delete document.documentElement.dataset.ytunesBoot;
   bindShell(root);
+  // Let the browser paint the styled shell once before dropping the veil.
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+  markShellPainted();
 }
 
 function launchInPlace(button, slot) {
@@ -212,7 +284,7 @@ function startLauncher() {
 }
 
 async function startOverlay() {
-  injectOverlayStyles();
+  const stylesReady = injectOverlayStyles();
   MusicHost.markReady();
   try {
     const ok = await MusicHost.waitUntilReady();
@@ -221,12 +293,14 @@ async function startOverlay() {
       startLauncher();
       return;
     }
+    await stylesReady;
     if (!ok) {
       injectBootFail();
       return;
     }
     await injectShell();
   } catch {
+    await stylesReady.catch(() => {});
     injectOverlayStyles();
     MusicHost.markReady();
     injectBootFail();
