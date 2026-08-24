@@ -40,6 +40,13 @@
   --pad: 34px;
   --radius: 10px;
   --head-h: 58px;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-press: 140ms;
+  --dur-ui: 200ms;
+  --dur-enter: 280ms;
 }
 
 *,
@@ -167,6 +174,7 @@ section {
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 3px),
     linear-gradient(var(--metal-hi), var(--metal) 47%, var(--metal-lo));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: box-shadow var(--dur-ui) var(--ease-out);
 }
 
 .site-head.is-stuck {
@@ -187,6 +195,11 @@ section {
   text-decoration: none;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
   white-space: nowrap;
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+.brand:active {
+  transform: scale(0.97);
 }
 
 .brand img {
@@ -212,13 +225,22 @@ section {
   font-weight: 700;
   text-decoration: none;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background var(--dur-press) var(--ease-out),
+    border-color var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out),
+    transform var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-press) var(--ease-out);
 }
 
 .tabs a:hover {
   border-color: #7f7f7f;
   background: linear-gradient(#ffffff, #e2e2e2);
   color: #111;
+}
+
+.tabs a:active {
+  transform: scale(0.97);
 }
 
 .tabs a.is-active {
@@ -260,7 +282,10 @@ section {
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
-  transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    background var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-press) var(--ease-out);
 }
 
 .btn svg {
@@ -271,7 +296,7 @@ section {
 }
 
 .btn:active {
-  transform: translateY(1px) scale(0.985);
+  transform: translateY(1px) scale(0.97);
 }
 
 .btn-aqua {
@@ -377,6 +402,23 @@ section {
   text-align: left;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .detect:not([hidden]) {
+    animation: detect-in var(--dur-enter) var(--ease-out) both;
+  }
+}
+
+@keyframes detect-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .detect b {
   color: var(--ink);
 }
@@ -384,6 +426,10 @@ section {
 .detect .bi {
   width: 14px;
   height: 14px;
+}
+
+.cta-row {
+  transition: opacity var(--dur-ui) var(--ease-out);
 }
 
 .cta-row.is-muted {
@@ -482,6 +528,22 @@ section {
   background: linear-gradient(#ffffff, #f5f5f2);
   box-shadow: inset 0 1px 0 #fff;
   text-align: center;
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    border-color var(--dur-ui) var(--ease-out),
+    box-shadow var(--dur-ui) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .browser:hover {
+    border-color: var(--line);
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 #fff, 0 2px 6px rgba(0, 0, 0, 0.08);
+  }
+}
+
+.browser:active {
+  transform: scale(0.98);
 }
 
 .browser .bi {
@@ -529,6 +591,23 @@ section {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .browser.is-you .you {
+    animation: you-in var(--dur-enter) var(--ease-out) both;
+  }
+}
+
+@keyframes you-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ---------- hero ---------- */
@@ -742,12 +821,19 @@ section {
   border-radius: 50%;
   background: linear-gradient(#ffffff, #dcdcd7);
   cursor: pointer;
-  transition: background 200ms ease, border-color 200ms ease;
+  transition:
+    background var(--dur-ui) var(--ease-out),
+    border-color var(--dur-ui) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
 }
 
 .dots button:hover {
   border-color: #7f7f7a;
   background: linear-gradient(#ffffff, #c4c4bf);
+}
+
+.dots button:active {
+  transform: scale(0.85);
 }
 
 .dots button[aria-current] {
@@ -1027,7 +1113,9 @@ body.is-lightbox-open .skip {
     inset 0 1px 0 #fff,
     0 1px 2px rgba(0, 0, 0, 0.08);
   overflow: hidden;
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  transition:
+    transform var(--dur-ui) var(--ease-out),
+    box-shadow var(--dur-ui) var(--ease-out);
 }
 
 /* only the Cover Flow card does anything on click */
@@ -1035,11 +1123,17 @@ body.is-lightbox-open .skip {
   cursor: pointer;
 }
 
-.feature:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    inset 0 1px 0 #fff,
-    0 6px 16px rgba(0, 0, 0, 0.12);
+@media (hover: hover) and (pointer: fine) {
+  .feature:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 1px 0 #fff,
+      0 6px 16px rgba(0, 0, 0, 0.12);
+  }
+}
+
+.feature:active {
+  transform: scale(0.99);
 }
 
 .feature h3 {
@@ -1522,6 +1616,7 @@ body.is-lightbox-open .skip {
   align-items: center;
   padding: 11px 14px;
   border-bottom: 1px solid var(--line-soft);
+  transition: background var(--dur-ui) var(--ease-out);
 }
 
 .where li:last-child {
@@ -1530,6 +1625,12 @@ body.is-lightbox-open .skip {
 
 .where li:nth-child(even) {
   background: #fafaf8;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .where li:hover {
+    background: var(--well-hi);
+  }
 }
 
 .where b {
@@ -1628,6 +1729,7 @@ body.is-lightbox-open .skip {
   font-weight: 700;
   cursor: pointer;
   list-style: none;
+  transition: background var(--dur-press) var(--ease-out);
 }
 
 .faq summary::-webkit-details-marker {
@@ -1642,7 +1744,7 @@ body.is-lightbox-open .skip {
   border-left: 6px solid #7a7a75;
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
-  transition: transform 160ms ease;
+  transition: transform var(--dur-ui) var(--ease-out);
 }
 
 .faq details[open] summary::before {
@@ -1653,11 +1755,55 @@ body.is-lightbox-open .skip {
   background: var(--well-hi);
 }
 
+.faq summary:active {
+  background: var(--well);
+}
+
 .faq p {
   margin: 0;
   padding: 0 16px 14px 31px;
   color: var(--mute);
   font-size: 12.5px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (interpolate-size: allow-keywords) {
+    html {
+      interpolate-size: allow-keywords;
+    }
+
+    .faq details::details-content {
+      height: 0;
+      opacity: 0;
+      overflow: clip;
+      transition:
+        height var(--dur-enter) var(--ease-out),
+        opacity var(--dur-ui) var(--ease-out),
+        content-visibility var(--dur-enter) allow-discrete;
+    }
+
+    .faq details[open]::details-content {
+      height: auto;
+      opacity: 1;
+    }
+  }
+
+  @supports not (interpolate-size: allow-keywords) {
+    .faq details[open] p {
+      animation: faq-answer-in var(--dur-enter) var(--ease-out) both;
+    }
+  }
+}
+
+@keyframes faq-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ---------- install ---------- */
@@ -1871,13 +2017,74 @@ footer.site {
 @media (prefers-reduced-motion: no-preference) {
   .reveal-ready .reveal {
     opacity: 0;
-    transform: translateY(14px);
-    transition: opacity 520ms ease, transform 520ms ease;
+    transform: translateY(12px);
+    transition:
+      opacity 480ms var(--ease-out),
+      transform 480ms var(--ease-out);
   }
 
   .reveal-ready .reveal.is-in {
     opacity: 1;
     transform: none;
+  }
+
+  /* Stagger cards inside revealed sections (marketing entrances only). */
+  .reveal-ready .features .feature,
+  .reveal-ready .browsers .browser,
+  .reveal-ready .where li {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  .reveal-ready .reveal.is-in .features .feature,
+  .reveal-ready .reveal.is-in .browsers .browser,
+  .reveal-ready .reveal.is-in .where li {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 400ms var(--ease-out),
+      transform 400ms var(--ease-out);
+  }
+
+  .reveal-ready .reveal.is-in .features .feature:nth-child(1),
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(1),
+  .reveal-ready .reveal.is-in .where li:nth-child(1) {
+    transition-delay: 40ms;
+  }
+  .reveal-ready .reveal.is-in .features .feature:nth-child(2),
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(2),
+  .reveal-ready .reveal.is-in .where li:nth-child(2) {
+    transition-delay: 80ms;
+  }
+  .reveal-ready .reveal.is-in .features .feature:nth-child(3),
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(3),
+  .reveal-ready .reveal.is-in .where li:nth-child(3) {
+    transition-delay: 120ms;
+  }
+  .reveal-ready .reveal.is-in .features .feature:nth-child(4),
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(4),
+  .reveal-ready .reveal.is-in .where li:nth-child(4) {
+    transition-delay: 160ms;
+  }
+  .reveal-ready .reveal.is-in .features .feature:nth-child(5),
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(5) {
+    transition-delay: 200ms;
+  }
+  .reveal-ready .reveal.is-in .features .feature:nth-child(6),
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(6) {
+    transition-delay: 240ms;
+  }
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(7) {
+    transition-delay: 280ms;
+  }
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(8) {
+    transition-delay: 320ms;
+  }
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(9) {
+    transition-delay: 360ms;
+  }
+  .reveal-ready .reveal.is-in .browsers .browser:nth-child(10) {
+    transition-delay: 400ms;
   }
 }
 
@@ -2135,11 +2342,20 @@ footer.site {
 
 @media (prefers-reduced-motion: reduce) {
   .btn,
+  .brand,
+  .tabs a,
   .cover,
   .feature,
+  .browser,
   .dots button,
-  .faq summary::before {
-    transition: none;
+  .faq summary,
+  .faq summary::before,
+  .where li,
+  .site-head,
+  .cta-row,
+  .detect {
+    transition: none !important;
+    animation: none !important;
   }
 
   /* The hover interactions are already gated on no-preference, but the deck
@@ -2151,5 +2367,9 @@ footer.site {
   .demo-themes i,
   .demo-lcd .lcd-bar i {
     transition: none;
+  }
+
+  .faq details::details-content {
+    transition: none !important;
   }
 }
