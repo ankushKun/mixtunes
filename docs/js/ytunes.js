@@ -106,6 +106,9 @@
         rows.forEach(function (row) {
           row.classList.add("is-muted");
         });
+        // Still personalise the CTAs (and drop the second store) so mobile
+        // matches desktop: one button for the browser they are actually on.
+        if (info.store) applyCtas(found, info, true);
         return;
       }
 
@@ -114,34 +117,9 @@
         return;
       }
 
+      applyCtas(found, info, false);
+
       var store = STORES[info.store];
-      var other = info.store === "chrome" ? STORES.firefox : STORES.chrome;
-      var otherIcon = info.store === "chrome" ? "firefox" : "chrome";
-      var otherName = info.store === "chrome" ? "Firefox" : "Chrome";
-
-      rows.forEach(function (row) {
-        var primary = row.querySelector("[data-cta-primary]");
-        var secondary = row.querySelector("[data-cta-secondary]");
-        if (primary) {
-          primary.href = store.url;
-          primary.querySelector("[data-cta-label]").textContent = "Add to " + info.name;
-          primary.querySelector("use").setAttribute("href", "#bi-" + info.icon);
-        }
-        if (secondary) {
-          // The hero drops to a single button; the install section keeps the
-          // other store on offer for people setting up a second browser.
-          if (row.dataset.cta === "hero") {
-            secondary.hidden = true;
-            return;
-          }
-          secondary.href = other.url;
-          secondary.querySelector("[data-cta-label]").textContent = "Add to " + otherName;
-          secondary.querySelector("use").setAttribute("href", "#bi-" + otherIcon);
-          secondary.classList.remove("btn-aqua");
-          secondary.classList.add("btn-graphite");
-        }
-      });
-
       var seen = info.name + (info.showVersion && found.version ? " " + found.version : "");
       if (found.version && found.version < MIN) {
         say(
@@ -163,6 +141,37 @@
         );
       }
 
+    }
+
+    function applyCtas(found, info, mobileOnlyPrimary) {
+      var store = STORES[info.store];
+      var other = info.store === "chrome" ? STORES.firefox : STORES.chrome;
+      var otherIcon = info.store === "chrome" ? "firefox" : "chrome";
+      var otherName = info.store === "chrome" ? "Firefox" : "Chrome";
+
+      rows.forEach(function (row) {
+        var primary = row.querySelector("[data-cta-primary]");
+        var secondary = row.querySelector("[data-cta-secondary]");
+        if (primary) {
+          primary.href = store.url;
+          primary.querySelector("[data-cta-label]").textContent = "Add to " + info.name;
+          primary.querySelector("use").setAttribute("href", "#bi-" + info.icon);
+        }
+        if (secondary) {
+          // Hero is always a single button. On mobile, hide the second store
+          // everywhere — install is pointless on a phone either way.
+          if (mobileOnlyPrimary || row.dataset.cta === "hero") {
+            secondary.hidden = true;
+            return;
+          }
+          secondary.hidden = false;
+          secondary.href = other.url;
+          secondary.querySelector("[data-cta-label]").textContent = "Add to " + otherName;
+          secondary.querySelector("use").setAttribute("href", "#bi-" + otherIcon);
+          secondary.classList.remove("btn-aqua");
+          secondary.classList.add("btn-graphite");
+        }
+      });
     }
 
     function trackCta(anchor, placement) {

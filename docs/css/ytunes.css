@@ -1517,7 +1517,7 @@ body.is-lightbox-open .skip {
 
 .where li {
   display: grid;
-  grid-template-columns: 28px 8.5rem 1fr auto;
+  grid-template-columns: 28px 8.5rem minmax(0, 1fr) auto;
   gap: 0 12px;
   align-items: center;
   padding: 11px 14px;
@@ -2025,20 +2025,39 @@ footer.site {
     width: 74px;
   }
 
-  /* the roadmap rows drop their middle column and stack the note */
+  /* Roadmap rows: icon + title + badge on row 1, note full-width under title. */
   .where li {
-    grid-template-columns: 26px 1fr auto;
-    gap: 2px 10px;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "mark title badge"
+      "mark note note";
+    column-gap: 10px;
+    row-gap: 3px;
+    align-items: center;
     padding: 10px 12px;
   }
 
+  .where .mark {
+    grid-area: mark;
+  }
+
   .where b {
+    grid-area: title;
     font-size: 12.5px;
+    min-width: 0;
   }
 
   .where-note {
-    grid-column: 2 / -1;
+    grid-area: note;
+    grid-column: unset;
+    min-width: 0;
     font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .where .badge {
+    grid-area: badge;
+    justify-self: end;
   }
 
   .browsers {
