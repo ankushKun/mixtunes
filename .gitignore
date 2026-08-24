@@ -5,3 +5,5 @@ tasks/
 *.crx
 *.xpi
 *.pem
+
+.agents/
