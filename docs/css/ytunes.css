@@ -451,6 +451,7 @@ section {
   background: var(--well-hi);
   box-shadow: inset 0 1px 0 #fff;
   text-align: left;
+  overflow: hidden;
 }
 
 .howto summary {
@@ -463,6 +464,7 @@ section {
   font-weight: 700;
   cursor: pointer;
   list-style: none;
+  transition: background var(--dur-press) var(--ease-out);
 }
 
 .howto summary::-webkit-details-marker {
@@ -477,14 +479,22 @@ section {
   border-left: 6px solid #7a7a75;
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
-  transition: transform 160ms ease;
+  transition: transform var(--dur-ui) var(--ease-out);
 }
 
 .howto[open] summary::before {
   transform: rotate(90deg);
 }
 
-.howto div {
+.howto summary:hover {
+  background: #f6f6f3;
+}
+
+.howto summary:active {
+  background: var(--well);
+}
+
+.howto div.fold-inner {
   padding: 0 14px 12px;
   border-top: 1px solid var(--line-soft);
 }
@@ -1766,43 +1776,29 @@ body.is-lightbox-open .skip {
   font-size: 12.5px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  @supports (interpolate-size: allow-keywords) {
-    html {
-      interpolate-size: allow-keywords;
-    }
-
-    .faq details::details-content {
-      height: 0;
-      opacity: 0;
-      overflow: clip;
-      transition:
-        height var(--dur-enter) var(--ease-out),
-        opacity var(--dur-ui) var(--ease-out),
-        content-visibility var(--dur-enter) allow-discrete;
-    }
-
-    .faq details[open]::details-content {
-      height: auto;
-      opacity: 1;
-    }
-  }
-
-  @supports not (interpolate-size: allow-keywords) {
-    .faq details[open] p {
-      animation: faq-answer-in var(--dur-enter) var(--ease-out) both;
-    }
-  }
+/* Cross-browser accordion fold (Firefox lacks interpolate-size / ::details-content). */
+.fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition:
+    grid-template-rows var(--dur-enter) var(--ease-out),
+    opacity var(--dur-ui) var(--ease-out);
+  opacity: 0;
 }
 
-@keyframes faq-answer-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+details[open] > .fold {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.fold-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fold {
+    transition: none;
   }
 }
 
@@ -2350,6 +2346,8 @@ footer.site {
   .dots button,
   .faq summary,
   .faq summary::before,
+  .howto summary,
+  .howto summary::before,
   .where li,
   .site-head,
   .cta-row,
@@ -2369,7 +2367,7 @@ footer.site {
     transition: none;
   }
 
-  .faq details::details-content {
+  .fold {
     transition: none !important;
   }
 }

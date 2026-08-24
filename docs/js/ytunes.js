@@ -872,6 +872,77 @@
     });
   })();
 
+  /* ---------- details fold (cross-browser height animation) ---------- */
+
+  (function detailsFold() {
+    var items = Array.prototype.slice.call(
+      document.querySelectorAll(".faq details, details.howto")
+    );
+    if (!items.length) return;
+
+    // Native <details> hides closed panels with display:none, so CSS alone
+    // cannot tween open/close in Firefox. Drive grid-template-rows in JS.
+    items.forEach(function (details) {
+      var summary = details.querySelector("summary");
+      var fold = details.querySelector(".fold");
+      if (!summary || !fold) return;
+
+      if (details.open) {
+        fold.style.gridTemplateRows = "1fr";
+        fold.style.opacity = "1";
+      }
+
+      if (reduceMotion.matches) return;
+
+      summary.addEventListener("click", function (event) {
+        event.preventDefault();
+        if (fold.dataset.busy === "1") return;
+        fold.dataset.busy = "1";
+
+        var closing = details.open;
+
+        function done() {
+          fold.removeEventListener("transitionend", onEnd);
+          fold.style.gridTemplateRows = "";
+          fold.style.opacity = "";
+          fold.dataset.busy = "";
+        }
+
+        function onEnd(event) {
+          if (event.target !== fold) return;
+          if (event.propertyName && event.propertyName !== "grid-template-rows") {
+            return;
+          }
+          if (closing) details.open = false;
+          done();
+        }
+
+        fold.addEventListener("transitionend", onEnd);
+        // Fallback if transitionend never fires (or reduced mid-flight).
+        setTimeout(function () {
+          if (fold.dataset.busy !== "1") return;
+          if (closing) details.open = false;
+          done();
+        }, 360);
+
+        if (closing) {
+          fold.style.gridTemplateRows = "1fr";
+          fold.style.opacity = "1";
+          void fold.offsetHeight;
+          fold.style.gridTemplateRows = "0fr";
+          fold.style.opacity = "0";
+        } else {
+          details.open = true;
+          fold.style.gridTemplateRows = "0fr";
+          fold.style.opacity = "0";
+          void fold.offsetHeight;
+          fold.style.gridTemplateRows = "1fr";
+          fold.style.opacity = "1";
+        }
+      });
+    });
+  })();
+
   /* ---------- scroll-spy tabs ---------- */
 
   (function scrollSpy() {
