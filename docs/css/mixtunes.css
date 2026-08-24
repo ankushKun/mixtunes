@@ -1,4 +1,4 @@
-/* yTunes site, a 2006 apple.com x iTunes 7 revival.
+/* Mixtunes site, a 2006 apple.com x iTunes 7 revival.
    Pinstripe desk, fixed white page column, brushed-metal chrome,
    Lucida Grande small type, aqua gloss buttons, black Cover Flow stage. */
 
@@ -209,64 +209,153 @@ section {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 
+/* GitHub corner (tholman/github-corners, MIT). Right on narrow screens so it
+   stays off the brand; left on wide layouts where it sits in the desk margin. */
+.github-corner {
+  display: block;
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: auto;
+  z-index: 200;
+  line-height: 0;
+  /* Ribbon fill via currentColor; keep it off the global a:hover link blue. */
+  color: #fff;
+  transition: color var(--dur-ui) var(--ease-out);
+}
+
+.github-corner:hover,
+.github-corner:focus-visible {
+  color: var(--blue-hi);
+}
+
+.github-corner svg {
+  width: 64px;
+  height: 64px;
+  fill: #222;
+  /* Path is left-corner shaped; flip for the top-right placement. */
+  transform: scaleX(-1);
+}
+
+.github-corner .octo-bg {
+  fill: currentColor;
+}
+
+.github-corner:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.github-corner:hover .octo-arm,
+.github-corner:focus-visible .octo-arm {
+  animation: octocat-wave 560ms ease-in-out;
+}
+
+@keyframes octocat-wave {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20%,
+  60% {
+    transform: rotate(25deg);
+  }
+  40%,
+  80% {
+    transform: rotate(-10deg);
+  }
+}
+
+@media (min-width: 1100px) {
+  .github-corner {
+    right: auto;
+    left: 0;
+  }
+
+  .github-corner svg {
+    width: 72px;
+    height: 72px;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .github-corner:hover .octo-arm,
+  .github-corner:focus-visible .octo-arm {
+    animation: none;
+  }
+}
+
 .tabs {
-  display: flex;
-  gap: 5px;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  margin-left: auto;
+  border: 1px solid #8e8e8e;
+  border-radius: 5px;
+  background: linear-gradient(#ececec, #d4d4d4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  overflow: hidden;
 }
 
 .tabs a {
+  position: relative;
   padding: 4px 11px 5px;
-  border: 1px solid #9a9a9a;
-  border-radius: 999px;
-  background: linear-gradient(#fdfdfd, #d6d6d6);
-  box-shadow: inset 0 1px 0 #fff;
-  color: #333;
-  font-size: 11.5px;
-  font-weight: 700;
+  border: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #3a3a3a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
   text-decoration: none;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
   transition:
     background var(--dur-press) var(--ease-out),
-    border-color var(--dur-press) var(--ease-out),
     color var(--dur-press) var(--ease-out),
-    transform var(--dur-press) var(--ease-out),
-    box-shadow var(--dur-press) var(--ease-out);
+    box-shadow var(--dur-press) var(--ease-out),
+    text-shadow var(--dur-press) var(--ease-out);
+}
+
+.tabs a:last-child {
+  border-right: 0;
 }
 
 .tabs a:hover {
-  border-color: #7f7f7f;
-  background: linear-gradient(#ffffff, #e2e2e2);
-  color: #111;
+  background: rgba(255, 255, 255, 0.28);
+  color: #1a1a1a;
 }
 
 .tabs a:active {
-  transform: scale(0.97);
+  background: rgba(0, 0, 0, 0.06);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.12);
+}
+
+.tabs a:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
 }
 
 .tabs a.is-active {
-  border-color: #2f6d9e;
-  background: linear-gradient(#a9d3f4, #4f97d4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  border-right-color: rgba(47, 109, 158, 0.35);
+  background: linear-gradient(#9ec8e8, #6a9fc9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
   color: #fff;
-  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.18);
 }
 
-.head-links {
-  display: flex;
-  gap: 14px;
-  margin-left: auto;
+.tabs a.is-active:hover {
+  background: linear-gradient(#a8d0ec, #75a8cf);
+  color: #fff;
 }
 
-.head-links a {
-  color: #444;
-  font-size: 11.5px;
-  text-decoration: none;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.head-links a:hover {
-  color: var(--link);
-  text-decoration: underline;
+.tabs a.is-active:active {
+  background: linear-gradient(#7aafd4, #5a8fb8);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 
 /* ---------- buttons ---------- */
@@ -297,6 +386,45 @@ section {
 
 .btn:active {
   transform: translateY(1px) scale(0.97);
+}
+
+.btn.is-soon,
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.72;
+  filter: grayscale(0.15);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 1px 1px rgba(0, 0, 0, 0.16);
+}
+
+.btn.is-soon:active,
+.btn:disabled:active,
+.btn[aria-disabled="true"]:active {
+  transform: none;
+}
+
+.btn-aqua.is-soon,
+.btn-aqua:disabled,
+.btn-aqua[aria-disabled="true"] {
+  border-color: #6a8fad;
+  background: linear-gradient(#9ec0dc 0%, #6a98c0 48%, #4f7fa8 52%, #5686ae 100%);
+}
+
+.btn-aqua.is-soon::before,
+.btn-aqua:disabled::before,
+.btn-aqua[aria-disabled="true"]::before {
+  opacity: 0.45;
+}
+
+.btn-graphite.is-soon,
+.btn-graphite:disabled,
+.btn-graphite[aria-disabled="true"] {
+  border-color: #9a9a9a;
+  background: linear-gradient(#ececec, #c8c8c8);
+  color: #555;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .btn-aqua {
@@ -444,7 +572,7 @@ section {
 /* ---------- collapsible manual instructions ---------- */
 
 .howto {
-  max-width: 38rem;
+  max-width: 46rem;
   margin: 0 auto 20px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -499,10 +627,59 @@ section {
   border-top: 1px solid var(--line-soft);
 }
 
-.howto p {
-  margin: 10px 0 0;
+.howto-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-top: 12px;
+}
+
+.howto-col {
+  min-width: 0;
+  padding: 0 14px 2px 0;
+}
+
+.howto-col + .howto-col {
+  padding: 0 0 2px 14px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.howto-col h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 3px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.howto-col h3 .bi {
+  width: 16px;
+  height: 16px;
+}
+
+.howto-scope {
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 10.5px;
+}
+
+.howto-col p {
+  margin: 0 0 8px;
   color: var(--mute);
   font-size: 12px;
+}
+
+.howto-col ol {
+  margin: 0;
+  padding-left: 1.15em;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.howto-col li + li {
+  margin-top: 4px;
 }
 
 /* ---------- works-with table ---------- */
@@ -632,7 +809,7 @@ section {
 }
 
 .hero h1 {
-  max-width: 20ch;
+  max-width: 24ch;
   margin: 0 auto 12px;
   font-size: clamp(30px, 5.6vw, 46px);
   font-weight: 700;
@@ -2008,7 +2185,7 @@ footer.site {
 
 /* ---------- reveal on scroll ---------- */
 
-/* Hiding is gated on .reveal-ready, which ytunes.js sets itself. If the
+/* Hiding is gated on .reveal-ready, which mixtunes.js sets itself. If the
    script never loads, nothing is ever hidden. */
 @media (prefers-reduced-motion: no-preference) {
   .reveal-ready .reveal {
@@ -2104,6 +2281,12 @@ footer.site {
   }
 }
 
+@media (max-width: 1099px) {
+  .site-head {
+    padding-right: 56px;
+  }
+}
+
 @media (max-width: 680px) {
   :root {
     --pad: 18px;
@@ -2118,25 +2301,26 @@ footer.site {
   }
 
   .site-head {
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    padding: 9px 14px;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 14px 10px;
   }
 
   .tabs {
-    order: 3;
-    width: 100%;
+    order: unset;
+    margin-left: 0;
+    width: max-content;
+    max-width: 100%;
     overflow-x: auto;
-    padding-bottom: 3px;
+    padding-bottom: 0;
     scrollbar-width: none;
   }
 
   .tabs::-webkit-scrollbar {
     display: none;
-  }
-
-  .tabs a {
-    white-space: nowrap;
   }
 
   .hero {
@@ -2328,11 +2512,21 @@ footer.site {
   .cta-row .btn {
     width: 100%;
   }
-}
 
-@media (max-width: 420px) {
-  .head-links a:not(:last-child) {
-    display: none;
+  .howto-cols {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .howto-col,
+  .howto-col + .howto-col {
+    padding: 0 0 2px;
+    border-left: 0;
+  }
+
+  .howto-col + .howto-col {
+    padding-top: 12px;
+    border-top: 1px solid var(--line-soft);
   }
 }
 

@@ -5,7 +5,7 @@
  * tests/hosts-config.test.js fails if these copies drift.
  */
 const HOST_ORIGINS = ["https://music.youtube.com"];
-const OFF_HOST_TITLE = "yTunes only works on a supported music site";
+const OFF_HOST_TITLE = "Mixtunes only works on a supported music site";
 
 function hostOwnsUrl(url) {
   if (!url) return false;
@@ -19,7 +19,7 @@ function hostOwnsUrl(url) {
 function syncAction(tabId, url) {
   chrome.action.setTitle({
     tabId,
-    title: hostOwnsUrl(url) ? "yTunes" : OFF_HOST_TITLE,
+    title: hostOwnsUrl(url) ? "Mixtunes" : OFF_HOST_TITLE,
   });
 }
 

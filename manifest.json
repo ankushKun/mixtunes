@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "yTunes",
+  "name": "Mixtunes",
   "version": "0.1.0",
-  "description": "Classic music library overlay for YouTube Music",
-  "homepage_url": "https://ankush.one/ytunes/",
+  "description": "Classic music-library theme for streaming sites",
+  "homepage_url": "https://ankush.one/mixtunes/",
   "minimum_chrome_version": "121",
   "browser_specific_settings": {
     "gecko": {
-      "id": "ytunes@ankush.one",
+      "id": "mixtunes@ankush.one",
       "strict_min_version": "121.0",
       "data_collection_permissions": {
         "required": ["none"]
@@ -21,7 +21,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "yTunes",
+    "default_title": "Mixtunes",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",

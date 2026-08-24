@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://ankush.one/ytunes/</loc>
-    <lastmod>2026-08-24</lastmod>
+    <loc>https://ankush.one/mixtunes/</loc>
+    <lastmod>2026-08-25</lastmod>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://ankush.one/ytunes/privacy.html</loc>
-    <lastmod>2026-08-24</lastmod>
+    <loc>https://ankush.one/mixtunes/privacy.html</loc>
+    <lastmod>2026-08-25</lastmod>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://ankush.one/ytunes/terms.html</loc>
-    <lastmod>2026-08-24</lastmod>
+    <loc>https://ankush.one/mixtunes/terms.html</loc>
+    <lastmod>2026-08-25</lastmod>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://ankush.one/ytunes/llms.txt</loc>
-    <lastmod>2026-08-24</lastmod>
+    <loc>https://ankush.one/mixtunes/llms.txt</loc>
+    <lastmod>2026-08-25</lastmod>
     <priority>0.3</priority>
   </url>
 </urlset>

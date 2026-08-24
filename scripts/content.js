@@ -169,7 +169,7 @@ function injectBootFail() {
       <header class="ytunes-top">
         <div class="ytunes-lcd">
           <div class="ytunes-lcd-meta">
-            <div id="ytunes-lcd-title">yTunes</div>
+            <div id="ytunes-lcd-title">Mixtunes</div>
             <div id="ytunes-lcd-sub"></div>
           </div>
         </div>
@@ -265,8 +265,8 @@ function placeLaunchButton() {
   const button = document.createElement("button");
   button.id = LAUNCH_ID;
   button.type = "button";
-  button.title = "Open yTunes";
-  button.setAttribute("aria-label", "Open yTunes");
+  button.title = "Open Mixtunes";
+  button.setAttribute("aria-label", "Open Mixtunes");
   button.innerHTML =
     '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
   bindLaunchButton(button);

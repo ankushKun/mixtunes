@@ -310,7 +310,7 @@ function testNowPlayingAcceptsCanonicalId() {
     prefs.sanitizeNowPlaying({ id: "abc", title: "Song" }).videoId,
     "abc"
   );
-  assert.strictEqual(prefs.sanitizeNowPlaying({ title: "yTunes" }), null);
+  assert.strictEqual(prefs.sanitizeNowPlaying({ title: "Mixtunes" }), null);
   assert.strictEqual(prefs.sanitizeNowPlaying(null), null);
 }
 

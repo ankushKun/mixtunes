@@ -53,8 +53,8 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          cp build/chromium.zip "build/yTunes-${TAG}-chrome.zip"
-          cp build/firefox.zip "build/yTunes-${TAG}-firefox.zip"
+          cp build/chromium.zip "build/Mixtunes-${TAG}-chrome.zip"
+          cp build/firefox.zip "build/Mixtunes-${TAG}-firefox.zip"
           ls -la build/*.zip
 
       - name: Upload zips to the GitHub release
@@ -63,6 +63,6 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           gh release upload "$TAG" \
-            "build/yTunes-${TAG}-chrome.zip" \
-            "build/yTunes-${TAG}-firefox.zip" \
+            "build/Mixtunes-${TAG}-chrome.zip" \
+            "build/Mixtunes-${TAG}-firefox.zip" \
             --clobber

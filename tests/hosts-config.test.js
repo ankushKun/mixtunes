@@ -186,7 +186,7 @@ function testManifestStoreReady() {
     );
   }
   const docs = path.join(__dirname, "..", "docs");
-  for (const file of ["index.html", "privacy.html", "css/ytunes.css", "js/ytunes.js"]) {
+  for (const file of ["index.html", "privacy.html", "css/mixtunes.css", "js/mixtunes.js"]) {
     assert.ok(fs.existsSync(path.join(docs, file)), `missing docs site file: ${file}`);
   }
 }

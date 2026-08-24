@@ -3,8 +3,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Website
-    url: https://ankush.one/ytunes/
+    url: https://ankush.one/mixtunes/
     about: Product page, screenshots, and install links
   - name: Privacy policy
-    url: https://ankush.one/ytunes/privacy.html
+    url: https://ankush.one/mixtunes/privacy.html
     about: Extension vs marketing-site data practices

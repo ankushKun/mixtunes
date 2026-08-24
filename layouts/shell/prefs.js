@@ -34,7 +34,7 @@ function sanitizeNowPlaying(value) {
   const title = String(value.title || "").trim();
   const videoId = String(value.id || value.videoId || "").trim();
   if (!title && !videoId) return null;
-  if (title === "yTunes") return null;
+  if (title === "Mixtunes") return null;
   return {
     videoId,
     title,

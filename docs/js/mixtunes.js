@@ -1,11 +1,48 @@
-/* yTunes site behaviour: browser detection for the install buttons, the
-   screenshot Cover Flow, sticky-header shadow, scroll-spy tabs, and
-   reveal-on-scroll. All progressive: with this file absent the page still
-   offers both stores and a manual download. */
+/* Mixtunes site behaviour: browser detection for the install buttons, the
+   screenshot Cover Flow, sticky-header shadow, scroll-spy tabs,
+   reveal-on-scroll, and latest release zip links. All progressive: with this
+   file absent the page still shows In review CTAs and a manual download. */
 (function () {
   "use strict";
 
   var reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+  /* ---------- latest GitHub release zip links ---------- */
+
+  (function latestReleaseZips() {
+    var links = Array.prototype.slice.call(
+      document.querySelectorAll("[data-release-zip]")
+    );
+    if (!links.length) return;
+
+    var REPO = "ankushKun/mixtunes";
+
+    fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
+      .then(function (res) {
+        if (!res.ok) throw new Error("release fetch failed");
+        return res.json();
+      })
+      .then(function (data) {
+        var assets = data.assets || [];
+
+        function urlFor(kind) {
+          var suffix = "-" + kind + ".zip";
+          for (var i = 0; i < assets.length; i++) {
+            var name = assets[i].name || "";
+            if (name.endsWith(suffix)) return assets[i].browser_download_url;
+          }
+          return null;
+        }
+
+        links.forEach(function (el) {
+          var url = urlFor(el.getAttribute("data-release-zip"));
+          if (url) el.href = url;
+        });
+      })
+      .catch(function () {
+        /* keep the releases-page fallback on the anchors */
+      });
+  })();
 
   /* ---------- which browser is this, and what should they get ---------- */
 
@@ -14,20 +51,66 @@
     if (!rows.length) return;
 
     var STORES = {
-      // Replace these with the live listing URLs once Chrome / AMO publish.
+      // Flip ready to true and paste the live listing URL when each store ships.
       chrome: {
         name: "Chrome",
         phrase: "the Chrome Web Store",
-        url: "https://chromewebstore.google.com"
+        url: "",
+        ready: false
       },
       firefox: {
         name: "Firefox",
         phrase: "Firefox Add-ons",
-        url: "https://addons.mozilla.org"
+        url: "",
+        ready: false
       }
     };
 
-    // min is the *engine* version yTunes needs (manifest: Chrome/Firefox 121+),
+    function storeReady(store) {
+      return Boolean(store && store.ready && store.url);
+    }
+
+    function setCtaSoon(el) {
+      if (!el) return;
+      el.classList.add("is-soon");
+      el.setAttribute("aria-disabled", "true");
+      el.removeAttribute("href");
+      el.removeAttribute("target");
+      el.removeAttribute("rel");
+      if (el.tagName === "A") el.tabIndex = -1;
+      else el.disabled = true;
+      var label = el.querySelector("[data-cta-label]");
+      if (label) label.textContent = "In review";
+      if (el._mixtunesOpen) {
+        el.removeEventListener("click", el._mixtunesOpen);
+        el._mixtunesOpen = null;
+      }
+    }
+
+    function setCtaLive(el, url, labelText, iconSlug) {
+      if (!el) return;
+      el.classList.remove("is-soon");
+      el.removeAttribute("aria-disabled");
+      var label = el.querySelector("[data-cta-label]");
+      if (label) label.textContent = labelText;
+      var use = el.querySelector("use");
+      if (use && iconSlug) use.setAttribute("href", "#bi-" + iconSlug);
+      if (el.tagName === "A") {
+        el.href = url;
+        el.target = "_blank";
+        el.rel = "noopener noreferrer";
+        el.removeAttribute("tabindex");
+      } else {
+        el.disabled = false;
+        if (el._mixtunesOpen) el.removeEventListener("click", el._mixtunesOpen);
+        el._mixtunesOpen = function () {
+          window.open(url, "_blank", "noopener,noreferrer");
+        };
+        el.addEventListener("click", el._mixtunesOpen);
+      }
+    }
+
+    // min is the *engine* version Mixtunes needs (manifest: Chrome/Firefox 121+),
     // which for a fork is its underlying Chromium, not its own version number.
     var BROWSERS = {
       chrome: { name: "Chrome", icon: "chrome", store: "chrome", showVersion: true },
@@ -120,24 +203,23 @@
       applyCtas(found, info, false);
 
       var store = STORES[info.store];
-      var seen = info.name + (info.showVersion && found.version ? " " + found.version : "");
-      if (found.version && found.version < MIN) {
+      var tooOld = found.version && found.version < MIN;
+      if (tooOld) {
+        var seen = info.name + (info.showVersion ? " " + found.version : "");
         say(
           iconFor(info.icon),
-          "You have <b>" + seen + "</b>. yTunes needs " + store.name + " " + MIN +
+          "You have <b>" + seen + "</b>. Mixtunes needs " + store.name + " " + MIN +
             " or newer, so update your browser first."
         );
-      } else if (info.fork) {
-        // Explain why a fork is being sent to Chrome's store.
+      } else if (!storeReady(store)) {
         say(
           iconFor(info.icon),
-          "You are using <b>" + seen + "</b>. The button above goes to " +
-            store.phrase + ". " + info.name + " can install from there."
+          "Store listings are in review - use the manual setup below for now."
         );
       } else {
         say(
           iconFor(info.icon),
-          "You are using <b>" + seen + "</b>. The button above goes to " + store.phrase + "."
+          "The button above goes to " + store.phrase + "."
         );
       }
 
@@ -148,14 +230,20 @@
       var other = info.store === "chrome" ? STORES.firefox : STORES.chrome;
       var otherIcon = info.store === "chrome" ? "firefox" : "chrome";
       var otherName = info.store === "chrome" ? "Firefox" : "Chrome";
+      var primaryReady = storeReady(store);
+      var secondaryReady = storeReady(other);
 
       rows.forEach(function (row) {
         var primary = row.querySelector("[data-cta-primary]");
         var secondary = row.querySelector("[data-cta-secondary]");
         if (primary) {
-          primary.href = store.url;
-          primary.querySelector("[data-cta-label]").textContent = "Add to " + info.name;
-          primary.querySelector("use").setAttribute("href", "#bi-" + info.icon);
+          if (primaryReady) {
+            setCtaLive(primary, store.url, "Add to " + info.name, info.icon);
+          } else {
+            setCtaSoon(primary);
+            var use = primary.querySelector("use");
+            if (use) use.setAttribute("href", "#bi-" + info.icon);
+          }
         }
         if (secondary) {
           // Hero is always a single button. On mobile, hide the second store
@@ -165,11 +253,15 @@
             return;
           }
           secondary.hidden = false;
-          secondary.href = other.url;
-          secondary.querySelector("[data-cta-label]").textContent = "Add to " + otherName;
-          secondary.querySelector("use").setAttribute("href", "#bi-" + otherIcon);
-          secondary.classList.remove("btn-aqua");
-          secondary.classList.add("btn-graphite");
+          if (secondaryReady) {
+            setCtaLive(secondary, other.url, "Add to " + otherName, otherIcon);
+            secondary.classList.remove("btn-aqua");
+            secondary.classList.add("btn-graphite");
+          } else {
+            setCtaSoon(secondary);
+            var otherUse = secondary.querySelector("use");
+            if (otherUse) otherUse.setAttribute("href", "#bi-" + otherIcon);
+          }
         }
       });
     }
@@ -178,16 +270,21 @@
       if (!anchor || anchor.dataset.analyticsBound) return;
       anchor.dataset.analyticsBound = "1";
       anchor.addEventListener("click", function () {
+        if (anchor.disabled || anchor.classList.contains("is-soon") ||
+            anchor.getAttribute("aria-disabled") === "true") {
+          return;
+        }
         var labelEl = anchor.querySelector("[data-cta-label]");
         var label = (labelEl && labelEl.textContent) || anchor.textContent || "";
-        if (window.yTunesAnalytics && window.yTunesAnalytics.capture) {
-          window.yTunesAnalytics.capture("install_cta_clicked", {
+        var href = anchor.href || "";
+        if (window.MixtunesAnalytics && window.MixtunesAnalytics.capture) {
+          window.MixtunesAnalytics.capture("install_cta_clicked", {
             placement: placement || "unknown",
             label: label.trim(),
-            href: anchor.href || "",
-            store: /firefox|addons\.mozilla/i.test(anchor.href || "")
+            href: href,
+            store: /firefox|addons\.mozilla/i.test(href)
               ? "firefox"
-              : /chrome|webstore/i.test(anchor.href || "")
+              : /chrome|webstore/i.test(href)
                 ? "chrome"
                 : "other"
           });

@@ -1,5 +1,5 @@
 /**
- * Cover Flow posing — adapted from ankushKun.github.io music-player.js.
+ * Cover Flow posing - adapted from ankushKun.github.io music-player.js.
  * Geometry: CF_WINDOW 6, angle 56°, depth/gap/spacing scale with cover size, 400ms ease.
  * Cover box is taller than the square so the flipped reflection sits inside the 3D plane.
  */
@@ -115,7 +115,7 @@ function coverCaptionParts(item, track) {
     const bits = [];
     if (album && album !== song) bits.push(album);
     if (artist && artist !== album && artist !== song) bits.push(artist);
-    return { title: song, sub: bits.join(" — ") };
+    return { title: song, sub: bits.join(" - ") };
   }
 
   const title = coverTitle || album;

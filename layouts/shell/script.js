@@ -204,8 +204,8 @@ function formatLcdSub(status, track) {
   const artist = (same && track.artist) || status?.artist || status?.author || track?.artist || "";
   const album = (same && track.album) || status?.album || track?.album || "";
   const year = (same && track.year) || status?.year || track?.year || "";
-  if (artist && album && year) return `${artist} — ${album} (${year})`;
-  if (artist && album) return `${artist} — ${album}`;
+  if (artist && album && year) return `${artist} - ${album} (${year})`;
+  if (artist && album) return `${artist} - ${album}`;
   if (artist && year) return `${artist} (${year})`;
   if (artist) return artist;
   return status?.subtitle || MusicHost.strings.lcdIdle;
@@ -421,7 +421,7 @@ function markPlayingSource(root, state) {
 
 /**
  * Status-bar affordance shown when the playing track is not in the visible
- * list — clicking jumps to Now Playing instead of silently doing nothing.
+ * list - clicking jumps to Now Playing instead of silently doing nothing.
  */
 function syncNowJump(root, state, status) {
   const btn = root.querySelector("#ytunes-now-jump");
@@ -526,7 +526,7 @@ function orderedSessionTracks(session) {
   if (!session?.shuffle) return tracks;
   const order = session.order;
   // An order that no longer matches the roster is meaningless; never re-roll
-  // here — re-rolling desyncs the shown order from the playback order.
+  // here - re-rolling desyncs the shown order from the playback order.
   if (!order || order.length !== tracks.length) return tracks;
   return order.map((index) => tracks[index]).filter(Boolean);
 }
@@ -540,7 +540,7 @@ async function playStateTrack(state, track, extras = {}) {
   if (!track) return;
   const cover = extras.cover || coverForTrack(state, track);
   // In Now Playing covers group by album, so a cover's tracks are an album
-  // subset — never let that replace the live queue as the play context.
+  // subset - never let that replace the live queue as the play context.
   const sessionTracks =
     extras.tracks ||
     (state.source !== "now" && cover?.tracks?.length > 1
@@ -648,7 +648,7 @@ function skipRoster(state, status) {
 
 /**
  * Hand the host the roster the overlay wants advanced. How it reaches the real
- * player — datasets, an SDK queue, nothing at all — is the host's business.
+ * player - datasets, an SDK queue, nothing at all - is the host's business.
  */
 function syncSkipRoster(root, state, status) {
   const { tracks, playlistId, ownList, handedOff } = skipRoster(state, status);
@@ -931,7 +931,7 @@ function renderSidebarWell(root, status, state) {
 function isIdleStatus(status) {
   if (status?.playing) return false;
   const title = String(status?.title || "").trim();
-  const realTitle = Boolean(title && title !== "yTunes" && !MusicHost.isIdleTitle(title));
+  const realTitle = Boolean(title && title !== "Mixtunes" && !MusicHost.isIdleTitle(title));
   if (status?.trackId && realTitle) return false;
   if (status?.trackId && (status.artwork || status.cover)) return false;
   if (realTitle && (status?.artist || status?.subtitle || status?.artwork || status?.cover)) {
@@ -961,7 +961,7 @@ function trackFromNowPlaying(info) {
   const title = String(info.title || "").trim();
   const videoId = String(info.videoId || "").trim();
   if (!title && !videoId) return null;
-  if (!videoId && (title === "yTunes" || MusicHost.isIdleTitle(title))) return null;
+  if (!videoId && (title === "Mixtunes" || MusicHost.isIdleTitle(title))) return null;
   return {
     id: videoId || "now",
     title: title || "Now Playing",
@@ -1268,7 +1268,7 @@ function renderPlayer(root, status, state) {
   }
 
   if (idle) {
-    setMarqueeText(title, "yTunes");
+    setMarqueeText(title, "Mixtunes");
     setMarqueeText(sub, MusicHost.strings.lcdIdle);
     if (!state.draggingSeek && seek) {
       seek.value = "0";
@@ -1279,7 +1279,7 @@ function renderPlayer(root, status, state) {
     setImg(root.querySelector("#ytunes-lcd-img"), "", "");
     markPlayingRows(root, "");
   } else {
-    const name = status?.title || "yTunes";
+    const name = status?.title || "Mixtunes";
     setMarqueeText(title, name);
     setMarqueeText(sub, formatLcdSub(status, findTrackByVideo(state, status?.trackId)));
 
@@ -2009,13 +2009,13 @@ function bindShell(root) {
       });
     });
     state.visibleTracks.forEach((track, index) => {
-      const label = `${track.title} — ${track.artist || ""}`;
+      const label = `${track.title} - ${track.artist || ""}`;
       if (q && !label.toLowerCase().includes(q)) return;
       items.push({ kind: "track", id: String(index), label });
     });
     if (state.source !== "now") {
       (state.nowTracks || []).forEach((track, index) => {
-        const label = `${track.title} — ${track.artist || ""}`;
+        const label = `${track.title} - ${track.artist || ""}`;
         if (q && !label.toLowerCase().includes(q)) return;
         items.push({ kind: "queue", id: String(index), label });
       });
@@ -2092,7 +2092,7 @@ function bindShell(root) {
       state.nowForceRefresh = false;
     }
     // Throttle, don't debounce: refreshUi polls every 200ms, and a debounce
-    // that resets on each poll never fires — which left Home/radio skips
+    // that resets on each poll never fires - which left Home/radio skips
     // without a live roster even while Now Playing looked full.
     if (state.nowTimer && !force) return;
     const videoId = status?.trackId || "";
@@ -2102,7 +2102,7 @@ function bindShell(root) {
       state.nowTimer = 0;
       try {
         // Overlay-owned roster: the session is the truth. Only paint when
-        // viewing Now Playing — but always keep nowTracks in sync for skips.
+        // viewing Now Playing - but always keep nowTracks in sync for skips.
         if (state.session?.source === "list" && state.session.tracks?.length) {
           const ordered = orderedSessionTracks(state.session);
           state.nowTracks = ordered;
@@ -2132,7 +2132,7 @@ function bindShell(root) {
         } else if (viewingNow) {
           queued = await MusicHost.playerQueue();
         } else {
-          // Not viewing Now Playing and nothing is playing — nothing to sync.
+          // Not viewing Now Playing and nothing is playing - nothing to sync.
           return;
         }
         let tracks = queued.tracks || [];
@@ -2145,8 +2145,8 @@ function bindShell(root) {
 
         const videoChanged = Boolean(videoId && videoId !== state.nowVideoId);
         const playable = playableSessionTracks(tracks);
-        // Always keep the skip roster's live snapshot fresh — even while
-        // browsing Home — so next/prev can fall back when native skip fails.
+        // Always keep the skip roster's live snapshot fresh - even while
+        // browsing Home - so next/prev can fall back when native skip fails.
         state.nowTracks = playable.length ? playable : tracks.filter(trackId);
         if (videoId) state.nowVideoId = videoId;
 

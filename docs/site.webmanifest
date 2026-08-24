@@ -1,0 +1,23 @@
+{
+  "name": "Mixtunes",
+  "short_name": "Mixtunes",
+  "description": "Classic iTunes-style theme for streaming music sites. Works on YouTube Music today.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "lang": "en-US",
+  "background_color": "#d9d9d9",
+  "theme_color": "#d9d9d9",
+  "icons": [
+    {
+      "src": "assets/icon-64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

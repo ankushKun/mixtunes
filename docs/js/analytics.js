@@ -1,4 +1,4 @@
-/* PostHog for the yTunes marketing site only (not the browser extension).
+/* PostHog for the Mixtunes marketing site only (not the browser extension).
    Uses the managed reverse proxy + EU UI host from project settings.
    Docs: https://posthog.com/docs/libraries/js
          https://posthog.com/docs/advanced/proxy */
@@ -77,7 +77,7 @@
     syncOptOutUi(window.posthog);
   });
 
-  window.yTunesAnalytics = {
+  window.MixtunesAnalytics = {
     capture: capture,
     syncOptOutUi: function () {
       syncOptOutUi(window.posthog);

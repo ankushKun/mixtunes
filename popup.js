@@ -78,7 +78,7 @@ function renderStatus(status) {
     return;
   }
 
-  const line = [status.title, status.subtitle].filter(Boolean).join(" — ");
+  const line = [status.title, status.subtitle].filter(Boolean).join(" - ");
   nowPlaying.textContent = line || activeHost?.strings.popupAlive || "Player is alive.";
   hostStatus.textContent = `${activeHost?.name || "Host"}: ${
     status.hasMoviePlayer ? "player ready" : "controls only"

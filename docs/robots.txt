@@ -2,6 +2,6 @@ User-agent: *
 Allow: /
 
 # Plain-language product context for answer engines and LLM crawlers
-# https://ankush.one/ytunes/llms.txt
+# https://ankush.one/mixtunes/llms.txt
 
-Sitemap: https://ankush.one/ytunes/sitemap.xml
+Sitemap: https://ankush.one/mixtunes/sitemap.xml

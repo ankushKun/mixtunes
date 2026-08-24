@@ -16,7 +16,7 @@
   root.YTunesHosts = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
-  const OFF_HOST_TITLE = "yTunes only works on a supported music site";
+  const OFF_HOST_TITLE = "Mixtunes only works on a supported music site";
 
   const HOSTS = [
     {
@@ -38,7 +38,7 @@
         overlayHint: "Turning the overlay off reloads YouTube Music.",
         /** Button that drops back to the untouched site. */
         originalLabel: "Original YouTube Music",
-        originalTitle: "Hide the yTunes overlay and reload YouTube Music",
+        originalTitle: "Hide the Mixtunes overlay and reload YouTube Music",
         /** Shown when the host player never appeared. */
         bootFail: "YouTube Music didn’t become ready",
         /** Section label for host-generated queue continuations (automix). */

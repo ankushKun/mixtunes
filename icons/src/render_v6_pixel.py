@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild final yTunes icons from the v6 EQ-Y 16px pixel master."""
+"""Rebuild final Mixtunes icons from the v6 EQ-Y 16px pixel master."""
 from pathlib import Path
 
 from PIL import Image
