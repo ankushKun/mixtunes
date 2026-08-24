@@ -34,7 +34,14 @@ Works on **Chrome 121+**, **Firefox 142+**, and Chromium-based browsers (Edge, B
 3. **Firefox**  
    Open `about:debugging` → **This Firefox** → **Load Temporary Add-on** → select the zip file (do not unzip). Temporary add-ons are cleared when Firefox quits until a signed AMO build is available.
 
-Publishing a GitHub Release (tag like `v0.1.0`) runs CI that packs both zips and attaches them automatically.
+Publishing a GitHub Release (tag like `v0.1.0`) runs CI that packs both zips and attaches them automatically. For a local version bump that keeps every file aligned:
+
+```bash
+npm run bump -- patch    # or minor / major / 0.2.0
+npm run pack
+```
+
+That updates `package.json`, `package-lock.json`, `manifest.json`, and the site `softwareVersion` together. AMO and the Chrome Web Store read **`manifest.json`**, not `package.json`.
 
 Then open a supported player site while signed in - today that is [music.youtube.com](https://music.youtube.com).
 

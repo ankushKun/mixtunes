@@ -1,12 +1,14 @@
 {
   "name": "mixtunes",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "license": "GPL-3.0-only",
   "description": "Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music",
   "scripts": {
     "pack": "node pack.js",
-    "test": "node tests/playback-core.test.js && node tests/list-core.test.js && node tests/hosts-config.test.js && node tests/host-contract.test.js"
+    "test": "node tests/playback-core.test.js && node tests/list-core.test.js && node tests/hosts-config.test.js && node tests/host-contract.test.js",
+    "version": "node sync-version.js",
+    "bump": "npm version --no-git-tag-version"
   },
   "devDependencies": {
     "chrome-types": "0.1.436"

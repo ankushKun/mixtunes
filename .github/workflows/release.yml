@@ -36,16 +36,7 @@ jobs:
             exit 1
           fi
           export VERSION
-          node <<'NODE'
-          const fs = require("fs");
-          const version = process.env.VERSION;
-          for (const file of ["manifest.json", "package.json"]) {
-            const data = JSON.parse(fs.readFileSync(file, "utf8"));
-            data.version = version;
-            fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
-            console.log(`${file} version -> ${version}`);
-          }
-          NODE
+          node sync-version.js "$VERSION"
 
       - name: Pack Chrome and Firefox builds
         run: npm run pack

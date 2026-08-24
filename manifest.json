@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mixtunes",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music",
   "homepage_url": "https://ankush.one/mixtunes/",
   "minimum_chrome_version": "121",
@@ -10,7 +10,9 @@
       "id": "mixtunes@ankush.one",
       "strict_min_version": "142.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   },
@@ -30,23 +32,40 @@
       "128": "icons/icon-128.png"
     }
   },
-  "host_permissions": ["https://music.youtube.com/*"],
-  "permissions": ["storage"],
+  "host_permissions": [
+    "https://music.youtube.com/*"
+  ],
+  "permissions": [
+    "storage"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://music.youtube.com/*"],
-      "css": ["scripts/hosts/ytm/boot-hide.css"],
-      "js": ["scripts/hosts/ytm/boot.js"],
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
+      "css": [
+        "scripts/hosts/ytm/boot-hide.css"
+      ],
+      "js": [
+        "scripts/hosts/ytm/boot.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["https://music.youtube.com/*"],
-      "js": ["scripts/hosts/ytm/page-core.js", "scripts/hosts/ytm/page.js"],
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
+      "js": [
+        "scripts/hosts/ytm/page-core.js",
+        "scripts/hosts/ytm/page.js"
+      ],
       "run_at": "document_end",
       "world": "MAIN"
     },
     {
-      "matches": ["https://music.youtube.com/*"],
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
       "js": [
         "scripts/hosts-config.js",
         "scripts/playback-core.js",
@@ -75,7 +94,9 @@
         "scripts/hosts/ytm/hide.css",
         "scripts/hosts/ytm/boot-hide.css"
       ],
-      "matches": ["https://music.youtube.com/*"]
+      "matches": [
+        "https://music.youtube.com/*"
+      ]
     }
   ],
   "background": {

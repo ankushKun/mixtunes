@@ -17,6 +17,21 @@ const BUILD = path.join(ROOT, "build");
 const CHROMIUM_DIR = path.join(BUILD, "chromium");
 const FIREFOX_DIR = path.join(BUILD, "firefox");
 
+function assertVersionsAligned() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
+  if (pkg.version !== manifest.version) {
+    console.error(
+      `Version mismatch: package.json is ${pkg.version} but manifest.json is ${manifest.version}.\n` +
+        `AMO reads manifest.json. Run: npm run bump -- ${pkg.version}\n` +
+        `(or: node sync-version.js ${pkg.version})`
+    );
+    process.exit(1);
+  }
+}
+
+assertVersionsAligned();
+
 const IGNORE_TOP = new Set([
   ".git",
   ".github",
@@ -28,6 +43,7 @@ const IGNORE_TOP = new Set([
   "tasks",
   "tests",
   "pack.js",
+  "sync-version.js",
   "package.json",
   "package-lock.json",
   "jsconfig.json",

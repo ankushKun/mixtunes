@@ -177,6 +177,24 @@ function testManifestStoreReady() {
     manifest.description,
     "package.json description must match manifest"
   );
+  assert.strictEqual(
+    pkg.version,
+    manifest.version,
+    "package.json version must match manifest (AMO reads manifest.json)"
+  );
+  const docsIndex = fs.readFileSync(
+    path.join(__dirname, "..", "docs", "index.html"),
+    "utf8"
+  );
+  assert.ok(
+    docsIndex.includes(`"softwareVersion": "${manifest.version}"`),
+    "docs/index.html softwareVersion must match manifest"
+  );
+  assert.strictEqual(
+    require("../package-lock.json").version,
+    manifest.version,
+    "package-lock.json version must match manifest"
+  );
   assert.ok(
     !/itunes/i.test(manifest.name),
     "extension name must not use the iTunes trademark"
