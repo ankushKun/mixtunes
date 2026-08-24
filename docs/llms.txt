@@ -9,6 +9,7 @@
 - Releases / manual install: https://github.com/ankushKun/mixtunes/releases
 - Privacy: https://ankush.one/mixtunes/privacy.html
 - Terms: https://ankush.one/mixtunes/terms.html
+- Support: https://ankush.one/mixtunes/support.html
 
 ## What it does
 
