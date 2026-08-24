@@ -36,6 +36,8 @@ const IGNORE_TOP = new Set([
   ".gitmodules",
   "store",
   "docs",
+  "README.md",
+  "LICENSE",
 ]);
 
 function copyExtension(dest) {

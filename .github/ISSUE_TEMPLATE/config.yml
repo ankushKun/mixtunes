@@ -1,0 +1,10 @@
+# Keep this file so GitHub shows the funding / about affordances cleanly.
+# Prefer issues for bugs and ideas; no formal code of conduct file yet.
+blank_issues_enabled: true
+contact_links:
+  - name: Website
+    url: https://ankush.one/ytunes/
+    about: Product page, screenshots, and install links
+  - name: Privacy policy
+    url: https://ankush.one/ytunes/privacy.html
+    about: Extension vs marketing-site data practices
