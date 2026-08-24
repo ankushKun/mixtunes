@@ -3,32 +3,38 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>yTunes · an old-school look for YouTube Music</title>
+    <title>yTunes · old-school look for YouTube Music</title>
     <meta
       name="description"
-      content="yTunes changes how YouTube Music looks: playlists down the side, your songs in a sortable list, and album covers you can flip through. For Chrome and Firefox."
+      content="Free Chrome &amp; Firefox extension that gives YouTube Music an old iTunes-style library: Cover Flow, sidebar, and sortable song list. Settings stay on your device."
     />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Ankush Singh" />
     <link rel="canonical" href="https://ankush.one/ytunes/" />
+    <link rel="alternate" type="text/plain" title="LLM context" href="https://ankush.one/ytunes/llms.txt" />
 
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:site_name" content="yTunes" />
-    <meta property="og:title" content="yTunes · an old-school look for YouTube Music" />
+    <meta property="og:title" content="yTunes · old-school look for YouTube Music" />
     <meta
       property="og:description"
-      content="An old-school music player look for YouTube Music. Your settings stay on your computer."
+      content="Free Chrome &amp; Firefox extension that gives YouTube Music an old iTunes-style library: Cover Flow, sidebar, and sortable song list. Settings stay on your device."
     />
     <meta property="og:url" content="https://ankush.one/ytunes/" />
-    <meta property="og:image" content="https://ankush.one/ytunes/assets/shot-coverflow.jpg" />
-    <meta property="og:image:width" content="1440" />
-    <meta property="og:image:height" content="878" />
+    <meta property="og:image" content="https://ankush.one/ytunes/assets/og-cover.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="yTunes on YouTube Music: album covers flipping across the top and a song list below." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="yTunes · an old-school look for YouTube Music" />
+    <meta name="twitter:title" content="yTunes · old-school look for YouTube Music" />
     <meta
       name="twitter:description"
-      content="An old-school music player look for YouTube Music. Your settings stay on your computer."
+      content="Free Chrome &amp; Firefox extension that gives YouTube Music an old iTunes-style library: Cover Flow, sidebar, and sortable song list. Settings stay on your device."
     />
-    <meta name="twitter:image" content="https://ankush.one/ytunes/assets/shot-coverflow.jpg" />
+    <meta name="twitter:image" content="https://ankush.one/ytunes/assets/og-cover.jpg" />
+    <meta name="twitter:image:alt" content="yTunes on YouTube Music: album covers flipping across the top and a song list below." />
 
     <meta name="theme-color" content="#d9d9d9" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#08080a" media="(prefers-color-scheme: dark)" />
@@ -39,14 +45,121 @@
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "yTunes",
-        "applicationCategory": "BrowserApplication",
-        "operatingSystem": "Chrome 121+, Firefox 121+",
-        "description": "A browser add-on that changes how YouTube Music looks: playlists down the side, songs in a sortable list, and album covers you can flip through.",
-        "url": "https://ankush.one/ytunes/",
-        "image": "https://ankush.one/ytunes/assets/shot-coverflow.jpg",
-        "author": { "@type": "Person", "name": "Ankush Singh", "url": "https://ankush.one" }
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://ankush.one/ytunes/#webpage",
+            "url": "https://ankush.one/ytunes/",
+            "name": "yTunes · old-school look for YouTube Music",
+            "description": "Free Chrome and Firefox extension that gives YouTube Music an old iTunes-style library: Cover Flow, sidebar, and sortable song list. Settings stay on your device.",
+            "isPartOf": { "@id": "https://ankush.one/ytunes/#website" },
+            "about": { "@id": "https://ankush.one/ytunes/#app" },
+            "primaryImageOfPage": {
+              "@type": "ImageObject",
+              "url": "https://ankush.one/ytunes/assets/og-cover.jpg",
+              "width": 1200,
+              "height": 630
+            },
+            "inLanguage": "en-US"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://ankush.one/ytunes/#website",
+            "name": "yTunes",
+            "url": "https://ankush.one/ytunes/",
+            "publisher": { "@id": "https://ankush.one/ytunes/#author" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://ankush.one/ytunes/#app",
+            "name": "yTunes",
+            "applicationCategory": "BrowserApplication",
+            "operatingSystem": "Chrome 121+, Firefox 121+",
+            "softwareVersion": "0.1.0",
+            "isAccessibleForFree": true,
+            "description": "A free browser extension that overlays a classic music-library interface on YouTube Music: sidebar playlists, sortable song list, and Cover Flow. YouTube Music remains the player; preferences stay on your device.",
+            "url": "https://ankush.one/ytunes/",
+            "downloadUrl": "https://github.com/ankushKun/yTunes/releases",
+            "image": "https://ankush.one/ytunes/assets/og-cover.jpg",
+            "screenshot": [
+              "https://ankush.one/ytunes/assets/shot-coverflow.jpg",
+              "https://ankush.one/ytunes/assets/shot-liked.jpg",
+              "https://ankush.one/ytunes/assets/shot-grid-dark.jpg",
+              "https://ankush.one/ytunes/assets/shot-lyrics.jpg"
+            ],
+            "sameAs": ["https://github.com/ankushKun/yTunes"],
+            "author": { "@id": "https://ankush.one/ytunes/#author" },
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock",
+              "url": "https://ankush.one/ytunes/#install"
+            }
+          },
+          {
+            "@type": "Person",
+            "@id": "https://ankush.one/ytunes/#author",
+            "name": "Ankush Singh",
+            "url": "https://ankush.one",
+            "sameAs": ["https://github.com/ankushKun", "https://ankush.one"]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://ankush.one/ytunes/#faq",
+            "isPartOf": { "@id": "https://ankush.one/ytunes/#webpage" },
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Do I have to give it my password?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. There is no yTunes account, and you never type a password into it. It works inside the YouTube Music tab you are already signed in to."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does it play the music itself?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. YouTube Music plays everything, exactly as it does now. yTunes only changes what you see and passes your play, pause and skip clicks along."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do I need to pay for Premium?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Whatever your account can play now, it can play with yTunes. Nothing is unlocked or skipped, so ads and limits work just as they did before."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How do I get the normal site back?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Click the yTunes button in your browser toolbar and switch it off, or open its settings and press “Original YouTube Music”. The page reloads back to normal, and it stays that way until you turn it on again."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does it work on my phone?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Phone and tablet browsers cannot use add-ons like this one, so you need Chrome or Firefox on a desktop or laptop. Safari is not supported yet either."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is this made by Apple or Google?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. One person makes it, and it has nothing to do with either company. It does not use any of their pictures, logos or type."
+                }
+              }
+            ]
+          }
+        ]
       }
     </script>
   </head>
@@ -76,10 +189,10 @@
 
       <main id="main">
         <header class="hero">
-          <h1>Make YouTube Music look like <em>old iTunes</em></h1>
+          <h1>yTunes: Make YouTube Music look like <em>old iTunes</em></h1>
           <p class="lede">
-            yTunes is a theme for YouTube Music. Same account, same songs,
-            just a different look.
+            yTunes is a free browser extension for YouTube Music. Same account,
+            same songs — just a classic library look. Settings stay on your device.
           </p>
           <div class="get" data-get>
             <div class="cta-row" data-cta="hero">
@@ -98,7 +211,7 @@
           <ul class="trust">
             <li>Uses the account you already have</li>
             <li>Settings stay on your computer</li>
-            <li>Nothing is tracked</li>
+            <li>The extension does not track you</li>
           </ul>
         </header>
 
@@ -481,6 +594,7 @@
         </p>
       </footer>
     </div>
+    <script src="js/analytics.js"></script>
     <script src="js/ytunes.js"></script>
   </body>
 </html>

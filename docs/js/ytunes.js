@@ -14,6 +14,7 @@
     if (!rows.length) return;
 
     var STORES = {
+      // Replace these with the live listing URLs once Chrome / AMO publish.
       chrome: {
         name: "Chrome",
         phrase: "the Chrome Web Store",
@@ -163,6 +164,32 @@
       }
 
     }
+
+    function trackCta(anchor, placement) {
+      if (!anchor || anchor.dataset.analyticsBound) return;
+      anchor.dataset.analyticsBound = "1";
+      anchor.addEventListener("click", function () {
+        var labelEl = anchor.querySelector("[data-cta-label]");
+        var label = (labelEl && labelEl.textContent) || anchor.textContent || "";
+        if (window.yTunesAnalytics && window.yTunesAnalytics.capture) {
+          window.yTunesAnalytics.capture("install_cta_clicked", {
+            placement: placement || "unknown",
+            label: label.trim(),
+            href: anchor.href || "",
+            store: /firefox|addons\.mozilla/i.test(anchor.href || "")
+              ? "firefox"
+              : /chrome|webstore/i.test(anchor.href || "")
+                ? "chrome"
+                : "other"
+          });
+        }
+      });
+    }
+
+    document.querySelectorAll("[data-cta]").forEach(function (row) {
+      trackCta(row.querySelector("[data-cta-primary]"), row.dataset.cta);
+      trackCta(row.querySelector("[data-cta-secondary]"), row.dataset.cta);
+    });
 
     var found = detect();
 

@@ -6,20 +6,66 @@
     <title>Privacy policy · yTunes</title>
     <meta
       name="description"
-      content="yTunes privacy policy: local preferences only, your player stays in your tab, no developer servers, no analytics."
+      content="yTunes privacy: the extension keeps preferences on your device; the marketing site uses PostHog analytics with an opt-out."
     />
     <link rel="canonical" href="https://ankush.one/ytunes/privacy.html" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Ankush Singh" />
     <meta property="og:type" content="article" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:site_name" content="yTunes" />
     <meta property="og:title" content="Privacy policy · yTunes" />
-    <meta property="og:description" content="yTunes privacy policy: local preferences only, your player stays in your tab, no developer servers, no analytics." />
+    <meta property="og:description" content="yTunes privacy: the extension keeps preferences on your device; the marketing site uses PostHog analytics with an opt-out." />
     <meta property="og:url" content="https://ankush.one/ytunes/privacy.html" />
-    <meta name="robots" content="index, follow" />
+    <meta property="og:image" content="https://ankush.one/ytunes/assets/og-cover.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="yTunes on YouTube Music: album covers flipping across the top and a song list below." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Privacy policy · yTunes" />
+    <meta name="twitter:description" content="yTunes privacy: the extension keeps preferences on your device; the marketing site uses PostHog analytics with an opt-out." />
+    <meta name="twitter:image" content="https://ankush.one/ytunes/assets/og-cover.jpg" />
+    <meta name="twitter:image:alt" content="yTunes on YouTube Music: album covers flipping across the top and a song list below." />
     <meta name="theme-color" content="#d9d9d9" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#08080a" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="assets/favicon.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="assets/icon-180.png" />
     <link rel="stylesheet" href="css/ytunes.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebPage",
+            "@id": "https://ankush.one/ytunes/privacy.html#webpage",
+            "url": "https://ankush.one/ytunes/privacy.html",
+            "name": "Privacy policy · yTunes",
+            "description": "yTunes privacy: the extension keeps preferences on your device; the marketing site uses PostHog analytics with an opt-out.",
+            "isPartOf": { "@type": "WebSite", "name": "yTunes", "url": "https://ankush.one/ytunes/" },
+            "inLanguage": "en-US",
+            "dateModified": "2026-08-24"
+          },
+          {
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "yTunes",
+                "item": "https://ankush.one/ytunes/"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "Privacy policy",
+                "item": "https://ankush.one/ytunes/privacy.html"
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <a class="skip" href="#policy">Skip to content</a>
@@ -51,6 +97,7 @@
             <li><a href="#what">What yTunes is</a></li>
             <li><a href="#device">Data stored on your device</a></li>
             <li><a href="#player-site">Data read on the player site</a></li>
+            <li><a href="#website">This marketing website</a></li>
             <li><a href="#not-do">What we do not do</a></li>
             <li><a href="#permissions">Permissions</a></li>
             <li><a href="#changes">Changes</a></li>
@@ -62,8 +109,8 @@
         <p>
           yTunes is a local overlay for
           <a href="https://music.youtube.com" rel="noopener noreferrer" target="_blank">YouTube Music</a>.
-          It does not run its own servers and does not send your music, account,
-          or browsing data to the developer.
+          The browser extension does not run its own servers and does not send your
+          music, account, or player browsing data to the developer.
         </p>
 
         <h2 id="device">Data stored on your device</h2>
@@ -83,12 +130,61 @@
           requests go to YouTube, not to yTunes.
         </p>
 
+        <h2 id="website">This marketing website</h2>
+        <p>
+          The pages at
+          <a href="https://ankush.one/ytunes/">ankush.one/ytunes</a>
+          (this site) are separate from the extension. They use
+          <a href="https://posthog.com" rel="noopener noreferrer" target="_blank">PostHog</a>
+          (EU Cloud) for product analytics so we can see which pages and install
+          buttons people use.
+        </p>
+        <ul>
+          <li>
+            Events are sent through a first-party reverse proxy at
+            <code>p1.ankush.one</code>, then processed by PostHog in the EU.
+          </li>
+          <li>
+            Typical data includes page views, button clicks (including install
+            CTAs), browser type, approximate region derived from IP, and a random
+            anonymous visitor id. We do not call <code>identify()</code> with your
+            name or email on this site.
+          </li>
+          <li>
+            PostHog may store a small amount of data in cookies or local storage
+            in your browser for that anonymous id, unless you opt out or your
+            browser sends Do Not Track.
+          </li>
+          <li>Session replay is turned off in the site’s PostHog config.</li>
+          <li>
+            PostHog’s own terms and privacy policy apply to their processing:
+            <a href="https://posthog.com/privacy" rel="noopener noreferrer" target="_blank">posthog.com/privacy</a>.
+          </li>
+        </ul>
+        <p>
+          The browser extension does <strong>not</strong> include PostHog or any
+          other analytics SDK.
+        </p>
+        <div class="analytics-controls" data-analytics-controls>
+          <p class="analytics-status" data-analytics-status>
+            Website analytics are on in this browser.
+          </p>
+          <div class="cta-row">
+            <button type="button" class="btn btn-graphite" data-analytics-opt-out>
+              Opt out of website analytics
+            </button>
+            <button type="button" class="btn btn-aqua" data-analytics-opt-in hidden>
+              Opt back in
+            </button>
+          </div>
+        </div>
+
         <h2 id="not-do">What we do not do</h2>
         <ul>
-          <li>No analytics, advertising, or crash-reporting SDKs.</li>
-          <li>No accounts, mailing lists, or developer-operated backend.</li>
-          <li>No sale or transfer of user data to third parties.</li>
-          <li>No collection of payment, health, or location data.</li>
+          <li>No analytics, advertising, or crash-reporting SDKs inside the extension.</li>
+          <li>No yTunes accounts, mailing lists, or developer-operated player backend.</li>
+          <li>No sale of your music library or account data.</li>
+          <li>No collection of payment, health, or precise location data.</li>
         </ul>
 
         <h2 id="permissions">Permissions</h2>
@@ -135,6 +231,7 @@
         </p>
       </footer>
     </div>
+    <script src="js/analytics.js"></script>
     <script src="js/ytunes.js"></script>
   </body>
 </html>

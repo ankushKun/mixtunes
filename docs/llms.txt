@@ -1,0 +1,37 @@
+# yTunes
+
+> yTunes is a free, independent browser extension that overlays a classic desktop music-library interface (sidebar, track list, Cover Flow) on YouTube Music. It does not stream audio itself; YouTube Music remains the player. Preferences stay on the device. Not affiliated with Apple or Google.
+
+## Product
+
+- Homepage: https://ankush.one/ytunes/
+- Source: https://github.com/ankushKun/yTunes
+- Releases / manual install: https://github.com/ankushKun/yTunes/releases
+- Privacy: https://ankush.one/ytunes/privacy.html
+- Terms: https://ankush.one/ytunes/terms.html
+
+## What it does
+
+- Runs on music.youtube.com in Chrome 121+ and Firefox 121+ (and Chromium-based browsers via the Chrome Web Store build once listed)
+- Shows library sources in a sidebar, songs in a sortable list, and album art in Cover Flow or grid
+- Passes play, pause, skip, and seek through to YouTube Music
+- Themes: Metal, Graphite, or match the system appearance
+- Can be turned off to restore the original YouTube Music UI
+
+## What it does not do
+
+- No yTunes account; never asks for a password
+- Does not unlock Premium, remove ads, or change what the account can play
+- Does not work on phones, tablets, or Safari (yet)
+- Does not send library or account data to the yTunes developer
+- The browser extension includes no analytics SDK; the marketing site may use PostHog (see Privacy)
+- Not an Apple, Google, Spotify, or SoundCloud product
+
+## Install
+
+1. Prefer the Chrome Web Store or Firefox Add-ons listing when available (links on the homepage).
+2. Or download a release zip from GitHub and load it unpacked (Chrome-family) or as a temporary add-on (Firefox). Steps: https://ankush.one/ytunes/#install
+
+## Author
+
+Ankush Singh — https://ankush.one — https://github.com/ankushKun
