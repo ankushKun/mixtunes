@@ -1,0 +1,68 @@
+name: Release extension packs
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Sync manifest version from release tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo "Release tag must look like v0.1.0 (got: $TAG)"
+            exit 1
+          fi
+          export VERSION
+          node <<'NODE'
+          const fs = require("fs");
+          const version = process.env.VERSION;
+          const file = "manifest.json";
+          const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+          manifest.version = version;
+          fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+          console.log(`manifest.json version -> ${version}`);
+          NODE
+
+      - name: Pack Chrome and Firefox builds
+        run: npm run pack
+
+      - name: Name release assets
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          cp build/chromium.zip "build/yTunes-${TAG}-chrome.zip"
+          cp build/firefox.zip "build/yTunes-${TAG}-firefox.zip"
+          ls -la build/*.zip
+
+      - name: Upload zips to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" \
+            "build/yTunes-${TAG}-chrome.zip" \
+            "build/yTunes-${TAG}-firefox.zip" \
+            --clobber

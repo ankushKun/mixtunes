@@ -24,12 +24,16 @@ Works on **Chrome 121+**, **Firefox 121+**, and Chromium-based browsers (Edge, B
 
 ### From a release (recommended)
 
-1. Download the latest zip from [Releases](https://github.com/ankushKun/yTunes/releases).
+1. Open [Releases](https://github.com/ankushKun/yTunes/releases) and download the zip for your browser:
+   - `yTunes-…-chrome.zip` — Chrome, Edge, Brave, Arc, Vivaldi, Opera, Chromium
+   - `yTunes-…-firefox.zip` — Firefox / Zen
 2. Unzip it.
-3. **Chrome / Edge / Brave / Opera / Vivaldi / Arc**  
-   Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the unzipped folder (or the `chromium` build folder if you packed locally).
+3. **Chrome-family**  
+   Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the unzipped folder.
 4. **Firefox**  
-   Open `about:debugging` → **This Firefox** → **Load Temporary Add-on** → pick any file inside the unzipped Firefox build. Temporary add-ons are cleared when Firefox quits until a signed AMO build is available.
+   Open `about:debugging` → **This Firefox** → **Load Temporary Add-on** → pick any file inside the unzipped folder. Temporary add-ons are cleared when Firefox quits until a signed AMO build is available.
+
+Publishing a GitHub Release (tag like `v0.1.0`) runs CI that packs both zips and attaches them automatically.
 
 Then open [music.youtube.com](https://music.youtube.com) while signed in.
 
