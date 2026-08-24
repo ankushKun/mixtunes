@@ -192,6 +192,17 @@
     var covers = Array.prototype.slice.call(flow.querySelectorAll(".cover"));
     if (!covers.length) return;
 
+    var lightbox = document.querySelector("[data-lightbox]");
+    var lightboxImgs = lightbox
+      ? Array.prototype.slice.call(lightbox.querySelectorAll("[data-lightbox-img]"))
+      : [];
+    var lightboxImg = lightboxImgs[0] || null;
+    var lightboxImgB = lightboxImgs[1] || null;
+    var lightboxTitle = lightbox && lightbox.querySelector(".shot-title");
+    var lightboxCloseBtn =
+      lightbox && lightbox.querySelector(".shot-traffic-btn.is-close");
+    var activeSlot = 0;
+
     var dotList = document.querySelector("[data-dots]");
     var dots = [];
 
@@ -199,6 +210,8 @@
     var index = 0;
     var timer = null;
     var onScreen = true;
+    var lightboxOpen = false;
+    var lightboxFocus = null;
     var DELAY = 5000;
 
     if (dotList) {
@@ -262,9 +275,16 @@
     }
 
     function go(i, focus) {
-      index = ((i % n) + n) % n;
+      var next = ((i % n) + n) % n;
+      var dir = 0;
+      if (lightboxOpen && next !== index) {
+        var step = ((next - index) % n + n) % n;
+        dir = step > n / 2 ? -1 : 1;
+      }
+      index = next;
       paint();
       if (focus) covers[index].focus();
+      if (lightboxOpen) showLightbox(index, dir);
     }
 
     function stop() {
@@ -276,7 +296,7 @@
 
     function restart() {
       stop();
-      if (reduceMotion.matches || !onScreen || document.hidden) return;
+      if (lightboxOpen || reduceMotion.matches || !onScreen || document.hidden) return;
       timer = setInterval(function () {
         // Hovering no longer halts the deck, only a keyboard user actively
         // stepping through it does.
@@ -285,14 +305,187 @@
       }, DELAY);
     }
 
+    function coverSrc(cover) {
+      if (cover.dataset.full) return cover.dataset.full;
+      var face = cover.querySelector(".cover-face");
+      return face ? face.getAttribute("src") : "";
+    }
+
+    var swapToken = 0;
+
+    function activeImg() {
+      return activeSlot === 0 ? lightboxImg : lightboxImgB;
+    }
+
+    function idleImg() {
+      return activeSlot === 0 ? lightboxImgB : lightboxImg;
+    }
+
+    function fillImg(img, i) {
+      if (!img) return;
+      var cover = covers[i];
+      var title = cover.dataset.title || "Screenshot";
+      var src = coverSrc(cover);
+      var label = cover.getAttribute("aria-label") || title;
+      img.src = src;
+      img.alt = label;
+      img.hidden = false;
+      if (lightboxTitle) lightboxTitle.textContent = title;
+    }
+
+    function clearSlideClasses(img) {
+      if (!img) return;
+      img.classList.remove(
+        "is-layer",
+        "is-slide-from-next",
+        "is-slide-from-prev",
+        "is-slide-to-next",
+        "is-slide-to-prev"
+      );
+      img.style.transition = "";
+    }
+
+    function showLightbox(i, dir) {
+      if (!lightbox || !lightboxImg) return;
+
+      // Instant on first open, reduced motion, missing second buffer, or same shot.
+      if (!dir || !lightboxImgB || reduceMotion.matches || !lightbox.classList.contains("is-open")) {
+        swapToken += 1;
+        clearSlideClasses(lightboxImg);
+        clearSlideClasses(lightboxImgB);
+        if (lightboxImgB) lightboxImgB.hidden = true;
+        activeSlot = 0;
+        fillImg(lightboxImg, i);
+        lightboxImg.hidden = false;
+        return;
+      }
+
+      var token = ++swapToken;
+      var from = activeImg();
+      var to = idleImg();
+      var fromClass = dir > 0 ? "is-slide-to-next" : "is-slide-to-prev";
+      var prepClass = dir > 0 ? "is-slide-from-next" : "is-slide-from-prev";
+      var done = false;
+
+      // Snap any in-flight slide so rapid arrows stay continuous.
+      clearSlideClasses(from);
+      clearSlideClasses(to);
+      from.hidden = false;
+      to.hidden = true;
+
+      fillImg(to, i);
+      from.classList.add("is-layer");
+      to.classList.add("is-layer", prepClass);
+      to.hidden = false;
+      void to.offsetWidth;
+
+      to.classList.remove(prepClass);
+      from.classList.add(fromClass);
+
+      function finish() {
+        if (done || token !== swapToken) return;
+        done = true;
+        from.removeEventListener("transitionend", onEnd);
+        clearSlideClasses(from);
+        clearSlideClasses(to);
+        from.hidden = true;
+        activeSlot = activeSlot === 0 ? 1 : 0;
+      }
+
+      function onEnd(event) {
+        if (event.propertyName && event.propertyName !== "transform") return;
+        if (event.target !== from) return;
+        finish();
+      }
+
+      from.addEventListener("transitionend", onEnd);
+      setTimeout(finish, 280);
+    }
+
+    function openLightbox(i) {
+      if (!lightbox || !lightboxImg) return;
+      index = ((i % n) + n) % n;
+      paint();
+      showLightbox(index);
+      lightboxFocus = document.activeElement;
+      lightboxOpen = true;
+      stop();
+      lightbox.hidden = false;
+      document.body.classList.add("is-lightbox-open");
+      // Force a frame so the opacity/scale transition can run.
+      void lightbox.offsetWidth;
+      lightbox.classList.add("is-open");
+      if (lightboxCloseBtn) lightboxCloseBtn.focus({ preventScroll: true });
+    }
+
+    function finishClose() {
+      lightbox.hidden = true;
+      lightbox.classList.remove("is-open");
+      document.body.classList.remove("is-lightbox-open");
+      lightboxOpen = false;
+      var restore = lightboxFocus && covers.indexOf(lightboxFocus) >= 0
+        ? lightboxFocus
+        : covers[index];
+      lightboxFocus = null;
+      if (restore && typeof restore.focus === "function") {
+        restore.focus({ preventScroll: true });
+      }
+      restart();
+    }
+
+    function closeLightbox() {
+      if (!lightbox || !lightboxOpen) return;
+      lightbox.classList.remove("is-open");
+      if (reduceMotion.matches) {
+        finishClose();
+        return;
+      }
+      var done = false;
+      function onEnd(event) {
+        if (event.target !== lightbox) return;
+        if (done) return;
+        done = true;
+        lightbox.removeEventListener("transitionend", onEnd);
+        finishClose();
+      }
+      lightbox.addEventListener("transitionend", onEnd);
+      // Fallback if transitionend never fires.
+      setTimeout(function () {
+        if (done) return;
+        done = true;
+        lightbox.removeEventListener("transitionend", onEnd);
+        finishClose();
+      }, 280);
+    }
+
+    // Keep Tab inside the lightbox so the page skip-link never steals focus.
+    document.addEventListener(
+      "keydown",
+      function (event) {
+        if (!lightboxOpen || event.key !== "Tab") return;
+        event.preventDefault();
+        if (lightboxCloseBtn) lightboxCloseBtn.focus({ preventScroll: true });
+      },
+      true
+    );
+
     covers.forEach(function (cover, i) {
       cover.addEventListener("click", function () {
-        go(i, true);
-        restart();
+        if (i === index) openLightbox(i);
+        else {
+          go(i, true);
+          restart();
+        }
       });
     });
 
     flow.addEventListener("keydown", function (event) {
+      if (lightboxOpen) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openLightbox(index);
+        return;
+      }
       var moved = true;
       if (event.key === "ArrowLeft") go(index - 1, true);
       else if (event.key === "ArrowRight") go(index + 1, true);
@@ -304,6 +497,15 @@
         restart();
       }
     });
+
+    if (lightbox) {
+      lightbox.querySelectorAll("[data-lightbox-close]").forEach(function (el) {
+        el.addEventListener("click", function (event) {
+          event.preventDefault();
+          closeLightbox();
+        });
+      });
+    }
 
     /* ---- drag: same gesture with a mouse or a finger ---- */
 
@@ -339,6 +541,7 @@
     }
 
     flow.addEventListener("pointerdown", function (event) {
+      if (lightboxOpen) return;
       if (event.button !== undefined && event.button !== 0) return;
       suppressClick = false;
       drag = {
@@ -408,10 +611,22 @@
       true
     );
 
-
     // Arrow keys drive the deck from anywhere on the page, not just when it
-    // happens to hold focus.
+    // happens to hold focus. While the lightbox is open they cycle shots there.
     document.addEventListener("keydown", function (event) {
+      if (lightboxOpen) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeLightbox();
+          return;
+        }
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          go(event.key === "ArrowLeft" ? index - 1 : index + 1);
+        }
+        return;
+      }
+
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
 

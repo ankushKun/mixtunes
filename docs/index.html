@@ -113,11 +113,13 @@
               class="flow"
               data-flow
               role="group"
-              aria-label="Screenshots. Click a side screenshot, or use the left and right arrow keys, to browse"
+              aria-label="Screenshots. Click a side screenshot to browse, click the center screenshot to enlarge, or use the left and right arrow keys"
             >
               <button
                 class="cover"
                 type="button"
+                data-title="Cover Flow"
+                data-full="assets/full/shot-coverflow.png"
                 aria-label="Cover Flow in the dark theme: album art flipping across the top, a playlist below with time, artist, album and play-count columns."
               >
                 <img class="cover-face" src="assets/shot-coverflow.jpg" alt="" width="1440" height="878" draggable="false" fetchpriority="high" />
@@ -126,6 +128,8 @@
               <button
                 class="cover"
                 type="button"
+                data-title="Liked Songs"
+                data-full="assets/full/shot-liked.png"
                 aria-label="The same Cover Flow view in the light theme, showing the Liked Songs library."
               >
                 <img class="cover-face" src="assets/shot-liked.jpg" alt="" width="1440" height="878" draggable="false" loading="lazy" />
@@ -134,6 +138,8 @@
               <button
                 class="cover"
                 type="button"
+                data-title="Album Grid"
+                data-full="assets/full/shot-grid-dark.png"
                 aria-label="The album grid in the dark theme: a wall of cover art above the song list."
               >
                 <img class="cover-face" src="assets/shot-grid-dark.jpg" alt="" width="1440" height="878" draggable="false" loading="lazy" />
@@ -142,6 +148,8 @@
               <button
                 class="cover"
                 type="button"
+                data-title="Album Grid — Light"
+                data-full="assets/full/shot-grid-light.png"
                 aria-label="The album grid in the light theme, with the playing song highlighted in the list below."
               >
                 <img class="cover-face" src="assets/shot-grid-light.jpg" alt="" width="1440" height="878" draggable="false" loading="lazy" />
@@ -150,6 +158,8 @@
               <button
                 class="cover"
                 type="button"
+                data-title="Lyrics"
+                data-full="assets/full/shot-lyrics.png"
                 aria-label="Lyrics shown beside the album art for the song that is playing."
               >
                 <img class="cover-face" src="assets/shot-lyrics.jpg" alt="" width="1440" height="878" draggable="false" loading="lazy" />
@@ -158,6 +168,8 @@
               <button
                 class="cover"
                 type="button"
+                data-title="Cover Flow — Light"
+                data-full="assets/full/shot-flow-light.png"
                 aria-label="Cover Flow in the light theme, browsing a playlist of album art."
               >
                 <img class="cover-face" src="assets/shot-flow-light.jpg" alt="" width="1440" height="878" draggable="false" loading="lazy" />
@@ -168,6 +180,31 @@
 
           <ul class="dots" data-dots aria-label="Choose a screenshot"></ul>
         </section>
+
+        <div
+          class="shot-lightbox"
+          data-lightbox
+          hidden
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="shot-lightbox-title"
+        >
+          <div class="shot-lightbox-scrim" data-lightbox-close></div>
+          <div class="shot-window">
+            <div class="shot-titlebar">
+              <div class="shot-traffic">
+                <button type="button" class="shot-traffic-btn is-close" data-lightbox-close aria-label="Close"></button>
+                <span class="shot-traffic-btn is-minimize" aria-hidden="true"></span>
+                <span class="shot-traffic-btn is-zoom" aria-hidden="true"></span>
+              </div>
+              <p class="shot-title" id="shot-lightbox-title">Screenshot</p>
+            </div>
+            <div class="shot-content">
+              <img data-lightbox-img data-lightbox-slot="a" alt="" width="1790" height="1092" draggable="false" />
+              <img data-lightbox-img data-lightbox-slot="b" alt="" width="1790" height="1092" draggable="false" hidden />
+            </div>
+          </div>
+        </div>
 
         <section class="section section-alt reveal" id="features">
           <div class="section-head">
