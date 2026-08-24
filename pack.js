@@ -10,6 +10,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const ROOT = __dirname;
 const BUILD = path.join(ROOT, "build");
@@ -33,6 +34,8 @@ const IGNORE_TOP = new Set([
   "skills-lock.json",
   ".gitignore",
   ".gitmodules",
+  "store",
+  "docs",
 ]);
 
 function copyExtension(dest) {
@@ -75,6 +78,18 @@ copyExtension(CHROMIUM_DIR);
 copyExtension(FIREFOX_DIR);
 patchFirefox(FIREFOX_DIR);
 
+function zipDir(dir, zipPath) {
+  fs.rmSync(zipPath, { force: true });
+  execFileSync("zip", ["-r", "-X", "-q", zipPath, "."], { cwd: dir });
+}
+
+const chromiumZip = path.join(BUILD, "chromium.zip");
+const firefoxZip = path.join(BUILD, "firefox.zip");
+zipDir(CHROMIUM_DIR, chromiumZip);
+zipDir(FIREFOX_DIR, firefoxZip);
+
 console.log("Packed:");
 console.log(`  Chromium  ${path.relative(ROOT, CHROMIUM_DIR)}`);
 console.log(`  Firefox   ${path.relative(ROOT, FIREFOX_DIR)}`);
+console.log(`  Chromium zip  ${path.relative(ROOT, chromiumZip)}`);
+console.log(`  Firefox zip   ${path.relative(ROOT, firefoxZip)}`);

@@ -2,18 +2,16 @@
   "manifest_version": 3,
   "name": "yTunes",
   "version": "0.1.0",
-  "description": "YouTube Music with a classic iTunes interface",
+  "description": "Classic music library overlay for YouTube Music",
+  "homepage_url": "https://ankush.one/ytunes/",
   "minimum_chrome_version": "121",
   "browser_specific_settings": {
     "gecko": {
-      "id": "ytunes@local",
+      "id": "ytunes@ankush.one",
       "strict_min_version": "121.0",
       "data_collection_permissions": {
         "required": ["none"]
       }
-    },
-    "gecko_android": {
-      "strict_min_version": "121.0"
     }
   },
   "icons": {

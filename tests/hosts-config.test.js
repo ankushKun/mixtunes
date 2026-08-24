@@ -146,10 +146,109 @@ function testManifestReferencesRealFiles() {
   }
 }
 
+function testManifestStoreReady() {
+  assert.ok(
+    !manifest.browser_specific_settings.gecko_android,
+    "omit gecko_android until Firefox for Android is tested"
+  );
+  const geckoId = manifest.browser_specific_settings.gecko.id;
+  assert.ok(
+    /^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(geckoId),
+    `gecko id must be a durable email-like id, got ${geckoId}`
+  );
+  assert.ok(
+    !/@local$/.test(geckoId),
+    "gecko id @local cannot be used for AMO"
+  );
+  assert.ok(
+    manifest.description.length > 0 && manifest.description.length <= 132,
+    "Chrome short description must be 1–132 characters"
+  );
+  assert.ok(
+    !/itunes/i.test(manifest.description),
+    "store-facing description must not use the iTunes trademark"
+  );
+  assert.ok(
+    !/itunes/i.test(manifest.name),
+    "extension name must not use the iTunes trademark"
+  );
+  const store = path.join(__dirname, "..", "store");
+  for (const file of [
+    "privacy.html",
+    "listing.md",
+    "cws-privacy.md",
+    "reviewer-notes.md",
+    "PUBLISH.md",
+  ]) {
+    assert.ok(
+      fs.existsSync(path.join(store, file)),
+      `missing store listing file: ${file}`
+    );
+  }
+  const docs = path.join(__dirname, "..", "docs");
+  for (const file of ["index.html", "privacy.html", "css/ytunes.css", "js/ytunes.js"]) {
+    assert.ok(fs.existsSync(path.join(docs, file)), `missing docs site file: ${file}`);
+  }
+}
+
+function pngSize(file) {
+  const buf = fs.readFileSync(file);
+  assert.strictEqual(buf.slice(0, 8).toString("hex"), "89504e470d0a1a0a");
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+function testStoreAssets() {
+  const store = path.join(__dirname, "..", "store");
+  const promo = pngSize(path.join(store, "promo-440x280.png"));
+  assert.deepStrictEqual(promo, { width: 440, height: 280 });
+  const icon128 = pngSize(path.join(store, "icon-128.png"));
+  assert.deepStrictEqual(icon128, { width: 128, height: 128 });
+  const shots = [
+    "01-cover-flow.png",
+    "02-cover-flow-graphite.png",
+    "03-preferences.png",
+  ];
+  for (const name of shots) {
+    const size = pngSize(path.join(store, "screenshots", name));
+    assert.ok(
+      (size.width === 1280 && size.height === 800) ||
+        (size.width === 640 && size.height === 400),
+      `${name} must be 1280×800 or 640×400, got ${size.width}×${size.height}`
+    );
+  }
+}
+
+function testPackExcludesStoreAndZips() {
+  const { execFileSync } = require("child_process");
+  const root = path.join(__dirname, "..");
+  execFileSync("node", [path.join(root, "pack.js")], { cwd: root });
+  const chromiumZip = path.join(root, "build", "chromium.zip");
+  const firefoxZip = path.join(root, "build", "firefox.zip");
+  assert.ok(fs.existsSync(chromiumZip), "chromium.zip missing");
+  assert.ok(fs.existsSync(firefoxZip), "firefox.zip missing");
+  const listing = execFileSync("zipinfo", ["-1", chromiumZip], {
+    encoding: "utf8",
+  });
+  assert.ok(listing.includes("manifest.json"));
+  assert.ok(!listing.split("\n").some((line) => line.startsWith("store/")));
+  assert.ok(!listing.split("\n").some((line) => line.startsWith("docs/")));
+  assert.ok(!listing.includes("pack.js"));
+  const ff = JSON.parse(
+    execFileSync("unzip", ["-p", firefoxZip, "manifest.json"], {
+      encoding: "utf8",
+    })
+  );
+  assert.deepStrictEqual(ff.background, { scripts: ["background.js"] });
+  assert.ok(!ff.gecko_android && !ff.browser_specific_settings?.gecko_android);
+}
+
 testHostShape();
 testForUrl();
 testManifestOriginsMatch();
 testBackgroundOriginsMatch();
 testManifestReferencesRealFiles();
+testManifestStoreReady();
+testStoreAssets();
+testPackExcludesStoreAndZips();
 
-console.log("hosts-config: 5 groups passed");
+console.log("hosts-config: 8 groups passed");
