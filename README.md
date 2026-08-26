@@ -71,8 +71,8 @@ python3 -m http.server 4173 --directory docs
 
 ## Privacy
 
-- **Extension:** preferences in `chrome.storage.local` only; no analytics SDK; player API calls go to the host (YouTube today), not to Mixtunes.
-- **Website:** [ankush.one/mixtunes](https://ankush.one/mixtunes/) may use PostHog for page/install analytics, with an opt-out on the [privacy policy](https://ankush.one/mixtunes/privacy.html).
+- **Extension:** preferences in `chrome.storage.local` only; no analytics SDK; player API calls go to the host (YouTube today), not to Mixtunes. On [ankush.one/mixtunes](https://ankush.one/mixtunes/) the extension may report its version in that tab so the page can show it.
+- **Website:** [ankush.one/mixtunes](https://ankush.one/mixtunes/) may use PostHog for page/install analytics, with an opt-out on the [privacy policy](https://ankush.one/mixtunes/privacy.html). The installed-version check is not sent to PostHog.
 
 ## Disclaimer
 

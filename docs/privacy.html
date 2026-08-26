@@ -47,7 +47,7 @@
             "description": "Mixtunes privacy: the extension keeps preferences on your device; the marketing site uses PostHog analytics with an opt-out.",
             "isPartOf": { "@type": "WebSite", "name": "Mixtunes", "url": "https://ankush.one/mixtunes/" },
             "inLanguage": "en-US",
-            "dateModified": "2026-08-24"
+            "dateModified": "2026-08-26"
           },
           {
             "@type": "BreadcrumbList",
@@ -111,7 +111,7 @@
 
       <main class="legal-page" id="policy">
         <h1>Privacy policy</h1>
-        <p class="updated">Last updated 25 August 2026 · Mixtunes is an independent browser extension by Ankush Singh.</p>
+        <p class="updated">Last updated 26 August 2026 · Mixtunes is an independent browser extension by Ankush Singh.</p>
 
         <nav class="toc" aria-labelledby="toc-title">
           <h2 id="toc-title">On this page</h2>
@@ -189,6 +189,11 @@
           The browser extension does <strong>not</strong> include PostHog or any
           other analytics SDK.
         </p>
+        <p>
+          If Mixtunes is installed, this site can read the extension’s version in
+          your browser so it can show it next to the latest GitHub release. That
+          check stays in the tab. It is not sent to PostHog or to the developer.
+        </p>
         <div class="analytics-controls" data-analytics-controls>
           <p class="analytics-status" data-analytics-status>
             Website analytics are on in this browser.
@@ -212,19 +217,27 @@
         </ul>
 
         <h2 id="permissions">Permissions</h2>
-        <p>
-          <strong>storage</strong>: save theme and appearance preferences on
-          this device.
-          <strong>Host access to music.youtube.com</strong>: inject the theme
-          and talk to the YouTube Music player in that tab only. Future player
-          support (Spotify, Apple Music, SoundCloud) would add equivalent
-          host-permissions for those sites only, and this policy will be updated
-          before that ships.
-          <strong>Host access to ankush.one</strong> (and localhost / 127.0.0.1
-          when previewing the site): tell the landing page which Mixtunes
-          version is installed, including unpacked and GitHub zips. That script
-          only posts the version string to the page.
-        </p>
+        <ul>
+          <li>
+            <strong>storage</strong>: save theme and appearance preferences on
+            this device.
+          </li>
+          <li>
+            <strong>Host access to music.youtube.com</strong>: inject the theme
+            and talk to the YouTube Music player in that tab only. Future player
+            support (Spotify, Apple Music, SoundCloud) would add equivalent
+            host-permissions for those sites only, and this policy will be updated
+            before that ships.
+          </li>
+          <li>
+            <strong>Host access to ankush.one</strong> (and localhost / 127.0.0.1
+            when previewing the site): tell the landing page which Mixtunes
+            version is installed, including Chrome Web Store, GitHub zip, and
+            unpacked loads. Chrome may also let the page ask the extension for
+            that version directly. Either way only the version string is
+            exchanged, in this tab.
+          </li>
+        </ul>
 
         <h2 id="changes">Changes</h2>
         <p>

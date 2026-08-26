@@ -28,6 +28,7 @@
 - Does not unlock Premium, remove ads, or change what the account can play
 - Does not work on phones, tablets, or Safari (yet)
 - Does not send library or account data to the Mixtunes developer
+- On the marketing site, the extension may report its version in that tab so the page can show it; that check is not sent to PostHog
 - The browser extension includes no analytics SDK; the marketing site may use PostHog (see Privacy)
 - Not an Apple, Google, Spotify, or SoundCloud product
 
