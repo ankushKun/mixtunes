@@ -1,7 +1,8 @@
 /* Mixtunes site behaviour: browser detection for the install buttons, the
    screenshot Cover Flow, sticky-header shadow, scroll-spy tabs,
    reveal-on-scroll, and latest release zip links. All progressive: with this
-   file absent the page still shows In review CTAs and a manual download. */
+   file absent the page still shows the Chrome Web Store CTA and a manual
+   download; Firefox stays In review until that listing ships. */
 (function () {
   "use strict";
 
@@ -55,8 +56,8 @@
       chrome: {
         name: "Chrome",
         phrase: "the Chrome Web Store",
-        url: "",
-        ready: false
+        url: "https://chromewebstore.google.com/detail/kaeebfmnanocpkfedmfgbkgjlihenjpm?utm_source=website",
+        ready: true
       },
       firefox: {
         name: "Firefox",

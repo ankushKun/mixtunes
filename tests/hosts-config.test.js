@@ -203,6 +203,17 @@ function testManifestStoreReady() {
   for (const file of ["index.html", "privacy.html", "css/mixtunes.css", "js/mixtunes.js"]) {
     assert.ok(fs.existsSync(path.join(docs, file)), `missing docs site file: ${file}`);
   }
+  const chromeStore =
+    "https://chromewebstore.google.com/detail/kaeebfmnanocpkfedmfgbkgjlihenjpm";
+  assert.ok(
+    docsIndex.includes(chromeStore),
+    "docs/index.html must link to the Chrome Web Store listing"
+  );
+  const docsJs = fs.readFileSync(path.join(docs, "js/mixtunes.js"), "utf8");
+  assert.ok(
+    docsJs.includes(chromeStore + "?utm_source=website"),
+    "docs installer must use the Chrome Web Store URL with utm_source=website"
+  );
 }
 
 function testPackExcludesStoreAndZips() {

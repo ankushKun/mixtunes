@@ -5,6 +5,7 @@
 ## Product
 
 - Homepage: https://ankush.one/mixtunes/
+- Chrome Web Store: https://chromewebstore.google.com/detail/kaeebfmnanocpkfedmfgbkgjlihenjpm
 - Source: https://github.com/ankushKun/mixtunes
 - Releases / manual install: https://github.com/ankushKun/mixtunes/releases
 - Privacy: https://ankush.one/mixtunes/privacy.html
@@ -13,7 +14,7 @@
 
 ## What it does
 
-- Themes Spotify, YouTube Music, SoundCloud and Apple Music in Chrome 121+ and Firefox 142+ (and Chromium-based browsers via the Chrome Web Store build once listed)
+- Themes Spotify, YouTube Music, SoundCloud and Apple Music in Chrome 121+ and Firefox 142+ (and Chromium-based browsers via the Chrome Web Store build)
 - YouTube Music (music.youtube.com) works today; Spotify, Apple Music, and SoundCloud are under development
 - Shows library sources in a sidebar, songs in a sortable list, and album art in Cover Flow or grid
 - Passes play, pause, skip, and seek through to the host player
@@ -31,7 +32,7 @@
 
 ## Install
 
-1. Prefer the Chrome Web Store or Firefox Add-ons listing when available (homepage CTAs say In review until those listings ship). Until then, install from a GitHub release zip (manual / load unpacked).
+1. Prefer the Chrome Web Store (https://chromewebstore.google.com/detail/kaeebfmnanocpkfedmfgbkgjlihenjpm). Firefox Add-ons is still in review; until then, Firefox users install from a GitHub release zip (manual / load unpacked).
 2. Or download a release zip from GitHub and load it unpacked (Chrome-family) or as a temporary add-on (Firefox). Steps: https://ankush.one/mixtunes/#install
 3. Open a supported player site while signed in (YouTube Music today: https://music.youtube.com).
 
