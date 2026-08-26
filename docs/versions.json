@@ -1,0 +1,17 @@
+{
+  "chrome": {
+    "version": "0.1.2",
+    "url": "https://chromewebstore.google.com/detail/kaeebfmnanocpkfedmfgbkgjlihenjpm"
+  },
+  "firefox": {
+    "version": null,
+    "url": "https://addons.mozilla.org/firefox/addon/mixtunes/",
+    "status": "in_review"
+  },
+  "github": {
+    "version": "0.1.2",
+    "tag": "v0.1.2",
+    "url": "https://github.com/ankushKun/mixtunes/releases/tag/v0.1.2"
+  },
+  "checkedAt": "2026-08-26T08:05:22.653Z"
+}

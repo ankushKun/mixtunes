@@ -44,6 +44,7 @@ const IGNORE_TOP = new Set([
   "tests",
   "pack.js",
   "sync-version.js",
+  "fetch-store-versions.js",
   "package.json",
   "package-lock.json",
   "jsconfig.json",
@@ -93,6 +94,20 @@ function patchFirefox(dir) {
   const { file, manifest } = readManifest(dir);
   manifest.background = { scripts: ["background.js"] };
   delete manifest.minimum_chrome_version;
+  delete manifest.externally_connectable;
+  let foundPing = false;
+  manifest.content_scripts = manifest.content_scripts.map((block) => {
+    if (!(block.js || []).includes("scripts/store-ping.js")) return block;
+    foundPing = true;
+    return Object.assign({}, block, { matches: ["https://ankush.one/*"] });
+  });
+  if (!foundPing) {
+    manifest.content_scripts.push({
+      matches: ["https://ankush.one/*"],
+      js: ["scripts/store-ping.js"],
+      run_at: "document_idle",
+    });
+  }
   writeManifest(file, manifest);
 }
 

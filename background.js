@@ -31,3 +31,25 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   const tab = await chrome.tabs.get(tabId);
   syncAction(tabId, tab.url);
 });
+
+function isSiteSender(url) {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:" && parsed.hostname === "ankush.one") {
+      return true;
+    }
+    return (
+      parsed.protocol === "http:" &&
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+    );
+  } catch {
+    return false;
+  }
+}
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (!isSiteSender(sender.url)) return;
+  if (!message || message.type !== "mixtunes-version") return;
+  sendResponse({ version: chrome.runtime.getManifest().version });
+});

@@ -572,7 +572,7 @@ section {
 /* ---------- collapsible manual instructions ---------- */
 
 .howto {
-  max-width: 46rem;
+  max-width: 38rem;
   margin: 0 auto 20px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1994,7 +1994,88 @@ details[open] > .fold {
 }
 
 .install .cta-row {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+}
+
+.build-pill {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto 20px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--well-hi);
+  box-shadow: inset 0 1px 0 #fff;
+  color: var(--mute);
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.build-pill:not(.is-installed) .build-pill-local,
+.build-pill:not(.is-installed) .build-pill-rule {
+  display: none;
+}
+
+.build-pill-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px 7px;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.build-pill-item:hover {
+  color: var(--ink);
+}
+
+a.build-pill-item:hover b {
+  color: var(--blue-lo);
+}
+
+.build-pill-rule {
+  flex: none;
+  width: 1px;
+  margin: 6px 0;
+  background: var(--line);
+}
+
+.build-pill b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.build-pill .bi,
+.build-pill img {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.build-pill-flag {
+  padding: 1px 7px 2px;
+  border: 1px solid #2c7a38;
+  border-radius: 999px;
+  background: linear-gradient(#d8f3d8, #a9e2ae);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: var(--green-ink);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.build-pill-flag[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .build-pill {
+    animation: detect-in var(--dur-enter) var(--ease-out) both;
+  }
 }
 
 .install .note {
@@ -2501,6 +2582,20 @@ footer.site {
     align-items: stretch;
   }
 
+  .build-pill {
+    width: auto;
+    border-radius: 12px;
+  }
+
+  .build-pill-rule {
+    display: none;
+  }
+
+  .build-pill-item {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
   .get {
     align-items: stretch;
   }
@@ -2545,7 +2640,8 @@ footer.site {
   .where li,
   .site-head,
   .cta-row,
-  .detect {
+  .detect,
+  .build-pill {
     transition: none !important;
     animation: none !important;
   }

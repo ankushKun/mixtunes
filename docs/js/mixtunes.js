@@ -1,8 +1,9 @@
 /* Mixtunes site behaviour: browser detection for the install buttons, the
    screenshot Cover Flow, sticky-header shadow, scroll-spy tabs,
-   reveal-on-scroll, and latest release zip links. All progressive: with this
-   file absent the page still shows the Chrome Web Store CTA and a manual
-   download; Firefox stays In review until that listing ships. */
+   reveal-on-scroll, latest release zip links, and the build pill.
+   All progressive: with this file absent the page still shows the Chrome
+   Web Store CTA and a manual download; Firefox stays In review until that
+   listing ships. */
 (function () {
   "use strict";
 
@@ -45,6 +46,161 @@
       });
   })();
 
+  /* ---------- installed build vs GitHub, plus store versions on cards ---------- */
+
+  (function buildPill() {
+    var pill = document.querySelector("[data-build-pill]");
+    if (!pill) return;
+
+    var CHROME_ID = "kaeebfmnanocpkfedmfgbkgjlihenjpm";
+
+    function compareVersions(a, b) {
+      function parts(value) {
+        return String(value || "")
+          .replace(/^v/i, "")
+          .split(".")
+          .map(function (n) {
+            return parseInt(n, 10) || 0;
+          });
+      }
+      var left = parts(a);
+      var right = parts(b);
+      var len = Math.max(left.length, right.length);
+      var i;
+      for (i = 0; i < len; i++) {
+        var x = left[i] || 0;
+        var y = right[i] || 0;
+        if (x > y) return 1;
+        if (x < y) return -1;
+      }
+      return 0;
+    }
+
+    function setStoreLabel(channel, text) {
+      document.querySelectorAll('[data-store-ver="' + channel + '"]').forEach(function (el) {
+        el.textContent = text;
+      });
+    }
+
+    function setInstalled(text, version) {
+      var el = pill.querySelector("[data-build-installed]");
+      if (!el) return;
+      el.textContent = "";
+      el.appendChild(document.createTextNode(text));
+      if (version) {
+        el.appendChild(document.createTextNode(" "));
+        var b = document.createElement("b");
+        b.textContent = version;
+        el.appendChild(b);
+      }
+    }
+
+    function pingInstalled() {
+      return new Promise(function (resolve) {
+        var settled = false;
+        function done(version) {
+          if (settled) return;
+          settled = true;
+          resolve(version || null);
+        }
+
+        window.addEventListener("message", function onMsg(event) {
+          if (event.origin !== window.location.origin) return;
+          var data = event.data;
+          if (!data || data.source !== "mixtunes" || data.type !== "version") {
+            return;
+          }
+          window.removeEventListener("message", onMsg);
+          done(data.version);
+        });
+
+        try {
+          window.postMessage(
+            { source: "mixtunes-site", type: "version-please" },
+            window.location.origin
+          );
+        } catch (_err) {
+          /* opaque origin */
+        }
+
+        var runtime = window.chrome && window.chrome.runtime;
+        if (runtime && typeof runtime.sendMessage === "function") {
+          try {
+            runtime.sendMessage(
+              CHROME_ID,
+              { type: "mixtunes-version" },
+              function (response) {
+                if (runtime.lastError || !response || !response.version) return;
+                done(response.version);
+              }
+            );
+          } catch (_err) {
+            /* wait for postMessage or timeout */
+          }
+        }
+
+        setTimeout(function () {
+          done(null);
+        }, 900);
+      });
+    }
+
+    function paint(snapshot, installed) {
+      snapshot = snapshot || {};
+      var chromeVer = snapshot.chrome && snapshot.chrome.version;
+      var firefox = snapshot.firefox || {};
+      var github = snapshot.github || {};
+      var githubVer = github.version;
+      var githubUrl = github.url;
+
+      if (chromeVer) setStoreLabel("chrome", chromeVer);
+      if (firefox.status === "listed" && firefox.version) {
+        setStoreLabel("firefox", firefox.version);
+      }
+
+      pill.classList.toggle("is-installed", Boolean(installed));
+      if (installed) setInstalled("This browser", installed);
+      pill.setAttribute(
+        "aria-label",
+        installed ? "Installed build and latest GitHub release" : "Latest GitHub release"
+      );
+
+      var gh = pill.querySelector("[data-build-github]");
+      if (gh) gh.textContent = githubVer || "—";
+
+      var ghLink = gh && gh.closest("a");
+      if (ghLink && githubUrl) ghLink.href = githubUrl;
+
+      var newer =
+        (githubVer && installed && compareVersions(githubVer, installed) > 0) ||
+        (githubVer && chromeVer && compareVersions(githubVer, chromeVer) > 0) ||
+        (githubVer &&
+          firefox.version &&
+          firefox.status === "listed" &&
+          compareVersions(githubVer, firefox.version) > 0);
+      var flag = pill.querySelector("[data-build-newer]");
+      if (flag) {
+        flag.hidden = !newer;
+      }
+      pill.classList.toggle("is-ahead", Boolean(newer));
+    }
+
+    var installedPromise = pingInstalled();
+    fetch("versions.json", { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) throw new Error("versions.json missing");
+        return res.json();
+      })
+      .catch(function () {
+        return {};
+      })
+      .then(function (snapshot) {
+        return installedPromise.then(function (installed) {
+          paint(snapshot, installed);
+        });
+      });
+  })();
+
   /* ---------- which browser is this, and what should they get ---------- */
 
   (function installer() {
@@ -62,7 +218,7 @@
       firefox: {
         name: "Firefox",
         phrase: "Firefox Add-ons",
-        url: "",
+        url: "https://addons.mozilla.org/firefox/addon/mixtunes/?utm_source=website",
         ready: false
       }
     };

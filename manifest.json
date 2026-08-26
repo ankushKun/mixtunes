@@ -83,6 +83,17 @@
         "scripts/content.js"
       ],
       "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "https://ankush.one/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "scripts/store-ping.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
@@ -101,5 +112,12 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://ankush.one/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*"
+    ]
   }
 }
