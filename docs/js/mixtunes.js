@@ -2,8 +2,7 @@
    screenshot Cover Flow, sticky-header shadow, scroll-spy tabs,
    reveal-on-scroll, latest release zip links, and the build pill.
    All progressive: with this file absent the page still shows the Chrome
-   Web Store CTA and a manual download; Firefox stays In review until that
-   listing ships. */
+   Web Store and Firefox Add-ons CTAs and a manual download. */
 (function () {
   "use strict";
 
@@ -208,7 +207,6 @@
     if (!rows.length) return;
 
     var STORES = {
-      // Flip ready to true and paste the live listing URL when each store ships.
       chrome: {
         name: "Chrome",
         phrase: "the Chrome Web Store",
@@ -219,7 +217,7 @@
         name: "Firefox",
         phrase: "Firefox Add-ons",
         url: "https://addons.mozilla.org/firefox/addon/mixtunes/?utm_source=website",
-        ready: false
+        ready: true
       }
     };
 

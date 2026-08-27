@@ -6,7 +6,7 @@ A free browser extension that themes the streaming sites you already use with a 
 
 **YouTube Music works today.** Spotify, Apple Music, and SoundCloud are under development.
 
-[Website](https://ankush.one/mixtunes/) · [Releases](https://github.com/ankushKun/mixtunes/releases) · [Privacy](https://ankush.one/mixtunes/privacy.html)
+[Website](https://ankush.one/mixtunes/) · [Chrome Web Store](https://chromewebstore.google.com/detail/kaeebfmnanocpkfedmfgbkgjlihenjpm) · [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/mixtunes/) · [Releases](https://github.com/ankushKun/mixtunes/releases) · [Privacy](https://ankush.one/mixtunes/privacy.html)
 
 <p align="center">
   <img src="docs/assets/shot-coverflow.jpg" alt="Mixtunes theme on YouTube Music: Cover Flow" width="920" />
@@ -24,7 +24,12 @@ Works on **Chrome 121+**, **Firefox 142+**, and Chromium-based browsers (Edge, B
 
 ## Install
 
-### From a release (recommended)
+### From a store (recommended)
+
+- **Chrome-family** — [Chrome Web Store](https://chromewebstore.google.com/detail/kaeebfmnanocpkfedmfgbkgjlihenjpm) (Chrome, Edge, Brave, Arc, Vivaldi, Opera)
+- **Firefox / Zen** — [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/mixtunes/)
+
+### From a GitHub release
 
 1. Open [Releases](https://github.com/ankushKun/mixtunes/releases) and download the zip for your browser:
    - `Mixtunes-…-chrome.zip` - Chrome, Edge, Brave, Arc, Vivaldi, Opera, Chromium
@@ -32,7 +37,7 @@ Works on **Chrome 121+**, **Firefox 142+**, and Chromium-based browsers (Edge, B
 2. **Chrome-family**  
    Unzip the file. Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the unzipped folder.
 3. **Firefox**  
-   Open `about:debugging` → **This Firefox** → **Load Temporary Add-on** → select the zip file (do not unzip). Temporary add-ons are cleared when Firefox quits until a signed AMO build is available.
+   Open `about:debugging` → **This Firefox** → **Load Temporary Add-on** → select the zip file (do not unzip). Temporary add-ons are cleared when Firefox quits. Prefer the [Firefox Add-ons listing](https://addons.mozilla.org/firefox/addon/mixtunes/) for a signed, persistent install.
 
 Publishing a GitHub Release (tag like `v0.1.0`) runs CI that packs both zips and attaches them automatically. For a local version bump that keeps every file aligned:
 
