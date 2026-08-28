@@ -1,7 +1,6 @@
 configurePrefs(MusicHost.id);
 
 const OVERLAY_KEY = "overlayEnabled";
-const OVERLAY_PREF_KEY = "ytunes-overlay";
 const LAUNCH_ID = "ytunes-launch";
 const STYLE_IDS = {
   host: "ytunes-css-host",
@@ -26,10 +25,15 @@ function stripOverlayParam() {
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function overlayHostId() {
+  return MusicHost.id;
+}
+
 function persistOverlayPref(enabled) {
   const on = Boolean(enabled);
   try {
-    localStorage.setItem(OVERLAY_PREF_KEY, on ? "1" : "0");
+    localStorage.setItem(YTunesHosts.overlayLocalKey(overlayHostId()), on ? "1" : "0");
+    if (overlayHostId() === "ytm") localStorage.setItem("ytunes-overlay", on ? "1" : "0");
   } catch {
     /* storage can be blocked */
   }
@@ -45,22 +49,26 @@ function persistOverlayPref(enabled) {
   );
 }
 
-// One boolean, because only one host origin ships today. A second host will need
-// per-origin keys: this listener reloads every tab that is listening.
+async function readOverlayMap() {
+  const stored = await chrome.storage.local.get({ [OVERLAY_KEY]: true });
+  return YTunesHosts.overlayMap(stored[OVERLAY_KEY]);
+}
+
 async function readOverlayEnabled() {
   if (overlayParamOff()) {
     stripOverlayParam();
     persistOverlayPref(false);
-    await chrome.storage.local.set({ [OVERLAY_KEY]: false });
+    const map = YTunesHosts.overlayPatch(await readOverlayMap(), overlayHostId(), false);
+    await chrome.storage.local.set({ [OVERLAY_KEY]: map });
     return false;
   }
-  const stored = await chrome.storage.local.get({ [OVERLAY_KEY]: true });
-  return stored[OVERLAY_KEY] !== false;
+  return YTunesHosts.overlayOn(await readOverlayMap(), overlayHostId());
 }
 
 async function writeOverlayEnabled(enabled) {
   persistOverlayPref(enabled);
-  await chrome.storage.local.set({ [OVERLAY_KEY]: Boolean(enabled) });
+  const map = YTunesHosts.overlayPatch(await readOverlayMap(), overlayHostId(), enabled);
+  await chrome.storage.local.set({ [OVERLAY_KEY]: map });
 }
 
 function injectSheet(id, file) {
@@ -289,10 +297,62 @@ function startLauncher() {
   launchPageWatch.observe(document.documentElement, { childList: true, subtree: true });
 }
 
+let signInWatch = null;
+let signInTimer = 0;
+
+function watchSignInForOverlay() {
+  if (!MusicHost.capabilities.overlayRequiresSignIn) return;
+  if (signInWatch) return;
+  signInWatch = new MutationObserver(() => {
+    if (signInTimer) return;
+    signInTimer = window.setTimeout(async () => {
+      signInTimer = 0;
+      if (document.getElementById("ytunes-root")) {
+        signInWatch?.disconnect();
+        signInWatch = null;
+        return;
+      }
+      if (!(await MusicHost.signedIn())) return;
+      signInWatch?.disconnect();
+      signInWatch = null;
+      startOverlay();
+    }, 400);
+  });
+  signInWatch.observe(document.documentElement, { childList: true, subtree: true });
+}
+
+function revealStockSite() {
+  const root = document.documentElement;
+  root.dataset.ytunesOverlay = "off";
+  delete root.dataset.ytunesBoot;
+  delete root.dataset.ytunesShell;
+  document.getElementById("ytunes-boot-inline")?.remove();
+}
+
 async function startOverlay() {
   const stylesReady = injectOverlayStyles();
-  MusicHost.markReady();
   try {
+    const overlayOn = await readOverlayEnabled();
+    if (!overlayOn) {
+      teardownOverlay();
+      startLauncher();
+      return;
+    }
+    if (
+      MusicHost.capabilities.overlayRequiresSignIn &&
+      MusicHost.capabilities.signedIn &&
+      !(await MusicHost.signedIn())
+    ) {
+      // No launch button here: the overlay pref is already on and only the
+      // sign-in gate is holding it back, so the button would set a pref that is
+      // set, reload, and land right back here. watchSignInForOverlay() starts
+      // the overlay on its own the moment a session appears.
+      teardownOverlay();
+      revealStockSite();
+      watchSignInForOverlay();
+      return;
+    }
+    MusicHost.markReady();
     const ok = await MusicHost.waitUntilReady();
     if (!(await readOverlayEnabled())) {
       teardownOverlay();
@@ -305,7 +365,7 @@ async function startOverlay() {
       return;
     }
     await injectShell();
-  } catch {
+  } catch (err) {
     await stylesReady.catch(() => {});
     injectOverlayStyles();
     MusicHost.markReady();
@@ -342,7 +402,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes[OVERLAY_KEY]) return;
-  persistOverlayPref(changes[OVERLAY_KEY].newValue !== false);
+  if (
+    !YTunesHosts.overlayChanged(
+      changes[OVERLAY_KEY].oldValue,
+      changes[OVERLAY_KEY].newValue,
+      overlayHostId()
+    )
+  ) {
+    return;
+  }
+  persistOverlayPref(
+    YTunesHosts.overlayOn(changes[OVERLAY_KEY].newValue, overlayHostId())
+  );
   location.reload();
 });
 

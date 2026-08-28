@@ -1,0 +1,37 @@
+/*
+ * document_start paint shield for Spotify.
+ * Hide replaced chrome; leave the now-playing bar alone so Widevine can
+ * initialize before the overlay parks it into a tiny on-screen box.
+ */
+
+html {
+  --ytunes-boot-bg: #cfcfcf;
+}
+
+html[data-ytunes-theme="graphite"] {
+  --ytunes-boot-bg: #3a3a3a;
+}
+
+html:not([data-ytunes-overlay="off"]):not([data-ytunes-shell="1"])::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+  background: var(--ytunes-boot-bg);
+}
+
+html:not([data-ytunes-overlay="off"]),
+html:not([data-ytunes-overlay="off"]) body {
+  height: 100% !important;
+  overflow: hidden !important;
+  background: var(--ytunes-boot-bg) !important;
+}
+
+html:not([data-ytunes-overlay="off"]) [data-testid="global-nav"],
+html:not([data-ytunes-overlay="off"]) [data-testid="top-bar"],
+html:not([data-ytunes-overlay="off"]) [data-testid="entity-view-top-bar"],
+html:not([data-ytunes-overlay="off"]) [data-testid="bottom-tab-navigation"] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

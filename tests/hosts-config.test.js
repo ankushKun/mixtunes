@@ -70,6 +70,37 @@ function testHostShape() {
   assert.strictEqual(hosts.byId("nope"), null);
 }
 
+function testUpcomingDestinations() {
+  assert.ok(Array.isArray(hosts.upcoming) && hosts.upcoming.length > 0);
+  const live = new Set(hosts.list.map((host) => host.id));
+  for (const host of hosts.upcoming) {
+    assert.ok(host.id && host.name && host.origin, `${host.id} upcoming entry is incomplete`);
+    assert.ok(!live.has(host.id), `${host.id} is live and must not also be upcoming`);
+    assert.strictEqual(hosts.forUrl(`${host.origin}/`), null);
+  }
+  const dest = hosts.destinations();
+  const names = dest.map((host) => host.name);
+  assert.ok(names.includes("YouTube Music"));
+  assert.ok(names.includes("Spotify"));
+  assert.ok(names.includes("Apple Music"));
+  assert.ok(names.includes("SoundCloud"));
+  assert.strictEqual(
+    dest.filter((host) => host.ready).length,
+    hosts.list.length
+  );
+  assert.ok(dest.some((host) => host.id === "apple" && !host.ready));
+  assert.ok(dest.some((host) => host.id === "soundcloud" && !host.ready));
+}
+
+function testPopupHostDock() {
+  const html = fs.readFileSync(path.join(__dirname, "..", "popup.html"), "utf8");
+  const js = fs.readFileSync(path.join(__dirname, "..", "popup.js"), "utf8");
+  assert.ok(html.includes('id="host-dock"'), "popup must reserve a host icon dock");
+  assert.ok(!html.includes('id="open-ytm"'), "popup must not use a single Open YouTube Music link");
+  assert.ok(/YTunesHosts\.destinations\(/.test(js), "popup must paint every destination");
+  assert.ok(/is-muted/.test(js) || /ready/.test(js), "upcoming hosts must render muted");
+}
+
 function testForUrl() {
   const host = hosts.primary();
   assert.strictEqual(hosts.forUrl(`${host.origin}/watch?v=abc`)?.id, host.id);
@@ -80,6 +111,30 @@ function testForUrl() {
   assert.strictEqual(hosts.forUrl(undefined), null);
   // Same host name on another origin must not match.
   assert.strictEqual(hosts.forUrl("http://music.youtube.com/"), null);
+  // Spotify is an upcoming destination, not a live host: the adapter under
+  // scripts/hosts/spotify/ stays in the tree but is unwired from the manifest.
+  assert.strictEqual(hosts.forUrl("https://open.spotify.com/"), null);
+  assert.strictEqual(hosts.forUrl("https://open.spotify.com/search"), null);
+}
+
+function testOverlayPrefMap() {
+  const ytm = hosts.byId("ytm").id;
+  const spotify = hosts.byId("spotify")?.id;
+  assert.strictEqual(hosts.overlayOn(true, ytm), true);
+  assert.strictEqual(hosts.overlayOn(false, ytm), false);
+  assert.strictEqual(hosts.overlayOn(undefined, ytm), true);
+  const migratedOff = hosts.overlayMap(false);
+  assert.strictEqual(migratedOff[ytm], false);
+  if (spotify) assert.strictEqual(migratedOff[spotify], false);
+  const patched = hosts.overlayPatch({ [ytm]: true }, ytm, false);
+  assert.strictEqual(patched[ytm], false);
+  if (spotify) assert.strictEqual(patched[spotify], true);
+  assert.strictEqual(hosts.overlayChanged(true, patched, ytm), true);
+  assert.strictEqual(
+    hosts.overlayChanged({ [ytm]: false }, patched, ytm),
+    false
+  );
+  assert.strictEqual(hosts.overlayLocalKey(ytm), "ytunes-overlay:ytm");
 }
 
 // MV3 needs literal match patterns in the manifest, so every origin is written
@@ -105,12 +160,39 @@ function testManifestOriginsMatch() {
   );
   manifest.content_scripts.forEach((block, index) => {
     if ((block.js || []).includes("scripts/store-ping.js")) return;
-    assert.deepStrictEqual(
-      sorted(block.matches),
-      expected,
-      `content_scripts[${index}].matches drifted from hosts-config`
-    );
+    const matches = sorted(block.matches || []);
+    for (const pattern of matches) {
+      assert.ok(
+        expected.includes(pattern),
+        `content_scripts[${index}] match ${pattern} is not in hosts-config`
+      );
+    }
+    assert.ok(matches.length > 0, `content_scripts[${index}] needs host matches`);
   });
+  // Only meaningful while Spotify is a live host. Written against hosts-config
+  // rather than deleted, so re-adding Spotify re-arms the embed guard by itself.
+  if (hosts.byId("spotify")) {
+    const spotifyBlocks = manifest.content_scripts.filter((block) =>
+      (block.matches || []).includes("https://open.spotify.com/*")
+    );
+    assert.ok(spotifyBlocks.length > 0, "Spotify content scripts missing");
+    for (const block of spotifyBlocks) {
+      assert.ok(
+        (block.exclude_matches || []).includes("https://open.spotify.com/embed/*"),
+        "Spotify content scripts must exclude embed player URLs"
+      );
+    }
+  }
+  const union = sorted(
+    manifest.content_scripts
+      .filter((block) => !(block.js || []).includes("scripts/store-ping.js"))
+      .flatMap((block) => block.matches || [])
+  );
+  assert.deepStrictEqual(
+    union,
+    expected,
+    "content_scripts host matches (union) drifted from hosts-config"
+  );
 
   manifest.web_accessible_resources.forEach((block, index) => {
     assert.deepStrictEqual(
@@ -230,6 +312,36 @@ function testManifestStoreReady() {
     "docs installer must use the Firefox Add-ons listing URL with utm_source=website"
   );
   assert.ok(
+    docsIndex.includes(firefoxStore),
+    "docs/index.html must link to the Firefox Add-ons listing"
+  );
+  assert.ok(
+    /firefox:\s*\{[\s\S]*?ready:\s*true/.test(docsJs),
+    "docs installer must mark Firefox Add-ons as ready"
+  );
+  assert.ok(
+    docsIndex.includes("data-cta-label>Add to Firefox"),
+    "docs/index.html must offer Add to Firefox without JavaScript"
+  );
+  assert.ok(
+    !/data-cta-secondary[^>]*\bdisabled\b/.test(docsIndex),
+    "Firefox store CTA must not be a disabled in-review control"
+  );
+  assert.ok(
+    !/still in review/i.test(docsIndex),
+    "docs/index.html must not say Firefox is still in review"
+  );
+  const supportHtml = fs.readFileSync(path.join(docs, "support.html"), "utf8");
+  assert.ok(
+    !/still in review/i.test(supportHtml),
+    "docs/support.html must not say Firefox is still in review"
+  );
+  const llmsTxt = fs.readFileSync(path.join(docs, "llms.txt"), "utf8");
+  assert.ok(
+    !/in review/i.test(llmsTxt),
+    "docs/llms.txt must not say Firefox is in review"
+  );
+  assert.ok(
     docsIndex.includes("data-build-pill"),
     "docs/index.html must include the installed / GitHub build pill"
   );
@@ -267,6 +379,12 @@ function testManifestStoreReady() {
   const versions = JSON.parse(fs.readFileSync(versionsPath, "utf8"));
   assert.ok(versions.chrome && "version" in versions.chrome, "versions.json needs chrome.version");
   assert.ok(versions.firefox && "status" in versions.firefox, "versions.json needs firefox.status");
+  assert.strictEqual(
+    versions.firefox.status,
+    "listed",
+    "versions.json firefox.status must be listed now that AMO published"
+  );
+  assert.ok(versions.firefox.version, "versions.json needs firefox.version");
   assert.ok(
     versions.firefox.url && versions.firefox.url.includes("/addon/mixtunes"),
     "versions.json firefox.url must be the AMO listing"
@@ -439,7 +557,10 @@ function testPackExcludesStoreAndZips() {
 }
 
 testHostShape();
+testUpcomingDestinations();
+testPopupHostDock();
 testForUrl();
+testOverlayPrefMap();
 testManifestOriginsMatch();
 testBackgroundOriginsMatch();
 testManifestReferencesRealFiles();
@@ -447,4 +568,4 @@ testManifestStoreReady();
 testStoreVersionParsers();
 testPackExcludesStoreAndZips();
 
-console.log("hosts-config: 8 groups passed");
+console.log("hosts-config: 11 groups passed");

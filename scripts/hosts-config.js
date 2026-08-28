@@ -8,8 +8,10 @@
  * MV3 needs those literals in the manifest, so they are duplicated on purpose;
  * tests/hosts-config.test.js fails if the copies drift.
  *
- * Adding a host: append an entry here, add its `scripts/hosts/<id>/` folder, and
- * duplicate both content_scripts blocks plus the manifest origin arrays.
+ * Adding a host: append an entry here, add `scripts/hosts/<id>/`, and split
+ * content_scripts into three isolated layers (shared cores → that host's
+ * adapter → shared shell) plus per-host document_start boot and MAIN-world
+ * page scripts. Origins here must also be copied into background.js.
  */
 (function (root, factory) {
   const api = factory();
@@ -17,6 +19,12 @@
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const OFF_HOST_TITLE = "Mixtunes only works on a supported music site";
+
+  const UPCOMING = [
+    { id: "spotify", name: "Spotify", origin: "https://open.spotify.com" },
+    { id: "apple", name: "Apple Music", origin: "https://music.apple.com" },
+    { id: "soundcloud", name: "SoundCloud", origin: "https://soundcloud.com" },
+  ];
 
   const HOSTS = [
     {
@@ -140,13 +148,77 @@
     return HOSTS.map((host) => `${host.origin}/*`);
   }
 
+  function overlayLocalKey(hostId) {
+    return `ytunes-overlay:${hostId || ""}`;
+  }
+
+  function overlayDefaults() {
+    const map = {};
+    for (const host of HOSTS) map[host.id] = true;
+    return map;
+  }
+
+  /**
+   * Normalize `overlayEnabled` from chrome.storage: a legacy boolean becomes a
+   * per-host map so toggling one origin cannot reload the other.
+   */
+  function overlayMap(raw) {
+    const defaults = overlayDefaults();
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return { ...defaults, ...raw };
+    }
+    const on = raw !== false;
+    const map = overlayDefaults();
+    for (const id of Object.keys(map)) map[id] = on;
+    return map;
+  }
+
+  function overlayOn(raw, hostId) {
+    if (!hostId) return overlayMap(raw)[primary().id] !== false;
+    return overlayMap(raw)[hostId] !== false;
+  }
+
+  function overlayPatch(raw, hostId, enabled) {
+    const map = overlayMap(raw);
+    if (hostId) map[hostId] = Boolean(enabled);
+    return map;
+  }
+
+  function overlayChanged(oldRaw, newRaw, hostId) {
+    return overlayOn(oldRaw, hostId) !== overlayOn(newRaw, hostId);
+  }
+
+  /** Live hosts plus planned ones, for popup chrome that must show every site. */
+  function destinations() {
+    return HOSTS.map((host) => ({
+      id: host.id,
+      name: host.name,
+      origin: host.origin,
+      ready: true,
+    })).concat(
+      UPCOMING.map((host) => ({
+        id: host.id,
+        name: host.name,
+        origin: host.origin,
+        ready: false,
+      }))
+    );
+  }
+
   return {
     list: HOSTS,
+    upcoming: UPCOMING,
+    destinations,
     forUrl,
     byId,
     primary,
     origins,
     matchPatterns,
+    overlayLocalKey,
+    overlayMap,
+    overlayOn,
+    overlayPatch,
+    overlayChanged,
     OFF_HOST_TITLE,
   };
 });

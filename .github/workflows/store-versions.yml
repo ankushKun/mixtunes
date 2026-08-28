@@ -2,7 +2,7 @@ name: Refresh store versions
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "01 */6 * * *"
   workflow_dispatch:
   release:
     types: [published]

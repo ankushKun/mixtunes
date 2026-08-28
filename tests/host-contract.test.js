@@ -65,9 +65,11 @@ const CAPABILITY_KEYS = [
   "sources",
   "lyrics",
   "like",
+  "dislike",
   "enqueue",
   "playlistEdit",
   "signedIn",
+  "overlayRequiresSignIn",
   "radio",
   "automix",
   "shuffle",
@@ -89,15 +91,26 @@ function assignedKeys(source, marker, indent) {
   return keys;
 }
 
+function hostAdapterDirs() {
+  const hostsDir = path.join(root, "scripts", "hosts");
+  return fs.readdirSync(hostsDir).filter((name) =>
+    fs.existsSync(path.join(hostsDir, name, "player.js"))
+  );
+}
+
 function testHostSurface() {
-  const source = read("scripts/hosts/ytm/player.js");
-  const keys = assignedKeys(source, "globalThis.MusicHost = (() => {", 4);
-  for (const name of REQUIRED_HOST_SURFACE) {
-    assert.ok(keys.has(name), `MusicHost is missing ${name}`);
-  }
-  const caps = assignedKeys(source, "capabilities: {", 6);
-  for (const name of CAPABILITY_KEYS) {
-    assert.ok(caps.has(name), `MusicHost.capabilities is missing ${name}`);
+  const dirs = hostAdapterDirs();
+  assert.ok(dirs.length > 0, "at least one host adapter must exist");
+  for (const dir of dirs) {
+    const source = read(`scripts/hosts/${dir}/player.js`);
+    const keys = assignedKeys(source, "globalThis.MusicHost = (() => {", 4);
+    for (const name of REQUIRED_HOST_SURFACE) {
+      assert.ok(keys.has(name), `${dir} MusicHost is missing ${name}`);
+    }
+    const caps = assignedKeys(source, "capabilities: {", 6);
+    for (const name of CAPABILITY_KEYS) {
+      assert.ok(caps.has(name), `${dir} MusicHost.capabilities is missing ${name}`);
+    }
   }
 }
 
@@ -145,42 +158,28 @@ function testShellHasNoHostKnowledge() {
  */
 function testWorldsDoNotShareFiles() {
   const manifest = JSON.parse(read("manifest.json"));
-  const seen = new Map();
+  const worldsByFile = new Map();
   manifest.content_scripts.forEach((entry, index) => {
     const world = entry.world || "ISOLATED";
     for (const file of entry.js || []) {
       assert.ok(fs.existsSync(path.join(root, file)), `${file} is listed but missing`);
-      const prior = seen.get(file);
-      assert.ok(
-        prior === undefined,
-        `${file} is listed in content_scripts[${prior}] and [${index}]; ` +
-          `worlds cannot share a file, so ${world} needs its own copy`
-      );
-      seen.set(file, index);
+      const worlds = worldsByFile.get(file) || new Set();
+      for (const prior of worlds) {
+        assert.ok(
+          prior === world,
+          `${file} is listed in both ${prior} and ${world} worlds ` +
+            `(content_scripts[${index}]); Chrome would inject it into one world only`
+        );
+      }
+      worlds.add(world);
+      worldsByFile.set(file, worlds);
     }
   });
 }
 
 /** The MAIN-world copy of the shared rules must behave like the originals. */
 function testPageCoreMatchesSharedRules() {
-  const pageCore = require("../scripts/hosts/ytm/page-core");
-  const ids = require("../scripts/hosts/ytm/ids");
-  const playback = require("../scripts/playback-core");
-  playback.configure(ids);
-
-  const cases = [
-    ["playable", ["dQw4w9WgXcQ"], ["short"], [""], [null], ["  dQw4w9WgXcQ  "]],
-    ["listId", ["VLPL123"], ["PL123"], [""], [null]],
-    ["isConcreteList", ["VLPL123"], ["RDAMVMdQw4w9WgXcQ"], ["RDCLAK5"], [""]],
-    ["radioFor", ["dQw4w9WgXcQ"], ["nope"], [""]],
-    [
-      "rowKey",
-      [{ setVideoId: "row1", id: "dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }],
-      [{ id: "dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }],
-      [{ videoId: "dQw4w9WgXcQ" }],
-      [{}],
-      [null],
-    ],
+  const generic = [
     ["shouldHandleAutoAdvance", [true], [false], [undefined]],
     [
       "shouldTakeOverAutoAdvance",
@@ -217,14 +216,88 @@ function testPageCoreMatchesSharedRules() {
     ],
   ];
 
-  for (const [name, ...argSets] of cases) {
-    const shared = typeof playback[name] === "function" ? playback : ids;
-    for (const args of argSets) {
-      assert.deepStrictEqual(
-        pageCore[name](...args),
-        shared[name](...args),
-        `page-core.${name} drifted from the shared rule for ${JSON.stringify(args)}`
+  const hostIdCases = {
+    ytm: [
+      ["playable", ["dQw4w9WgXcQ"], ["short"], [""], [null], ["  dQw4w9WgXcQ  "]],
+      ["listId", ["VLPL123"], ["PL123"], [""], [null]],
+      ["isConcreteList", ["VLPL123"], ["RDAMVMdQw4w9WgXcQ"], ["RDCLAK5"], [""]],
+      ["radioFor", ["dQw4w9WgXcQ"], ["nope"], [""]],
+      [
+        "rowKey",
+        [{ setVideoId: "row1", id: "dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }],
+        [{ id: "dQw4w9WgXcQ", videoId: "dQw4w9WgXcQ" }],
+        [{ videoId: "dQw4w9WgXcQ" }],
+        [{}],
+        [null],
+      ],
+    ],
+    spotify: [
+      [
+        "playable",
+        ["4cOdK2wGLETKBW3PvgPWqT"],
+        ["spotify:track:4cOdK2wGLETKBW3PvgPWqT"],
+        ["https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT"],
+        ["/track/4cOdK2wGLETKBW3PvgPWqT"],
+        ["short"],
+        [""],
+        [null],
+      ],
+      [
+        "listId",
+        ["spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"],
+        ["37i9dQZF1DXcBWIGoYBM5M"],
+        ["collection"],
+        [""],
+        [null],
+      ],
+      [
+        "isConcreteList",
+        ["spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"],
+        ["collection"],
+        ["spotify:station:track:abc"],
+        [""],
+      ],
+      ["radioFor", ["4cOdK2wGLETKBW3PvgPWqT"], ["nope"], [""]],
+      [
+        "rowKey",
+        [{ id: "4cOdK2wGLETKBW3PvgPWqT", videoId: "4cOdK2wGLETKBW3PvgPWqT" }],
+        [{ videoId: "4cOdK2wGLETKBW3PvgPWqT" }],
+        [{}],
+        [null],
+      ],
+      [
+        "sessionHint",
+        ["/collection/tracks"],
+        ["/collection"],
+        ["/user/abc"],
+        ["/"],
+        ["/search"],
+        ["/playlist/37i9dQZF1DXcBWIGoYBM5M"],
+        [""],
+        [null],
+      ],
+    ],
+  };
+
+  for (const dir of hostAdapterDirs()) {
+    const pageCore = require(`../scripts/hosts/${dir}/page-core`);
+    const ids = require(`../scripts/hosts/${dir}/ids`);
+    const playback = require("../scripts/playback-core");
+    playback.configure(ids);
+    const cases = generic.concat(hostIdCases[dir] || []);
+    for (const [name, ...argSets] of cases) {
+      const shared = typeof playback[name] === "function" ? playback : ids;
+      assert.ok(
+        typeof pageCore[name] === "function",
+        `${dir} page-core is missing ${name}`
       );
+      for (const args of argSets) {
+        assert.deepStrictEqual(
+          pageCore[name](...args),
+          shared[name](...args),
+          `${dir} page-core.${name} drifted from the shared rule for ${JSON.stringify(args)}`
+        );
+      }
     }
   }
 }
@@ -428,6 +501,164 @@ function testOrderedSessionTracksNeverRerolls() {
   );
 }
 
+function testSpotifyExtractTracks() {
+  require("../scripts/hosts/spotify/ids");
+  const { extractTracksFromPayload } = require("../scripts/hosts/spotify/catalog");
+  const graphql = {
+    data: {
+      fetchLibraryTracks: {
+        items: [
+          {
+            item: {
+              data: {
+                __typename: "Track",
+                uri: "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+                name: "Never Gonna Give You Up",
+                artists: { items: [{ profile: { name: "Rick Astley" } }] },
+                albumOfTrack: {
+                  name: "Whenever You Need Somebody",
+                  uri: "spotify:album:6N9PS4QXF1D3b7a0EpVT8l",
+                  coverArt: { sources: [{ url: "https://i.scdn.co/image/ab" }] },
+                  date: { year: 1987 },
+                },
+                duration: { totalMilliseconds: 213000 },
+              },
+            },
+          },
+        ],
+      },
+    },
+  };
+  const tracks = extractTracksFromPayload(graphql, { likeStatus: "like", playlistId: "collection" });
+  assert.strictEqual(tracks.length, 1);
+  assert.strictEqual(tracks[0].id, "4cOdK2wGLETKBW3PvgPWqT");
+  assert.strictEqual(tracks[0].title, "Never Gonna Give You Up");
+  assert.strictEqual(tracks[0].artist, "Rick Astley");
+  assert.strictEqual(tracks[0].album, "Whenever You Need Somebody");
+  assert.strictEqual(tracks[0].likeStatus, "like");
+  const rest = extractTracksFromPayload({
+    items: [
+      {
+        track: {
+          id: "4cOdK2wGLETKBW3PvgPWqT",
+          type: "track",
+          name: "Never Gonna Give You Up",
+          artists: [{ name: "Rick Astley" }],
+          album: { name: "Whenever You Need Somebody", images: [{ url: "https://i.scdn.co/image/ab" }] },
+          duration_ms: 213000,
+        },
+      },
+    ],
+  });
+  assert.strictEqual(rest[0].id, "4cOdK2wGLETKBW3PvgPWqT");
+  const ignored = extractTracksFromPayload({
+    uri: "spotify:album:6N9PS4QXF1D3b7a0EpVT8l",
+    name: "Whenever You Need Somebody",
+  });
+  assert.strictEqual(ignored.length, 0);
+}
+
+function testSpotifySessionHint() {
+  const ids = require("../scripts/hosts/spotify/ids");
+  assert.strictEqual(ids.sessionHint("/collection/tracks"), "in");
+  assert.strictEqual(ids.sessionHint("/collection"), "in");
+  assert.strictEqual(ids.sessionHint("/user/abc"), "in");
+  assert.strictEqual(ids.sessionHint("/"), "");
+  assert.strictEqual(ids.sessionHint("/search"), "");
+  assert.strictEqual(ids.sessionHint("/playlist/37i9dQZF1DXcBWIGoYBM5M"), "");
+}
+
+function testSpotifyFirstSliceTrimmed() {
+  const source = read("scripts/hosts/spotify/player.js");
+  assert.ok(/lyrics:\s*false/.test(source), "Spotify lyrics stay off for the first slice");
+  assert.ok(/enqueue:\s*false/.test(source), "Spotify enqueue stays off for the first slice");
+  assert.ok(/playlistEdit:\s*false/.test(source), "Spotify playlistEdit stays off");
+  assert.ok(/radio:\s*false/.test(source), "Spotify radio stays off");
+  assert.ok(/dislike:\s*false/.test(source), "Spotify dislike stays off");
+  assert.ok(/overlayRequiresSignIn:\s*true/.test(source), "Spotify must not trap signed-out login");
+  assert.ok(
+    /sessionHint\(location\.pathname\)/.test(source),
+    "Spotify signed-in overlay must trust /collection before tokens exist"
+  );
+  assert.ok(
+    /sources:\s*\[\s*"liked"/.test(source),
+    "Spotify first slice starts at Liked Songs"
+  );
+  assert.ok(
+    !/"videos"/.test(source.slice(source.indexOf("sources:"))),
+    "Spotify first slice must not enable Videos"
+  );
+}
+
+/**
+ * The shell runs in the same isolated world as whichever adapter loaded before
+ * it, so a bare call to an adapter's top-level function resolves on the host
+ * that happens to define it and throws a ReferenceError on every other host.
+ * That is how `parseClock`, `formatClock`, `seekToRatio`, and `setVolumeRatio`
+ * silently worked on YouTube Music while breaking Spotify. Shared helpers
+ * belong in scripts/*-core.js; host behavior belongs behind MusicHost.
+ */
+function testShellCallsNoAdapterGlobal() {
+  const declared = (source) =>
+    [...source.matchAll(/^\s*(?:async\s+)?function ([A-Za-z_$][\w$]*)\s*\(/gm)].map(
+      (match) => match[1]
+    );
+
+  const adapterNames = new Set();
+  for (const dir of hostAdapterDirs()) {
+    const base = path.join(root, "scripts", "hosts", dir);
+    for (const file of fs.readdirSync(base)) {
+      if (!file.endsWith(".js")) continue;
+      for (const name of declared(read(`scripts/hosts/${dir}/${file}`))) {
+        adapterNames.add(name);
+      }
+    }
+  }
+
+  const sharedNames = new Set(
+    [
+      "scripts/list-core.js",
+      "scripts/playback-core.js",
+      "scripts/hosts-config.js",
+      "scripts/dom-html.js",
+    ].flatMap((file) => declared(read(file)))
+  );
+
+  for (const file of [
+    "layouts/shell/script.js",
+    "layouts/shell/coverflow.js",
+    "layouts/shell/prefs.js",
+    "layouts/shell/marquee.js",
+    "layouts/shell/dialog.js",
+    "layouts/shell/toast.js",
+    "scripts/content.js",
+    "popup.js",
+  ]) {
+    const source = read(file);
+    const own = new Set(declared(source));
+    const lines = source
+      .split("\n")
+      .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line));
+    for (const name of adapterNames) {
+      if (own.has(name) || sharedNames.has(name)) continue;
+      const call = new RegExp(`(?<![.\\w])${name}\\s*\\(`);
+      const hit = lines.find((line) => call.test(line));
+      assert.ok(
+        !hit,
+        `${file} calls adapter-private ${name}(): ${String(hit).trim()}`
+      );
+    }
+  }
+}
+
+function testShellGatesContextMenu() {
+  const source = read("layouts/shell/script.js");
+  assert.ok(/caps\.enqueue/.test(source), "Play Next / Queue must follow capabilities.enqueue");
+  assert.ok(/caps\.radio/.test(source), "Start Radio must follow capabilities.radio");
+  assert.ok(/caps\.dislike/.test(source), "Dislike must follow capabilities.dislike");
+  assert.ok(/caps\.playlistEdit/.test(source), "Add to Playlist must follow capabilities.playlistEdit");
+}
+
 testHostSurface();
 testShellHasNoHostKnowledge();
 testWorldsDoNotShareFiles();
@@ -437,6 +668,11 @@ testSkipRosterIgnoresBrowsedSource();
 testRadioHandoffReplacesListSession();
 testRadioSkipRosterPrefersLiveQueue();
 testOrderedSessionTracksNeverRerolls();
+testSpotifyExtractTracks();
+testSpotifySessionHint();
+testSpotifyFirstSliceTrimmed();
+testShellCallsNoAdapterGlobal();
+testShellGatesContextMenu();
 testPrefsAreNamespacedByHost().then(() => {
-  console.log("host-contract: 10 groups passed");
+  console.log("host-contract: 15 groups passed");
 });

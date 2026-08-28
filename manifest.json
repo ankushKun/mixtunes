@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mixtunes",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Classic iTunes theme for Spotify, YouTube Music, SoundCloud and Apple Music",
   "homepage_url": "https://ankush.one/mixtunes/",
   "minimum_chrome_version": "121",
@@ -70,10 +70,26 @@
         "scripts/hosts-config.js",
         "scripts/playback-core.js",
         "scripts/list-core.js",
-        "scripts/dom-html.js",
+        "scripts/dom-html.js"
+      ],
+      "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
+      "js": [
         "scripts/hosts/ytm/ids.js",
         "scripts/hosts/ytm/catalog.js",
-        "scripts/hosts/ytm/player.js",
+        "scripts/hosts/ytm/player.js"
+      ],
+      "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "https://music.youtube.com/*"
+      ],
+      "js": [
         "layouts/shell/prefs.js",
         "layouts/shell/toast.js",
         "layouts/shell/dialog.js",

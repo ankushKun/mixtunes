@@ -57,6 +57,31 @@ const IGNORE_TOP = new Set([
   "LICENSE",
 ]);
 
+/**
+ * Host adapters the manifest actually loads. An adapter left in the tree but
+ * unwired from manifest.json (e.g. a host parked back to "upcoming") is dead
+ * weight in the store zip, so packing follows the manifest rather than the
+ * directory listing. Re-wiring the host ships it again with no change here.
+ */
+function wiredHostDirs() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
+  const referenced = [
+    ...(manifest.content_scripts || []).flatMap((block) => [
+      ...(block.js || []),
+      ...(block.css || []),
+    ]),
+    ...(manifest.web_accessible_resources || []).flatMap((block) => block.resources || []),
+  ];
+  const dirs = new Set();
+  for (const file of referenced) {
+    const match = /^scripts\/hosts\/([^/]+)\//.exec(file);
+    if (match) dirs.add(match[1]);
+  }
+  return dirs;
+}
+
+const WIRED_HOSTS = wiredHostDirs();
+
 /** Skip Finder junk that AMO's linter flags (nested .DS_Store, AppleDouble, etc.). */
 function shouldCopy(src) {
   const base = path.basename(src);
@@ -64,6 +89,10 @@ function shouldCopy(src) {
     return false;
   }
   if (src.includes(`${path.sep}icons${path.sep}src`)) return false;
+  const host = new RegExp(
+    `\\${path.sep}scripts\\${path.sep}hosts\\${path.sep}([^\\${path.sep}]+)`
+  ).exec(src);
+  if (host && !WIRED_HOSTS.has(host[1])) return false;
   return true;
 }
 

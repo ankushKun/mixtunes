@@ -753,6 +753,7 @@ globalThis.MusicHost = (() => {
       lyrics: true,
       like: true,
       dislike: true,
+      overlayRequiresSignIn: false,
       enqueue: true,
       playlistEdit: true,
       signedIn: true,

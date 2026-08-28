@@ -1,0 +1,36 @@
+/*
+ * Spotify chrome removal. visibility:hidden for UI we replace; park the
+ * now-playing bar off-screen so Encrypted Media / Connect audio keeps running.
+ */
+
+html[data-ytunes-host="ready"] nav,
+html[data-ytunes-host="ready"] [data-testid="global-nav"],
+html[data-ytunes-host="ready"] [data-testid="top-bar"],
+html[data-ytunes-host="ready"] [data-testid="entity-view-top-bar"],
+html[data-ytunes-host="ready"] [data-testid="bottom-tab-navigation"],
+html[data-ytunes-host="ready"] [data-testid="home-banner"],
+html[data-ytunes-host="ready"] [data-testid="premium-banner"] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+html[data-ytunes-host="ready"] [data-testid="rootlist"],
+html[data-ytunes-host="ready"] [data-testid="playlist-page"],
+html[data-ytunes-host="ready"] [data-testid="home-page"] {
+  pointer-events: none !important;
+}
+
+/*
+ * Cover the stock player with the overlay. Do not opacity:0, shrink, or
+ * move it off-screen — Widevine treats that as "protected content is not
+ * enabled" and the Web Player never becomes a local device.
+ */
+html[data-ytunes-host="ready"] [data-testid="now-playing-bar"],
+html[data-ytunes-host="ready"] footer {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 0 !important;
+  pointer-events: none !important;
+}

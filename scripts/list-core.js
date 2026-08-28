@@ -6,6 +6,30 @@
   const LIST_ROW_HEIGHT = 24;
   const BROWSE_PAGE_CAP = 500;
 
+  /**
+   * "3:45" / "1:02:03" -> seconds. Lives here, not in a host adapter: the shell
+   * sorts and totals durations for every host, and previously reached for a
+   * global that only scripts/hosts/ytm/player.js happened to define.
+   */
+  function parseClock(value) {
+    const parts = String(value || "")
+      .split(":")
+      .map(Number);
+    if (!parts.length || parts.some((n) => Number.isNaN(n))) return 0;
+    return parts.reduce((sum, n) => sum * 60 + n, 0);
+  }
+
+  /** Seconds -> "3:45" / "1:02:03". Shared for the same reason as parseClock. */
+  function formatClock(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+    const whole = Math.floor(seconds);
+    const h = Math.floor(whole / 3600);
+    const m = Math.floor((whole % 3600) / 60);
+    const s = whole % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
   function browsePageCount(pages) {
     if (pages === "all" || pages === Infinity) return BROWSE_PAGE_CAP;
     const n = Number(pages);
@@ -230,6 +254,8 @@
   return {
     LIST_ROW_HEIGHT,
     BROWSE_PAGE_CAP,
+    parseClock,
+    formatClock,
     browsePageCount,
     libraryBrowsePages,
     libraryUpdatePlan,

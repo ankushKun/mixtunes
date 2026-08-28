@@ -671,7 +671,7 @@ function syncSkipRoster(root, state, status) {
 
 function totalTimeLabel(tracks) {
   let seconds = 0;
-  for (const track of tracks) seconds += parseClock(track.duration || "");
+  for (const track of tracks) seconds += YTunesList.parseClock(track.duration || "");
   if (seconds <= 0) return "";
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -831,6 +831,31 @@ function renderSourceList(root) {
     })
     .join("");
   insertHtmlAfter(sprite, html);
+}
+
+/**
+ * The source the library opens on. Hosts whose adapter cannot browse Home fall
+ * back to the first sidebar source they do support, so a first-slice adapter
+ * lands on real music instead of a view its catalog always returns empty.
+ */
+function defaultSourceType() {
+  const caps = new Set(MusicHost.capabilities?.sources || []);
+  if (!caps.size || caps.has("home")) return "home";
+  const host =
+    (typeof YTunesHosts !== "undefined" && YTunesHosts.byId(MusicHost.id)) || null;
+  for (const group of host?.sourceGroups || []) {
+    for (const item of group.sources || []) {
+      if (caps.has(item.source)) return item.source;
+    }
+  }
+  return "home";
+}
+
+/** A restored/next source the host can still browse, or its default. */
+function supportedSource(source) {
+  const caps = new Set(MusicHost.capabilities?.sources || []);
+  if (source?.type && (!caps.size || caps.has(source.type))) return source;
+  return { type: defaultSourceType() };
 }
 
 /**
@@ -1708,8 +1733,8 @@ function sortTracks(state) {
     let av;
     let bv;
     if (key === "duration") {
-      av = parseClock(a.duration || "");
-      bv = parseClock(b.duration || "");
+      av = YTunesList.parseClock(a.duration || "");
+      bv = YTunesList.parseClock(b.duration || "");
       return (av - bv) * dir;
     }
     if (key === "year") {
@@ -1883,7 +1908,7 @@ function bindShell(root) {
     selectedCoverId: "",
     selectedIndex: -1,
     coverFlow: null,
-    lastSource: { type: "home" },
+    lastSource: { type: defaultSourceType() },
     loadSeq: 0,
     suggestSeq: 0,
     busySlots: {},
@@ -2084,7 +2109,7 @@ function bindShell(root) {
     if (overlay) {
       try {
         const stored = await chrome.storage.local.get({ overlayEnabled: true });
-        overlay.checked = stored.overlayEnabled !== false;
+        overlay.checked = YTunesHosts.overlayOn(stored.overlayEnabled, MusicHost.id);
       } catch {
         overlay.checked = true;
       }
@@ -2347,7 +2372,7 @@ function bindShell(root) {
     const next = lockVolume(volume.value);
     if (lastVolumeSent === next) return;
     lastVolumeSent = next;
-    setVolumeRatio(next / 100);
+    MusicHost.volume(next / 100);
   }
 
   volume.addEventListener("pointerdown", (event) => {
@@ -2379,7 +2404,7 @@ function bindShell(root) {
   function flushSeek() {
     window.clearTimeout(seekFlush);
     seekFlush = 0;
-    seekToRatio(Number(seek.value) / 1000);
+    MusicHost.seek(Number(seek.value) / 1000);
   }
 
   seek.addEventListener("pointerdown", (event) => {
@@ -2392,7 +2417,7 @@ function bindShell(root) {
     setRangeFill(seek, seek.value, 1000);
     const total = Number(hostStatus()?.progress?.duration) || 0;
     const currentLabel = root.querySelector("#ytunes-time-current");
-    if (total && currentLabel) currentLabel.textContent = formatClock(ratio * total);
+    if (total && currentLabel) currentLabel.textContent = YTunesList.formatClock(ratio * total);
     window.clearTimeout(seekFlush);
     seekFlush = window.setTimeout(flushSeek, 140);
   });
@@ -2448,7 +2473,14 @@ function bindShell(root) {
       graphite: resolveGraphite(state.prefs.theme),
     });
     try {
-      await chrome.storage.local.set({ overlayEnabled: event.target.checked });
+      const current = await chrome.storage.local.get({ overlayEnabled: true });
+      await chrome.storage.local.set({
+        overlayEnabled: YTunesHosts.overlayPatch(
+          current.overlayEnabled,
+          MusicHost.id,
+          event.target.checked
+        ),
+      });
     } catch {
       location.reload();
     }
@@ -2472,7 +2504,14 @@ function bindShell(root) {
   });
   root.querySelector("#ytunes-prefs-original")?.addEventListener("click", async () => {
     try {
-      await chrome.storage.local.set({ overlayEnabled: false });
+      const current = await chrome.storage.local.get({ overlayEnabled: true });
+      await chrome.storage.local.set({
+        overlayEnabled: YTunesHosts.overlayPatch(
+          current.overlayEnabled,
+          MusicHost.id,
+          false
+        ),
+      });
     } catch {
       location.reload();
     }
@@ -2584,7 +2623,7 @@ function bindShell(root) {
   function restoreLibrary() {
     hideSuggest();
     syncSearchClear();
-    loadSource(root, state, state.lastSource || { type: "home" }, { history: false });
+    loadSource(root, state, supportedSource(state.lastSource), { history: false });
   }
 
   search.addEventListener("input", () => {
@@ -2933,24 +2972,31 @@ function bindShell(root) {
   function openTrackMenu(track, at, extra = {}) {
     if (!track) return;
     state.menuTrack = track;
+    const caps = MusicHost.capabilities || {};
     const items = [];
     if (extra.includePlay !== false) items.push(menuItem("play", "Play"));
-    items.push(
-      menuItem("next", "Play Next"),
-      menuItem("queue", "Add to Queue"),
-      menuItem("radio", "Start Radio")
-    );
-    if (extra.includeLike !== false) {
+    if (caps.enqueue) {
+      items.push(
+        menuItem("next", "Play Next"),
+        menuItem("queue", "Add to Queue")
+      );
+    }
+    if (caps.radio) items.push(menuItem("radio", "Start Radio"));
+    if (caps.like && extra.includeLike !== false) {
       items.push(menuItem("like", extra.liked ? "Unlike" : "Like"));
     }
-    items.push(menuItem("dislike", "Dislike"));
+    if (caps.dislike) items.push(menuItem("dislike", "Dislike"));
     items.push(
       menuItem("album", "Go to Album", !MusicHost.albumOf(track)),
       menuItem("artist", "Go to Artist", !MusicHost.artistOf(track))
     );
-    if (extra.canAddHere) items.push(menuItem("add-here", "Add to this Playlist"));
-    items.push(menuItem("add", "Add to Playlist…"));
-    if (extra.canRemove) items.push(menuItem("remove", "Remove from Playlist"));
+    if (caps.playlistEdit && extra.canAddHere) {
+      items.push(menuItem("add-here", "Add to this Playlist"));
+    }
+    if (caps.playlistEdit) items.push(menuItem("add", "Add to Playlist…"));
+    if (caps.playlistEdit && extra.canRemove) {
+      items.push(menuItem("remove", "Remove from Playlist"));
+    }
     setHtml(menu, items.join(""));
     menu.hidden = false;
     positionMenu(at);
@@ -3619,7 +3665,9 @@ function bindShell(root) {
     state.lyricsOn = Boolean(state.prefs.lyricsOn);
     if (state.prefs.source?.type && state.prefs.source.type !== "search") {
       const saved = state.prefs.source;
-      state.lastSource = saved.type === "songs" ? { type: "home" } : saved;
+      state.lastSource = supportedSource(
+        saved.type === "songs" ? { type: defaultSourceType() } : saved
+      );
       state.history = [state.lastSource];
       state.historyIndex = 0;
     }
@@ -4334,7 +4382,7 @@ async function loadSource(root, state, source, options = {}) {
 function bootLibrary(root, state) {
   loadPlaylists(root, state);
   loadMoods(root, state);
-  loadSource(root, state, state.lastSource || { type: "home" }, {
+  loadSource(root, state, supportedSource(state.lastSource), {
     history: false,
     play: false,
   });

@@ -7,4 +7,5 @@ tasks/
 *.pem
 
 .agents/
+.cursor/
 store/

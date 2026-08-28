@@ -1,12 +1,10 @@
 /**
- * document_start: kill the white canvas before first paint, mirror the user's
- * theme into a boot background, and kick off stylesheet downloads early.
+ * document_start: kill the stock canvas before first paint and prefetch sheets.
  */
 (() => {
-  const OVERLAY_PREF_KEY = "ytunes-overlay:ytm";
-  const OVERLAY_PREF_LEGACY = "ytunes-overlay";
+  const OVERLAY_PREF_KEY = "ytunes-overlay:spotify";
   const BOOT_THEME_KEY = "ytunes-boot-theme";
-  const ESCAPE = "newytm";
+  const ESCAPE = "newspotify";
   const INLINE_ID = "ytunes-boot-inline";
   const root = document.documentElement;
 
@@ -21,9 +19,7 @@
 
   function prefEnabled() {
     try {
-      const value =
-        localStorage.getItem(OVERLAY_PREF_KEY) ??
-        localStorage.getItem(OVERLAY_PREF_LEGACY);
+      const value = localStorage.getItem(OVERLAY_PREF_KEY);
       if (value === null) return true;
       return value !== "0" && value !== "false";
     } catch {
@@ -63,7 +59,6 @@
   root.dataset.ytunesTheme = theme;
   delete root.dataset.ytunesShell;
 
-  // Inline styles beat the browser's default white paint even before boot-hide.css.
   let style = document.getElementById(INLINE_ID);
   if (!style) {
     style = document.createElement("style");
@@ -86,10 +81,9 @@ html:not([data-ytunes-overlay="off"]):not([data-ytunes-shell="1"])::before {
 }
 `;
 
-  // Prefetch shell CSS so it is warm before content.js mounts the UI.
   const sheets = [
     "scripts/content.css",
-    "scripts/hosts/ytm/hide.css",
+    "scripts/hosts/spotify/hide.css",
     "layouts/shell/style.css",
   ];
   for (const file of sheets) {
